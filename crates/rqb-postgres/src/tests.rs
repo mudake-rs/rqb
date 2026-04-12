@@ -318,6 +318,26 @@ fn renders_jsonb_and_json_path_null_safe_comparisons_as_jsonb() {
 }
 
 #[test]
+fn renders_jsonb_array_comparisons_as_jsonb_params() {
+    let built = select(orders())
+        .filter(all([
+            field("metadata").eq([1, 2, 3]),
+            field("metadata").is_not_distinct_from(["vip", "gift"]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"metadata\" = $1::jsonb"));
+    assert!(
+        built
+            .sql
+            .contains("\"metadata\" IS NOT DISTINCT FROM $2::jsonb")
+    );
+    assert_eq!(built.params[0], serde_json::json!([1, 2, 3]).into());
+    assert_eq!(built.params[1], serde_json::json!(["vip", "gift"]).into());
+}
+
+#[test]
 fn renders_column_predicate_operator_matrix() {
     let built = select(typed_values())
         .filter(all([
@@ -732,6 +752,29 @@ fn renders_update_set_from_serde_record() {
     );
     assert!(built.sql.contains("\"total_cents\" = $2::bigint"));
     assert!(built.sql.contains("WHERE \"id\" = $3::text::uuid"));
+}
+
+#[test]
+fn renders_jsonb_write_arrays_as_jsonb_params() {
+    let dataset = Dataset::table("events").fields([Field::new("payload", FieldType::Jsonb)]);
+
+    let built = update(dataset)
+        .set("payload", [1, 2, 3])
+        .build_pg()
+        .unwrap();
+
+    assert_eq!(built.sql, "UPDATE \"events\" SET \"payload\" = $1::jsonb");
+    assert_eq!(built.params, vec![serde_json::json!([1, 2, 3]).into()]);
+}
+
+#[test]
+fn renders_jsonb_write_null_as_sql_null() {
+    let dataset = Dataset::table("events").fields([Field::new("payload", FieldType::Jsonb)]);
+
+    let built = update(dataset).set_null("payload").build_pg().unwrap();
+
+    assert_eq!(built.sql, "UPDATE \"events\" SET \"payload\" = $1::jsonb");
+    assert_eq!(built.params, vec![Value::Null]);
 }
 
 #[test]
@@ -1443,6 +1486,20 @@ fn renders_enum_casts() {
             .contains("\"status_history\" && $5::text[]::\"public\".\"order_status\"[]")
     );
     assert_eq!(built.params.len(), 5);
+}
+
+#[test]
+fn renders_string_agg_enum_with_text_cast() {
+    let built = select(enum_orders())
+        .agg(string_agg("status", ",", "statuses"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .contains("string_agg(\"status\"::text, ',') AS \"statuses\"")
+    );
 }
 
 #[test]

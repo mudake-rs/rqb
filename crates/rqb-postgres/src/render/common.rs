@@ -1,8 +1,8 @@
 use rqb_core::{ElemType, FieldType, RawSql, ResolvedField, Source, ValidatedWriteValue, Value};
 
 use crate::helpers::{
-    postgres_cast_sql, postgres_selection_cast, renumber_postgres_placeholders, write_quoted_ident,
-    write_quoted_qualified,
+    postgres_cast_sql, postgres_selection_cast, renumber_postgres_placeholders, value_to_json,
+    write_quoted_ident, write_quoted_qualified,
 };
 use crate::{Error, Result};
 
@@ -94,6 +94,9 @@ impl Renderer {
         field_type: FieldType,
     ) -> Result<()> {
         match value {
+            ValidatedWriteValue::Value(value) if field_type.is_jsonb() && !value.is_null() => {
+                self.push_typed_param(&value_to_json(value), field_type)
+            }
             ValidatedWriteValue::Value(value) => self.push_typed_param(value, field_type),
             ValidatedWriteValue::Raw(raw) => self.render_raw(raw)?,
             ValidatedWriteValue::Column(field) => self.render_column_name(field),

@@ -16,6 +16,12 @@ pub(super) fn validate_operator(
             require_array(field, operator, value)?;
             if let Some(enum_type) = enum_type_for_field(field) {
                 require_enum_array(field, operator, enum_type, value)?;
+            } else if field.ty.is_array() {
+                return unsupported(field, operator);
+            } else if field.is_json_path() {
+                reject_non_finite_numbers(field, operator.as_str(), value)?;
+            } else {
+                require_array_values_for_field_type(field, operator.as_str(), value)?;
             }
         }
         Between | NotBetween => {
@@ -33,6 +39,8 @@ pub(super) fn validate_operator(
                 || field.ty == FieldType::Text)
             {
                 return unsupported(field, operator);
+            } else {
+                require_array_values_for_field_type(field, operator.as_str(), value)?;
             }
         }
         ArrayContainsAny | ArrayContainsAll => {
@@ -42,6 +50,8 @@ pub(super) fn validate_operator(
             }
             if let Some(enum_type) = enum_type_for_array(field) {
                 require_enum_array(field, operator, enum_type, value)?;
+            } else {
+                validate_value_for_field_type(field, operator.as_str(), value)?;
             }
         }
         ArrayContains | ArrayNotContains => {
@@ -51,6 +61,13 @@ pub(super) fn validate_operator(
             }
             if let Some(enum_type) = enum_type_for_array(field) {
                 require_enum_scalar(field, operator, enum_type, value)?;
+            } else {
+                require_value_for_elem_type(
+                    field,
+                    operator.as_str(),
+                    array_elem_type(field),
+                    value,
+                )?;
             }
         }
         ArrayIsEmpty | ArrayIsNotEmpty => {
@@ -63,9 +80,18 @@ pub(super) fn validate_operator(
                 require_scalar(field, operator, value)?;
                 if let Some(enum_type) = enum_type_for_array(field) {
                     require_enum_scalar(field, operator, enum_type, value)?;
+                } else {
+                    require_value_for_elem_type(
+                        field,
+                        operator.as_str(),
+                        array_elem_type(field),
+                        value,
+                    )?;
                 }
             } else if !field.ty.is_jsonb() {
                 return unsupported(field, operator);
+            } else {
+                reject_non_finite_numbers(field, operator.as_str(), value)?;
             }
         }
         JsonKeyExists => {
@@ -105,22 +131,36 @@ pub(super) fn validate_operator(
                 || field.ty == FieldType::Text)
             {
                 return unsupported(field, operator);
+            } else {
+                validate_value_for_field_type(field, operator.as_str(), value)?;
             }
         }
         Equals | NotEquals => {
-            require_scalar_or_json(field, operator, value)?;
-            reject_json_for_non_jsonb_field(field, operator, value)?;
+            if field.ty.is_jsonb() {
+                require_scalar_array_or_json(field, operator, value)?;
+            } else {
+                require_scalar_or_json(field, operator, value)?;
+                reject_json_for_non_jsonb_field(field, operator, value)?;
+            }
             if let Some(enum_type) = enum_type_for_field(field) {
                 require_enum_scalar(field, operator, enum_type, value)?;
+            } else {
+                validate_value_for_field_type(field, operator.as_str(), value)?;
             }
         }
         IsDistinctFrom | IsNotDistinctFrom => {
-            require_scalar_json_or_null(field, operator, value)?;
-            reject_json_for_non_jsonb_field(field, operator, value)?;
+            if field.ty.is_jsonb() {
+                require_scalar_array_json_or_null(field, operator, value)?;
+            } else {
+                require_scalar_json_or_null(field, operator, value)?;
+                reject_json_for_non_jsonb_field(field, operator, value)?;
+            }
             if !value.is_null()
                 && let Some(enum_type) = enum_type_for_field(field)
             {
                 require_enum_scalar(field, operator, enum_type, value)?;
+            } else if !value.is_null() {
+                validate_value_for_field_type(field, operator.as_str(), value)?;
             }
         }
         TextSearch => {
@@ -210,6 +250,208 @@ pub(super) fn validate_column_operator(
         right_type: right.ty.as_str().to_owned(),
         operator: operator.as_str().to_owned(),
     })
+}
+
+pub(super) fn validate_value_for_field_type(
+    field: &ResolvedField,
+    operator: &str,
+    value: &Value,
+) -> Result<()> {
+    if field.is_json_path() {
+        reject_non_finite_numbers(field, operator, value)?;
+        return Ok(());
+    }
+    if value.is_null() {
+        return Ok(());
+    }
+    require_value_for_field_type(field, operator, field.ty, value)
+}
+
+fn require_array_values_for_field_type(
+    field: &ResolvedField,
+    operator: &str,
+    value: &Value,
+) -> Result<()> {
+    let Value::Array(values) = value else {
+        unreachable!("array shape validated by require_array");
+    };
+    for value in values {
+        validate_value_for_field_type(field, operator, value)?;
+    }
+    Ok(())
+}
+
+fn require_value_for_field_type(
+    field: &ResolvedField,
+    operator: &str,
+    field_type: FieldType,
+    value: &Value,
+) -> Result<()> {
+    match field_type {
+        FieldType::Text => require_value_shape(field, operator, value, "string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        FieldType::Integer | FieldType::BigInt => {
+            require_value_shape(field, operator, value, "integer", |value| {
+                matches!(value, Value::I64(_))
+            })
+        }
+        FieldType::Float => require_value_shape(field, operator, value, "number", Value::is_number),
+        FieldType::Numeric => require_value_shape(
+            field,
+            operator,
+            value,
+            "number or numeric string",
+            |value| value.is_number() || matches!(value, Value::String(_)),
+        ),
+        FieldType::Bool => require_value_shape(field, operator, value, "bool", |value| {
+            matches!(value, Value::Bool(_))
+        }),
+        FieldType::Uuid => require_value_shape(field, operator, value, "UUID string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        FieldType::Timestamp => {
+            require_value_shape(field, operator, value, "timestamp string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
+        FieldType::Date => require_value_shape(field, operator, value, "date string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        FieldType::Jsonb => {
+            if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
+                reject_non_finite_numbers(field, operator, value)?;
+                Ok(())
+            } else {
+                Err(Error::InvalidValue {
+                    field: field.display_name(),
+                    operator: operator.to_owned(),
+                    message: format!("expected scalar, array, or JSON, got {}", value.type_name()),
+                })
+            }
+        }
+        FieldType::Enum(enum_type) => {
+            require_enum_scalar_by_name(field, operator, enum_type, value)
+        }
+        FieldType::Array(elem_type) => {
+            let Value::Array(values) = value else {
+                return Err(Error::InvalidValue {
+                    field: field.display_name(),
+                    operator: operator.to_owned(),
+                    message: format!("expected array, got {}", value.type_name()),
+                });
+            };
+            for value in values {
+                require_value_for_elem_type(field, operator, elem_type, value)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn require_value_for_elem_type(
+    field: &ResolvedField,
+    operator: &str,
+    elem_type: ElemType,
+    value: &Value,
+) -> Result<()> {
+    match elem_type {
+        ElemType::Text => require_value_shape(field, operator, value, "string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        ElemType::Int | ElemType::BigInt => {
+            require_value_shape(field, operator, value, "integer", |value| {
+                matches!(value, Value::I64(_))
+            })
+        }
+        ElemType::Float => require_value_shape(field, operator, value, "number", Value::is_number),
+        ElemType::Numeric => require_value_shape(
+            field,
+            operator,
+            value,
+            "number or numeric string",
+            |value| value.is_number() || matches!(value, Value::String(_)),
+        ),
+        ElemType::Bool => require_value_shape(field, operator, value, "bool", |value| {
+            matches!(value, Value::Bool(_))
+        }),
+        ElemType::Uuid => require_value_shape(field, operator, value, "UUID string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        ElemType::Timestamp => {
+            require_value_shape(field, operator, value, "timestamp string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
+        ElemType::Date => require_value_shape(field, operator, value, "date string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        ElemType::Enum(enum_type) => require_enum_scalar_by_name(field, operator, enum_type, value),
+    }
+}
+
+fn reject_non_finite_numbers(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    match value {
+        Value::F64(value) if !value.is_finite() => Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.to_owned(),
+            message: "non-finite numbers are not supported".to_owned(),
+        }),
+        Value::Array(values) => {
+            for value in values {
+                reject_non_finite_numbers(field, operator, value)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn require_value_shape(
+    field: &ResolvedField,
+    operator: &str,
+    value: &Value,
+    expected: &str,
+    matches: impl FnOnce(&Value) -> bool,
+) -> Result<()> {
+    if matches(value) {
+        return Ok(());
+    }
+    Err(Error::InvalidValue {
+        field: field.display_name(),
+        operator: operator.to_owned(),
+        message: format!("expected {expected}, got {}", value.type_name()),
+    })
+}
+
+fn require_enum_scalar_by_name(
+    field: &ResolvedField,
+    operator: &str,
+    enum_type: EnumType,
+    value: &Value,
+) -> Result<()> {
+    let Value::String(value) = value else {
+        return Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.to_owned(),
+            message: format!("expected enum string, got {}", value.type_name()),
+        });
+    };
+    if enum_type.contains(value) {
+        return Ok(());
+    }
+    Err(Error::InvalidEnumValue {
+        field: field.display_name(),
+        value: value.clone(),
+        allowed: enum_type.allowed_values(),
+    })
+}
+
+fn array_elem_type(field: &ResolvedField) -> ElemType {
+    let FieldType::Array(elem_type) = field.ty else {
+        unreachable!("array field validated before element type lookup");
+    };
+    elem_type
 }
 
 fn unsupported<T>(field: &ResolvedField, operator: Operator) -> Result<T> {
@@ -307,6 +549,22 @@ fn require_scalar_or_json(field: &ResolvedField, operator: Operator, value: &Val
     }
 }
 
+fn require_scalar_array_or_json(
+    field: &ResolvedField,
+    operator: Operator,
+    value: &Value,
+) -> Result<()> {
+    if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
+        Ok(())
+    } else {
+        Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.as_str().to_owned(),
+            message: format!("expected scalar, array, or JSON, got {}", value.type_name()),
+        })
+    }
+}
+
 fn require_scalar_json_or_null(
     field: &ResolvedField,
     operator: Operator,
@@ -319,6 +577,25 @@ fn require_scalar_json_or_null(
             field: field.display_name(),
             operator: operator.as_str().to_owned(),
             message: format!("expected scalar, JSON, or null, got {}", value.type_name()),
+        })
+    }
+}
+
+fn require_scalar_array_json_or_null(
+    field: &ResolvedField,
+    operator: Operator,
+    value: &Value,
+) -> Result<()> {
+    if value.is_scalar() || value.is_null() || matches!(value, Value::Array(_) | Value::Json(_)) {
+        Ok(())
+    } else {
+        Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.as_str().to_owned(),
+            message: format!(
+                "expected scalar, array, JSON, or null, got {}",
+                value.type_name()
+            ),
         })
     }
 }

@@ -162,3 +162,60 @@ impl SelectQuery {
         datasets
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use crate::{LogicalExpr, LogicalOp, SortDir, field};
+
+    use super::*;
+
+    #[test]
+    fn search_request_merge_replaces_shape_and_ands_queries() {
+        let base = SearchRequest {
+            offset: Some(10),
+            limit: Some(20),
+            fields: vec![field("id")],
+            sort: vec![field("createdAt").desc()],
+            query: Some(field("status").eq("paid")),
+        };
+        let incoming = SearchRequest {
+            offset: Some(0),
+            limit: Some(5),
+            fields: vec![field("email")],
+            sort: vec![field("email").asc()],
+            query: Some(field("email").contains("@example.com")),
+        };
+
+        let merged = base.merge(incoming);
+
+        assert_eq!(merged.offset, Some(0));
+        assert_eq!(merged.limit, Some(5));
+        assert_eq!(merged.fields, vec![field("email")]);
+        assert_eq!(merged.sort[0].field, field("email"));
+        assert_eq!(merged.sort[0].dir, SortDir::Asc);
+        assert!(matches!(
+            merged.query,
+            Some(Expr::Logical(LogicalExpr {
+                logical: LogicalOp::And,
+                predicates,
+            })) if predicates.len() == 2
+        ));
+    }
+
+    #[test]
+    fn search_request_merge_keeps_existing_shape_when_incoming_shape_is_empty() {
+        let base = SearchRequest {
+            offset: Some(10),
+            limit: Some(20),
+            fields: vec![field("id")],
+            sort: vec![field("createdAt").desc()],
+            query: Some(field("status").eq("paid")),
+        };
+
+        let merged = base.clone().merge(SearchRequest::new());
+
+        assert_eq!(merged, base);
+    }
+}

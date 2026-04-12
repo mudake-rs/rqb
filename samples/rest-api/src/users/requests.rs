@@ -151,6 +151,23 @@ mod tests {
     }
 
     #[test]
+    fn user_list_params_convert_to_query_with_defaults() {
+        let params = UserListParams {
+            status: Some("active".to_owned()),
+            tag: Some("vip".to_owned()),
+            limit: None,
+            offset: None,
+        };
+        params.validate().unwrap();
+
+        let query = UserListQuery::from(params);
+        assert_eq!(query.status.as_deref(), Some("active"));
+        assert_eq!(query.tag.as_deref(), Some("vip"));
+        assert_eq!(query.limit, DEFAULT_LIMIT);
+        assert_eq!(query.offset, DEFAULT_OFFSET);
+    }
+
+    #[test]
     fn user_request_validation_rejects_unknown_status_bad_email_and_empty_patch() {
         let create = CreateUserRequest {
             organization_id: id("00000000-0000-0000-0000-000000000001"),

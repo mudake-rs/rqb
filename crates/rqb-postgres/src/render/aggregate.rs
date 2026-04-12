@@ -196,6 +196,9 @@ impl Renderer {
             } => {
                 self.sql.push_str("string_agg(");
                 self.render_column_name(field);
+                if let Some(cast) = postgres_selection_cast(field.ty) {
+                    self.sql.push_str(cast);
+                }
                 self.sql.push_str(", ");
                 self.sql.push_str(&quote_literal(separator));
                 if let Some(sort) = order_by {

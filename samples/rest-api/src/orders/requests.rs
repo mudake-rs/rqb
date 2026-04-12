@@ -192,6 +192,27 @@ mod tests {
     }
 
     #[test]
+    fn order_list_params_convert_to_query_with_defaults_and_sort() {
+        let params = OrderListParams {
+            status: Some("paid".to_owned()),
+            channel: Some("web".to_owned()),
+            min_total: Some(1_000),
+            sort: Some("totalCents:desc".to_owned()),
+            limit: None,
+            offset: None,
+        };
+        params.validate().unwrap();
+
+        let query = params.into_query().unwrap();
+        assert_eq!(query.status.as_deref(), Some("paid"));
+        assert_eq!(query.channel.as_deref(), Some("web"));
+        assert_eq!(query.min_total, Some(1_000));
+        assert_eq!(query.limit, DEFAULT_LIMIT);
+        assert_eq!(query.offset, DEFAULT_OFFSET);
+        assert_eq!(query.sort.field.display_name(), "totalCents");
+    }
+
+    #[test]
     fn order_request_validation_rejects_unknown_status_and_empty_patch() {
         let request = CreateOrderRequest {
             user_id: id("20000000-0000-0000-0000-000000000001"),

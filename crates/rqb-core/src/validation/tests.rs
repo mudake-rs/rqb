@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType, Join,
-    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, Sort, Value, count, field, insert,
-    sum,
+    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, Sort, Value, avg, count,
+    count_field, field, insert, max, min, string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -46,6 +46,7 @@ fn dataset() -> Dataset {
         Field::mapped("blobName", "blob_name", FieldType::Text).selectable(false),
         Field::new("internal", FieldType::Text).filterable(false),
         Field::new("score", FieldType::Integer),
+        Field::new("amount", FieldType::Numeric),
         Field::new("active", FieldType::Bool),
         Field::mapped("createdAt", "created_at", FieldType::Timestamp),
         Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false),
@@ -146,6 +147,8 @@ fn accepts_array_contains_all_and_elem_match_on_supported_fields() {
     for expr in [
         field("tags").contains_all(["vip", "gift"]),
         field("tags").elem_match("vip"),
+        field("properties").eq([1, 2, 3]),
+        field("properties").is_not_distinct_from(["vip", "gift"]),
         field("properties").elem_match(serde_json::json!({"gift": true})),
     ] {
         let query = crate::select(dataset()).filter(expr).build();
@@ -472,6 +475,104 @@ fn rejects_not_in_without_array() {
 }
 
 #[test]
+fn rejects_in_on_array_fields() {
+    let query = crate::select(dataset())
+        .filter(field("tags").is_in(["vip"]))
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::UnsupportedOperator { field, operator, .. } if field == "tags" && operator == "in")
+    );
+}
+
+#[test]
+fn rejects_scalar_values_that_do_not_match_field_types() {
+    for (expr, field, expected) in [
+        (field("name").eq(42), "name", "expected string, got i64"),
+        (
+            field("score").eq("42"),
+            "score",
+            "expected integer, got string",
+        ),
+        (
+            field("active").eq("true"),
+            "active",
+            "expected bool, got string",
+        ),
+        (field("id").eq(42), "id", "expected UUID string, got i64"),
+        (
+            field("createdAt").eq(42),
+            "createdAt",
+            "expected timestamp string, got i64",
+        ),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidValue { field: ref actual, ref message, .. } if actual == field && message == expected),
+            "unexpected error for {field}: {err}"
+        );
+    }
+}
+
+#[test]
+fn accepts_numeric_strings_only_for_numeric_fields() {
+    let query = crate::select(dataset())
+        .filter(crate::all([
+            field("amount").eq("9007199254740993"),
+            field("amount").between("1.25", "2.50"),
+        ]))
+        .build();
+
+    ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn rejects_array_operator_values_that_do_not_match_element_type() {
+    let query = crate::select(dataset())
+        .filter(field("tags").contains_all([1]))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "tags" && message == "expected string, got i64")
+    );
+
+    let query = crate::select(dataset())
+        .filter(field("tags").has(1))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "tags" && message == "expected string, got i64")
+    );
+
+    let query = crate::select(dataset())
+        .filter(field("tags").elem_match(1))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "tags" && message == "expected string, got i64")
+    );
+}
+
+#[test]
+fn rejects_non_finite_numbers_that_would_be_encoded_as_json() {
+    for expr in [
+        field("properties").eq(f64::NAN),
+        field("properties.score").eq(f64::INFINITY),
+        field("properties").elem_match(f64::NEG_INFINITY),
+        field("properties").eq(Value::Array(vec![Value::F64(f64::NAN)])),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidValue { ref message, .. } if message == "non-finite numbers are not supported"),
+            "unexpected error: {err}"
+        );
+    }
+}
+
+#[test]
 fn accepts_is_distinct_from_scalar() {
     let query = crate::select(dataset())
         .filter(crate::all([
@@ -558,6 +659,46 @@ fn accepts_null_write_values_for_enum_array_fields() {
 }
 
 #[test]
+fn accepts_jsonb_array_write_values() {
+    let query = crate::update(dataset())
+        .set("properties", Value::Array(vec![1.into(), 2.into()]))
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+
+    ValidatedUpdate::new(query).unwrap();
+}
+
+#[test]
+fn rejects_write_values_that_do_not_match_field_types() {
+    let update = crate::update(dataset())
+        .set("score", "42")
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+    let err = ValidatedUpdate::new(update).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "score" && message == "expected integer, got string")
+    );
+
+    let insert = insert(dataset()).set("tags", [1]).build().unwrap();
+    let err = ValidatedInsert::new(insert).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "tags" && message == "expected string, got i64")
+    );
+
+    let update = crate::update(dataset())
+        .set("properties", Value::Array(vec![Value::F64(f64::INFINITY)]))
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+    let err = ValidatedUpdate::new(update).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "properties" && message == "non-finite numbers are not supported")
+    );
+}
+
+#[test]
 fn rejects_write_raw_bind_mismatch_and_set_col_type_mismatch() {
     let raw_query = crate::update(dataset())
         .set_raw("name", crate::raw("upper(?)"))
@@ -621,6 +762,19 @@ fn rejects_insert_from_select_mixed_sources_and_unknown_targets() {
         ValidatedInsert::new(unknown_target).unwrap_err(),
         Error::UnknownField { dataset, field } if dataset == "target" && field == "name"
     ));
+
+    let target = Dataset::table("target").fields([Field::new("name", FieldType::Text)]);
+    let source = Dataset::table("source").fields([Field::new("name", FieldType::Integer)]);
+    let type_mismatch = insert(target)
+        .from_select(crate::select(source).fields(["name"]).build())
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        ValidatedInsert::new(type_mismatch).unwrap_err(),
+        Error::IncompatibleColumnTypes { left, left_type, right, right_type, .. }
+            if left == "name" && left_type == "text" && right == "name" && right_type == "integer"
+    ));
 }
 
 #[test]
@@ -678,6 +832,73 @@ fn accepts_grouped_aggregate_selection() {
     assert_eq!(validated.group_by.len(), 1);
     assert_eq!(validated.aggregates.len(), 1);
     assert_eq!(validated.columns.len(), 2);
+}
+
+#[test]
+fn rejects_aggregate_fields_that_are_hidden_or_have_wrong_type() {
+    let hidden = crate::select(dataset())
+        .agg(count_field("blobName", "blobs"))
+        .build();
+    assert!(matches!(
+        ValidatedSelect::new(hidden).unwrap_err(),
+        Error::NotSelectable { field } if field == "blobName"
+    ));
+
+    let text_sum = crate::select(dataset()).agg(sum("name", "total")).build();
+    assert!(matches!(
+        ValidatedSelect::new(text_sum).unwrap_err(),
+        Error::UnsupportedAggregateField { aggregate, field, field_type }
+            if aggregate == "sum" && field == "name" && field_type == "text"
+    ));
+
+    let bool_avg = crate::select(dataset())
+        .agg(avg("active", "avgActive"))
+        .build();
+    assert!(matches!(
+        ValidatedSelect::new(bool_avg).unwrap_err(),
+        Error::UnsupportedAggregateField { aggregate, field, field_type }
+            if aggregate == "avg" && field == "active" && field_type == "bool"
+    ));
+
+    let unsortable_min = crate::select(dataset())
+        .agg(min("tags", "firstTags"))
+        .build();
+    assert!(matches!(
+        ValidatedSelect::new(unsortable_min).unwrap_err(),
+        Error::NotSortable { field } if field == "tags"
+    ));
+
+    let unsortable_max = crate::select(dataset())
+        .agg(max("properties", "lastProps"))
+        .build();
+    assert!(matches!(
+        ValidatedSelect::new(unsortable_max).unwrap_err(),
+        Error::NotSortable { field } if field == "properties"
+    ));
+
+    let numeric_string_agg = crate::select(dataset())
+        .agg(string_agg("score", ",", "scores"))
+        .build();
+    assert!(matches!(
+        ValidatedSelect::new(numeric_string_agg).unwrap_err(),
+        Error::UnsupportedAggregateField { aggregate, field, field_type }
+            if aggregate == "string_agg" && field == "score" && field_type == "integer"
+    ));
+}
+
+#[test]
+fn accepts_supported_aggregate_field_types() {
+    let query = crate::select(dataset())
+        .fields(["state"])
+        .agg(sum("score", "totalScore"))
+        .agg(avg("amount", "avgAmount"))
+        .agg(min("createdAt", "firstSeen"))
+        .agg(max("name", "lastName"))
+        .agg(string_agg("state", ",", "states"))
+        .group_by(["state"])
+        .build();
+
+    ValidatedSelect::new(query).unwrap();
 }
 
 #[test]

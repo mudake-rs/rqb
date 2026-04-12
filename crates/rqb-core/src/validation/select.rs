@@ -205,48 +205,67 @@ fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<Valid
             alias,
             distinct,
             filter,
-        } => ValidatedAggregate::CountField {
-            field: resolve_aggregate_field(scope, field)?,
-            alias: alias.clone(),
-            distinct: *distinct,
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "count", field)?;
+            ValidatedAggregate::CountField {
+                field,
+                alias: alias.clone(),
+                distinct: *distinct,
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
         Aggregate::Sum {
             field,
             alias,
             filter,
-        } => ValidatedAggregate::Sum {
-            field: resolve_aggregate_field(scope, field)?,
-            alias: alias.clone(),
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "sum", field)?;
+            validate_numeric_aggregate_field("sum", &field)?;
+            ValidatedAggregate::Sum {
+                field,
+                alias: alias.clone(),
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
         Aggregate::Avg {
             field,
             alias,
             filter,
-        } => ValidatedAggregate::Avg {
-            field: resolve_aggregate_field(scope, field)?,
-            alias: alias.clone(),
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "avg", field)?;
+            validate_numeric_aggregate_field("avg", &field)?;
+            ValidatedAggregate::Avg {
+                field,
+                alias: alias.clone(),
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
         Aggregate::Min {
             field,
             alias,
             filter,
-        } => ValidatedAggregate::Min {
-            field: resolve_aggregate_field(scope, field)?,
-            alias: alias.clone(),
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "min", field)?;
+            validate_ordered_aggregate_field("min", &field)?;
+            ValidatedAggregate::Min {
+                field,
+                alias: alias.clone(),
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
         Aggregate::Max {
             field,
             alias,
             filter,
-        } => ValidatedAggregate::Max {
-            field: resolve_aggregate_field(scope, field)?,
-            alias: alias.clone(),
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "max", field)?;
+            validate_ordered_aggregate_field("max", &field)?;
+            ValidatedAggregate::Max {
+                field,
+                alias: alias.clone(),
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
         Aggregate::JsonAgg {
             alias,
             fields,
@@ -256,7 +275,7 @@ fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<Valid
         } => {
             let fields = fields
                 .iter()
-                .map(|field| resolve_aggregate_field(scope, field))
+                .map(|field| resolve_aggregate_field(scope, "json_agg", field))
                 .collect::<Result<Vec<_>>>()?;
             let order_by = order_by
                 .as_ref()
@@ -276,32 +295,39 @@ fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<Valid
             distinct,
             order_by,
             filter,
-        } => ValidatedAggregate::ArrayAgg {
-            field: resolve_aggregate_field(scope, field)?,
-            alias: alias.clone(),
-            distinct: *distinct,
-            order_by: order_by
-                .as_ref()
-                .map(|sort| validate_sort(scope, sort))
-                .transpose()?,
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "array_agg", field)?;
+            ValidatedAggregate::ArrayAgg {
+                field,
+                alias: alias.clone(),
+                distinct: *distinct,
+                order_by: order_by
+                    .as_ref()
+                    .map(|sort| validate_sort(scope, sort))
+                    .transpose()?,
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
         Aggregate::StringAgg {
             field,
             separator,
             alias,
             order_by,
             filter,
-        } => ValidatedAggregate::StringAgg {
-            field: resolve_aggregate_field(scope, field)?,
-            separator: separator.clone(),
-            alias: alias.clone(),
-            order_by: order_by
-                .as_ref()
-                .map(|sort| validate_sort(scope, sort))
-                .transpose()?,
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
+        } => {
+            let field = resolve_aggregate_field(scope, "string_agg", field)?;
+            validate_string_aggregate_field(&field)?;
+            ValidatedAggregate::StringAgg {
+                field,
+                separator: separator.clone(),
+                alias: alias.clone(),
+                order_by: order_by
+                    .as_ref()
+                    .map(|sort| validate_sort(scope, sort))
+                    .transpose()?,
+                filter: validate_aggregate_filter(scope, filter)?,
+            }
+        }
     })
 }
 
@@ -312,14 +338,57 @@ fn validate_aggregate_filter(scope: &QueryScope, filter: &Option<Expr>) -> Resul
     Ok(filter.clone())
 }
 
-fn resolve_aggregate_field(scope: &QueryScope, field_ref: &FieldRef) -> Result<ResolvedField> {
+fn resolve_aggregate_field(
+    scope: &QueryScope,
+    _aggregate: &str,
+    field_ref: &FieldRef,
+) -> Result<ResolvedField> {
     let field = resolve_field_in_scope(scope, field_ref)?;
     if field.is_json_path() {
         return Err(Error::NotSelectable {
             field: field.display_name(),
         });
     }
+    if !field.caps.selectable {
+        return Err(Error::NotSelectable {
+            field: field.display_name(),
+        });
+    }
     Ok(field)
+}
+
+fn validate_numeric_aggregate_field(aggregate: &str, field: &ResolvedField) -> Result<()> {
+    if field.ty.is_numeric() {
+        return Ok(());
+    }
+    Err(Error::UnsupportedAggregateField {
+        aggregate: aggregate.to_owned(),
+        field: field.display_name(),
+        field_type: field.ty.as_str().to_owned(),
+    })
+}
+
+fn validate_ordered_aggregate_field(_aggregate: &str, field: &ResolvedField) -> Result<()> {
+    if field.caps.sortable {
+        return Ok(());
+    }
+    Err(Error::NotSortable {
+        field: field.display_name(),
+    })
+}
+
+fn validate_string_aggregate_field(field: &ResolvedField) -> Result<()> {
+    if matches!(
+        field.ty,
+        crate::field::FieldType::Text | crate::field::FieldType::Enum(_)
+    ) {
+        return Ok(());
+    }
+    Err(Error::UnsupportedAggregateField {
+        aggregate: "string_agg".to_owned(),
+        field: field.display_name(),
+        field_type: field.ty.as_str().to_owned(),
+    })
 }
 
 fn validate_aggregate_aliases(aggregates: &[ValidatedAggregate]) -> Result<()> {

@@ -120,6 +120,13 @@ pub enum Error {
     #[error("aggregate `{alias}` does not support ordered input")]
     AggregateOrderUnsupported { alias: String },
 
+    #[error("aggregate `{aggregate}` does not support field `{field}` of type `{field_type}`")]
+    UnsupportedAggregateField {
+        aggregate: String,
+        field: String,
+        field_type: String,
+    },
+
     #[error("subquery must select {expected} column(s), but selects {actual}")]
     InvalidSubquerySelection { expected: usize, actual: usize },
 }

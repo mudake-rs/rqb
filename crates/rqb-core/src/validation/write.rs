@@ -11,7 +11,7 @@ use crate::write::{
 
 use super::operators::{
     count_raw_placeholders, enum_type_for_array, enum_type_for_field, require_enum_array,
-    require_enum_scalar, validate_column_operator,
+    require_enum_scalar, validate_column_operator, validate_value_for_field_type,
 };
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
@@ -59,6 +59,11 @@ impl ValidatedInsert {
                 .collect::<Result<Vec<_>>>()?,
             None => Vec::new(),
         };
+        if let Some(select) = &from_select {
+            for (target, source) in from_select_targets.iter().zip(&select.selected_fields) {
+                validate_column_operator(target, ColumnOperator::Equals, source)?;
+            }
+        }
         let returning = resolve_returning(&query.dataset, &query.returning)?;
         let conflict = query
             .conflict
@@ -163,6 +168,7 @@ fn validate_write_value(field: &ResolvedField, value: &Value) -> Result<()> {
     if let Some(enum_type) = enum_type_for_array(field) {
         return require_enum_array(field, Operator::ArrayContainsAll, enum_type, value);
     }
+    validate_value_for_field_type(field, "write", value)?;
     Ok(())
 }
 

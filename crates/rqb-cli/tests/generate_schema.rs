@@ -79,6 +79,51 @@ fn generate_public_schema_from_live_postgres_matches_golden() {
     fs::remove_file(output_path).expect("failed to remove generated schema output");
 }
 
+#[test]
+fn generate_public_schema_can_filter_tables() {
+    let Some(database_url) = test_database_url() else {
+        eprintln!("skipping rqb-cli table filter e2e test; set RQB_TEST_DATABASE_URL");
+        return;
+    };
+
+    let output_path = temp_schema_path();
+    let _ = fs::remove_file(&output_path);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rqb"))
+        .args([
+            "generate",
+            "--database-url",
+            &database_url,
+            "--schema",
+            "public",
+            "--table",
+            "orders",
+            "--table",
+            "order_items",
+            "--out",
+        ])
+        .arg(&output_path)
+        .output()
+        .expect("failed to run rqb generate with table filters");
+
+    assert!(
+        output.status.success(),
+        "rqb generate failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let generated =
+        fs::read_to_string(&output_path).expect("failed to read generated filtered schema output");
+    assert!(generated.contains("pub mod orders"));
+    assert!(generated.contains("pub mod order_items"));
+    assert!(generated.contains("pub const ORDER_STATUS"));
+    assert!(!generated.contains("pub mod app_users"));
+    assert!(!generated.contains("pub mod order_search_view"));
+
+    fs::remove_file(output_path).expect("failed to remove generated filtered schema output");
+}
+
 fn test_database_url() -> Option<String> {
     std::env::var("RQB_TEST_DATABASE_URL").ok()
 }

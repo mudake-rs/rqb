@@ -22,6 +22,17 @@ pub(super) fn validate_operator(
             require_between(field, operator, value)?;
             if let Some(enum_type) = enum_type_for_field(field) {
                 require_enum_array(field, operator, enum_type, value)?;
+            } else if field.is_json_path() {
+                let Value::Array(values) = value else {
+                    unreachable!("array shape validated by require_between");
+                };
+                require_number(field, operator, &values[0])?;
+                require_number(field, operator, &values[1])?;
+            } else if !(field.ty.is_numeric()
+                || field.ty.is_temporal()
+                || field.ty == FieldType::Text)
+            {
+                return unsupported(field, operator);
             }
         }
         ArrayContainsAny | ArrayContainsAll => {

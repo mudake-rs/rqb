@@ -174,6 +174,17 @@ impl Renderer {
     }
 
     pub(super) fn push_typed_param(&mut self, value: &Value, field_type: FieldType) {
+        if let Value::Array(values) = value
+            && values.is_empty()
+            && field_type.is_array()
+        {
+            self.sql.push_str("ARRAY[]");
+            if let Some(cast) = postgres_cast_sql(field_type) {
+                self.sql.push_str(&cast);
+            }
+            return;
+        }
+
         match field_type {
             FieldType::Numeric => {
                 self.push_numeric_param(value);

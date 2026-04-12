@@ -864,9 +864,12 @@ async fn executes_extended_operators_against_postgres() -> TestResult {
         .fields([order_search::EMAIL])
         .filter(all([
             order_search::TAGS.has("vip"),
+            order_search::TAGS.contains_all(["vip", "gift"]),
+            order_search::TAGS.elem_match("vip"),
             order_search::TAGS.is_not_empty(),
             order_search::METADATA.key_exists("campaign"),
             order_search::METADATA.keys_exist_any(["score", "missing"]),
+            order_search::METADATA.keys_exist_all(["campaign", "score"]),
             order_search::EMAIL.regex("^a"),
             order_search::EMAIL.search("ada@example.com"),
             order_search::STATUS.not_in([

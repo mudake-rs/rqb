@@ -125,13 +125,19 @@ impl Renderer {
                 self.push_typed_param(value, field.ty);
             }
             ArrayElemMatch => {
-                if field.is_json_path() {
-                    self.render_json_target(field);
-                } else {
+                if field.ty.is_array() && !field.is_json_path() {
                     self.render_column_name(field);
+                    self.sql.push_str(" @> ");
+                    self.push_typed_param(&Value::Array(vec![value.clone()]), field.ty);
+                } else {
+                    if field.is_json_path() {
+                        self.render_json_target(field);
+                    } else {
+                        self.render_column_name(field);
+                    }
+                    self.sql.push_str(" @> ");
+                    self.push_typed_param(&value_to_json_array(value), FieldType::Jsonb);
                 }
-                self.sql.push_str(" @> ");
-                self.push_typed_param(&value_to_json_array(value), FieldType::Jsonb);
             }
             ArrayContains => self.render_array_contains(field, value, false),
             ArrayNotContains => self.render_array_contains(field, value, true),

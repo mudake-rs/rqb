@@ -5,6 +5,7 @@ use rqb_core::{
     Sort, Value, all, avg, count, count_distinct, delete, exists, field, insert, not_exists, raw,
     select, string_agg, sum, update,
 };
+use serde::Serialize;
 
 fn orders() -> Dataset {
     Dataset::view("order_search_view")
@@ -47,6 +48,28 @@ fn writable_orders() -> Dataset {
         Field::new("status", FieldType::Enum(ORDER_STATUS)),
         Field::mapped("totalCents", "total_cents", FieldType::BigInt),
         Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+    ])
+}
+
+fn typed_values() -> Dataset {
+    Dataset::table("typed_values").fields([
+        Field::new("id", FieldType::Uuid),
+        Field::new("a", FieldType::Integer),
+        Field::new("b", FieldType::BigInt),
+        Field::new("amount", FieldType::Numeric),
+        Field::new("ratio", FieldType::Float),
+        Field::new("active", FieldType::Bool),
+        Field::mapped("happenedOn", "happened_on", FieldType::Date),
+        Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+        Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false),
+        Field::new("scores", FieldType::Array(ElemType::Int)).sortable(false),
+        Field::new("ids", FieldType::Array(ElemType::Uuid)).sortable(false),
+        Field::mapped(
+            "createdAtList",
+            "created_at_list",
+            FieldType::Array(ElemType::Timestamp),
+        )
+        .sortable(false),
     ])
 }
 
@@ -204,6 +227,163 @@ fn renders_numeric_float_special_values_as_postgres_literals() {
 }
 
 #[test]
+fn renders_scalar_range_and_text_negation_operators() {
+    let built = select(orders())
+        .filter(all([
+            field("totalCents").between(1_000, 2_000),
+            field("totalCents").lt(5_000),
+            field("email").not_contains("@spam.test"),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .contains("\"total_cents\" BETWEEN $1::bigint AND $2::bigint")
+    );
+    assert!(built.sql.contains("\"total_cents\" < $3::bigint"));
+    assert!(built.sql.contains("\"email\" NOT ILIKE $4 ESCAPE '\\'"));
+    assert_eq!(
+        built.params,
+        vec![
+            Value::I64(1_000),
+            Value::I64(2_000),
+            Value::I64(5_000),
+            Value::String("%@spam.test%".to_owned())
+        ]
+    );
+}
+
+#[test]
+fn renders_array_contains_all_and_elem_match_with_array_casts() {
+    let built = select(orders())
+        .filter(all([
+            field("tags").contains_all(["vip", "gift"]),
+            field("tags").elem_match("vip"),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"tags\" @> $1::text[]"));
+    assert!(built.sql.contains("\"tags\" @> $2::text[]"));
+    assert_eq!(
+        built.params,
+        vec![
+            Value::Array(vec!["vip".into(), "gift".into()]),
+            Value::Array(vec!["vip".into()])
+        ]
+    );
+}
+
+#[test]
+fn renders_json_elem_match_and_keys_exist_all() {
+    let built = select(orders())
+        .filter(all([
+            field("metadata").elem_match(serde_json::json!({"gift": true})),
+            field("metadata").keys_exist_all(["campaign", "score"]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"metadata\" @> $1::jsonb"));
+    assert!(built.sql.contains("\"metadata\" ?& $2::text[]"));
+}
+
+#[test]
+fn renders_column_predicate_operator_matrix() {
+    let built = select(typed_values())
+        .filter(all([
+            field("a").ne_col(field("b")),
+            field("a").gt_col(field("b")),
+            field("a").gte_col(field("b")),
+            field("a").lt_col(field("b")),
+            field("a").lte_col(field("b")),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    for fragment in [
+        "\"a\" <> \"b\"",
+        "\"a\" > \"b\"",
+        "\"a\" >= \"b\"",
+        "\"a\" < \"b\"",
+        "\"a\" <= \"b\"",
+    ] {
+        assert!(
+            built.sql.contains(fragment),
+            "{fragment} missing from {}",
+            built.sql
+        );
+    }
+}
+
+#[test]
+fn renders_postgres_type_cast_matrix() {
+    let built = select(typed_values())
+        .fields(["id", "happenedOn", "active", "ratio"])
+        .filter(all([
+            field("id").eq("10000000-0000-0000-0000-000000000001"),
+            field("a").eq(42),
+            field("b").eq(42_i64),
+            field("amount").eq("9007199254740993"),
+            field("ratio").eq(1.5),
+            field("active").eq(true),
+            field("happenedOn").eq("2026-04-12"),
+            field("createdAt").eq("2026-04-12T00:00:00Z"),
+            field("scores").contains_any([1, 2]),
+            field("ids").contains_any(["10000000-0000-0000-0000-000000000001"]),
+            field("createdAtList").contains_any(["2026-04-12T00:00:00Z"]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("$1::text::uuid"));
+    assert!(built.sql.contains("$2::bigint::int"));
+    assert!(built.sql.contains("$3::bigint"));
+    assert!(built.sql.contains("$4::text::numeric"));
+    assert!(built.sql.contains("$5::double precision"));
+    assert!(built.sql.contains("$7::text::date"));
+    assert!(built.sql.contains("$8::text::timestamptz"));
+    assert!(built.sql.contains("$9::bigint[]::int[]"));
+    assert!(built.sql.contains("$10::text[]::uuid[]"));
+    assert!(built.sql.contains("$11::text[]::timestamptz[]"));
+}
+
+#[test]
+fn renders_empty_array_params_as_typed_literals() {
+    let built = select(typed_values())
+        .filter(all([
+            field("scores").contains_any(Vec::<i32>::new()),
+            field("ids").contains_any(Vec::<String>::new()),
+            field("createdAtList").contains_any(Vec::<String>::new()),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"scores\" && ARRAY[]::bigint[]::int[]"));
+    assert!(built.sql.contains("\"ids\" && ARRAY[]::text[]::uuid[]"));
+    assert!(
+        built
+            .sql
+            .contains("\"created_at_list\" && ARRAY[]::text[]::timestamptz[]")
+    );
+    assert!(built.params.is_empty());
+
+    let enum_built = select(enum_orders())
+        .filter(field("statusHistory").contains_any(Vec::<OrderStatus>::new()))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        enum_built
+            .sql
+            .contains("\"status_history\" && ARRAY[]::text[]::\"public\".\"order_status\"[]")
+    );
+    assert!(enum_built.params.is_empty());
+}
+
+#[test]
 fn select_defaults_to_all_selectable_root_fields() {
     let built = select(orders())
         .filter(field("status").eq("paid"))
@@ -234,6 +414,20 @@ fn select_defaults_to_all_selectable_root_fields() {
 }
 
 #[test]
+fn renders_schema_qualified_sources_and_explicit_offset() {
+    let dataset = Dataset::from(rqb_core::Source::table("orders").schema("archive"))
+        .fields([Field::new("id", FieldType::Uuid)]);
+    let built = select(dataset)
+        .fields(["id"])
+        .offset(40)
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("FROM \"archive\".\"orders\""));
+    assert!(built.sql.ends_with("LIMIT 100 OFFSET 40"));
+}
+
+#[test]
 fn renders_cte_and_raw_predicate() {
     let cte = rqb_core::cte(
         "recent_orders",
@@ -250,6 +444,65 @@ fn renders_cte_and_raw_predicate() {
     ));
     assert!(built.sql.contains("WHERE total_cents > $2"));
     assert_eq!(built.params.len(), 2);
+}
+
+#[test]
+fn renders_select_based_and_recursive_ctes() {
+    let paid_orders = rqb_core::cte(
+        "paid_orders",
+        select(orders())
+            .fields(["id", "status"])
+            .filter(field("status").eq("paid"))
+            .build(),
+    );
+    let built = select(Dataset::cte("paid_orders").fields([
+        Field::new("id", FieldType::Uuid),
+        Field::new("status", FieldType::Text),
+    ]))
+    .cte(paid_orders)
+    .build_rows_pg()
+    .unwrap();
+
+    assert!(built.sql.starts_with("WITH \"paid_orders\" AS (SELECT"));
+    assert!(built.sql.contains("FROM \"order_search_view\""));
+    assert!(built.sql.contains("WHERE \"status\" = $1"));
+
+    let numbers = rqb_core::cte("numbers", raw("SELECT ?::bigint AS n").bind(1))
+        .columns(["n"])
+        .recursive();
+    let recursive = select(Dataset::cte("numbers").fields([Field::new("n", FieldType::BigInt)]))
+        .cte(numbers)
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        recursive
+            .sql
+            .starts_with("WITH RECURSIVE \"numbers\" (\"n\") AS (SELECT $1::bigint AS n)")
+    );
+}
+
+#[test]
+fn renders_raw_sql_escaped_question_marks_and_bind_errors() {
+    let escaped = rqb_core::cte("escaped", raw("SELECT ?? AS literal, ? AS n").bind(1));
+    let built = select(Dataset::cte("escaped").fields([Field::new("n", FieldType::Integer)]))
+        .cte(escaped)
+        .build_rows_pg()
+        .unwrap();
+    assert!(built.sql.contains("SELECT ? AS literal, $1 AS n"));
+    assert_eq!(built.params, vec![Value::I64(1)]);
+
+    let too_few = select(Dataset::cte("bad").fields([Field::new("n", FieldType::Integer)]))
+        .cte(rqb_core::cte("bad", raw("SELECT ? AS n")))
+        .build_rows_pg()
+        .unwrap_err();
+    assert!(matches!(too_few, Error::TooFewRawBinds));
+
+    let unused = select(Dataset::cte("bad").fields([Field::new("n", FieldType::Integer)]))
+        .cte(rqb_core::cte("bad", raw("SELECT 1 AS n").bind(1)))
+        .build_rows_pg()
+        .unwrap_err();
+    assert!(matches!(unused, Error::UnusedRawBinds));
 }
 
 #[test]
@@ -279,6 +532,102 @@ fn renders_insert_values_returning_and_upsert() {
     assert!(built.sql.ends_with(&expected_returning));
     assert_eq!(built.params.len(), 4);
     assert_eq!(built.columns.len(), 2);
+}
+
+#[test]
+fn renders_insert_batch_values() {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NewOrder {
+        id: &'static str,
+        user_id: &'static str,
+        status: &'static str,
+        total_cents: i64,
+    }
+
+    let rows = [
+        NewOrder {
+            id: "30000000-0000-0000-0000-000000009901",
+            user_id: "10000000-0000-0000-0000-000000000001",
+            status: "draft",
+            total_cents: 1_000,
+        },
+        NewOrder {
+            id: "30000000-0000-0000-0000-000000009902",
+            user_id: "10000000-0000-0000-0000-000000000002",
+            status: "paid",
+            total_cents: 2_000,
+        },
+    ];
+
+    let built = insert(writable_orders()).values(&rows).build_pg().unwrap();
+
+    assert!(built.sql.starts_with("INSERT INTO \"orders\""));
+    assert!(built.sql.contains(" VALUES ("));
+    assert!(built.sql.contains("), ("));
+    assert_eq!(built.params.len(), 8);
+}
+
+#[test]
+fn renders_insert_from_select() {
+    let source = select(writable_orders())
+        .fields(["id", "userId", "status", "totalCents"])
+        .filter(field("status").eq(OrderStatus::Paid))
+        .build();
+
+    let built = insert(writable_orders())
+        .from_select(source)
+        .on_conflict("id")
+        .do_nothing()
+        .build_pg()
+        .unwrap();
+
+    assert!(built.sql.starts_with(
+        "INSERT INTO \"orders\" (\"id\", \"user_id\", \"status\", \"total_cents\") SELECT"
+    ));
+    assert!(built.sql.contains("FROM \"orders\""));
+    assert!(
+        built
+            .sql
+            .contains("WHERE \"status\" = $1::text::\"public\".\"order_status\"")
+    );
+    assert!(built.sql.ends_with("ON CONFLICT (\"id\") DO NOTHING"));
+}
+
+#[test]
+fn renders_conflict_targets_actions_and_filters() {
+    let do_nothing = insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .on_conflict("id")
+        .do_nothing()
+        .build_pg()
+        .unwrap();
+    assert!(do_nothing.sql.contains("ON CONFLICT (\"id\") DO NOTHING"));
+
+    let constraint = insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .on_conflict_constraint("orders_pkey")
+        .do_nothing()
+        .build_pg()
+        .unwrap();
+    assert!(
+        constraint
+            .sql
+            .contains("ON CONFLICT ON CONSTRAINT \"orders_pkey\" DO NOTHING")
+    );
+
+    let composite = insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .set("userId", "10000000-0000-0000-0000-000000000001")
+        .set("status", OrderStatus::Paid)
+        .on_conflict(["id", "userId"])
+        .do_update(["status"])
+        .filter(field("status").ne(OrderStatus::Cancelled))
+        .build_pg()
+        .unwrap();
+    assert!(composite
+        .sql
+        .contains("ON CONFLICT (\"id\", \"user_id\") DO UPDATE SET \"status\" = EXCLUDED.\"status\" WHERE \"status\" <> $4::text::\"public\".\"order_status\""));
 }
 
 #[test]
@@ -315,6 +664,34 @@ fn renders_update_raw_column_and_delete() {
 }
 
 #[test]
+fn renders_update_set_from_serde_record() {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OrderPatch {
+        status: &'static str,
+        total_cents: i64,
+    }
+
+    let built = update(writable_orders())
+        .set_from(&OrderPatch {
+            status: "paid",
+            total_cents: 15_900,
+        })
+        .filter(field("id").eq("30000000-0000-0000-0000-000000009999"))
+        .build_pg()
+        .unwrap();
+
+    assert!(built.sql.starts_with("UPDATE \"orders\" SET "));
+    assert!(
+        built
+            .sql
+            .contains("\"status\" = $1::text::\"public\".\"order_status\"")
+    );
+    assert!(built.sql.contains("\"total_cents\" = $2::bigint"));
+    assert!(built.sql.contains("WHERE \"id\" = $3::text::uuid"));
+}
+
+#[test]
 fn renders_default_returning_all_for_write_fetches() {
     let built = insert(writable_orders())
         .set("id", "30000000-0000-0000-0000-000000009999")
@@ -348,6 +725,21 @@ fn renders_default_returning_all_for_write_fetches() {
         .build_pg()
         .unwrap();
     assert_eq!(explicit.columns.len(), 1);
+
+    let update_all = update(writable_orders())
+        .set("status", OrderStatus::Paid)
+        .filter(field("id").eq("30000000-0000-0000-0000-000000009999"))
+        .returning_all_if_empty()
+        .build_pg()
+        .unwrap();
+    assert_eq!(update_all.columns.len(), 5);
+
+    let delete_all = delete(writable_orders())
+        .filter(field("id").eq("30000000-0000-0000-0000-000000009999"))
+        .returning_all_if_empty()
+        .build_pg()
+        .unwrap();
+    assert_eq!(delete_all.columns.len(), 5);
 }
 
 #[test]
@@ -414,6 +806,22 @@ fn renders_filter_for_non_json_aggregates() {
 }
 
 #[test]
+fn renders_distinct_select() {
+    let built = select(orders())
+        .fields(["email"])
+        .distinct()
+        .build_pg()
+        .unwrap();
+
+    assert!(built.rows.sql.starts_with("SELECT DISTINCT \"email\""));
+    assert!(
+        built.count.sql.starts_with(
+            "SELECT count(*) FROM (SELECT DISTINCT \"email\" FROM \"order_search_view\""
+        )
+    );
+}
+
+#[test]
 fn renders_distinct_on() {
     let built = select(orders())
         .fields(["email", "createdAt"])
@@ -475,6 +883,34 @@ fn renders_for_share_nowait() {
 }
 
 #[test]
+fn renders_other_lock_modes_and_nulls_first() {
+    let no_key_update = select(orders_table())
+        .fields(["id"])
+        .for_no_key_update()
+        .skip_locked()
+        .build_rows_pg()
+        .unwrap();
+    assert!(no_key_update.sql.ends_with("FOR NO KEY UPDATE SKIP LOCKED"));
+
+    let key_share = select(orders_table())
+        .fields(["id"])
+        .for_key_share()
+        .build_rows_pg()
+        .unwrap();
+    assert!(key_share.sql.ends_with("FOR KEY SHARE"));
+
+    let nulls_first = select(orders())
+        .order_by(field("createdAt").asc().nulls_first())
+        .build_rows_pg()
+        .unwrap();
+    assert!(
+        nulls_first
+            .sql
+            .contains("ORDER BY \"created_at\" ASC NULLS FIRST")
+    );
+}
+
+#[test]
 fn request_merges_with_existing_filter() {
     let request = SearchRequest {
         query: Some(field("status").eq("paid")),
@@ -514,6 +950,53 @@ fn filter_chains_with_and() {
         built.sql
     );
     assert_eq!(built.params, vec!["paid".into(), 1_000.into()]);
+}
+
+#[test]
+fn renders_optional_conditional_and_apply_filters() {
+    let built = select(orders())
+        .filter_if(false, field("status").eq("draft"))
+        .filter_if(true, field("status").eq("paid"))
+        .filter_option(Some(1_000), |min| field("totalCents").gte(min))
+        .filter_option(None::<String>, |status| field("status").eq(status))
+        .apply(|query| query.or_where(field("email").ends_with("@example.com")))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built.sql.contains(
+            "WHERE ((\"status\" = $1 AND \"total_cents\" >= $2::bigint) OR \"email\" ILIKE $3 ESCAPE '\\')"
+        ),
+        "{}",
+        built.sql
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("paid".to_owned()),
+            Value::I64(1_000),
+            Value::String("%@example.com".to_owned())
+        ]
+    );
+}
+
+#[test]
+fn renders_not_expression_and_standalone_null_checks() {
+    let built = select(orders())
+        .filter(rqb_core::not(all([
+            field("status").eq("cancelled"),
+            field("createdAt").is_not_null(),
+        ])))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .contains("WHERE NOT ((\"status\" = $1 AND \"created_at\" IS NOT NULL))"),
+        "{}",
+        built.sql
+    );
 }
 
 #[test]
@@ -665,6 +1148,37 @@ fn renders_join_with_qualified_columns() {
 }
 
 #[test]
+fn renders_right_full_and_cross_joins() {
+    let right = select(orders_table().alias("o"))
+        .right_join(
+            users_table().alias("u"),
+            field("o.userId").eq_col(field("u.id")),
+        )
+        .fields([field("o.id")])
+        .build_rows_pg()
+        .unwrap();
+    assert!(right.sql.contains("RIGHT JOIN \"app_users\" AS \"u\" ON"));
+
+    let full = select(orders_table().alias("o"))
+        .full_join(
+            users_table().alias("u"),
+            field("o.userId").eq_col(field("u.id")),
+        )
+        .fields([field("o.id")])
+        .build_rows_pg()
+        .unwrap();
+    assert!(full.sql.contains("FULL JOIN \"app_users\" AS \"u\" ON"));
+
+    let cross = select(orders_table().alias("o"))
+        .cross_join(users_table().alias("u"))
+        .fields([field("o.id"), field("u.email")])
+        .build_rows_pg()
+        .unwrap();
+    assert!(cross.sql.contains("CROSS JOIN \"app_users\" AS \"u\""));
+    assert!(!cross.sql.contains(" CROSS JOIN \"app_users\" AS \"u\" ON "));
+}
+
+#[test]
 fn join_default_projection_uses_root_fields_only() {
     let built = select(users_table().alias("u"))
         .left_join(
@@ -752,6 +1266,29 @@ fn renders_in_subquery_without_default_limit() {
     assert!(built.sql.contains(
         "WHERE \"id\" IN (SELECT \"o\".\"user_id\" FROM \"orders\" AS \"o\" WHERE \"o\".\"status\" = $1)"
     ), "{}", built.sql);
+    assert!(!built.sql.contains("WHERE \"o\".\"status\" = $1 LIMIT"));
+    assert_eq!(built.params, vec!["paid".into()]);
+}
+
+#[test]
+fn renders_not_in_subquery_without_default_limit() {
+    let subquery = select(orders_table().alias("o"))
+        .fields([field("o.userId")])
+        .filter(field("o.status").eq("paid"));
+
+    let built = select(users_table())
+        .fields(["email"])
+        .filter(field("id").not_in_subquery(subquery))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built.sql.contains(
+            "WHERE \"id\" NOT IN (SELECT \"o\".\"user_id\" FROM \"orders\" AS \"o\" WHERE \"o\".\"status\" = $1)"
+        ),
+        "{}",
+        built.sql
+    );
     assert!(!built.sql.contains("WHERE \"o\".\"status\" = $1 LIMIT"));
     assert_eq!(built.params, vec!["paid".into()]);
 }

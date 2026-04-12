@@ -8,6 +8,7 @@ rqb keeps tests close to the layer that owns the behavior. The goal is fast feed
 - `crates/rqb-postgres/src/tests.rs`: Postgres SQL rendering behavior with inline SQL assertions.
 - `crates/rqb-postgres/tests/postgres_integration.rs`: runtime behavior against Postgres.
 - `crates/rqb-cli/src/main.rs`: code generation unit tests.
+- `crates/rqb-cli/tests/generate_schema.rs`: CLI introspection against live Postgres plus golden generated schema comparison.
 
 Split a test file only when it becomes hard to navigate. Do not create a separate test crate while the workspace is still small.
 

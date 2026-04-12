@@ -1,4 +1,4 @@
-.PHONY: fmt check-fmt clippy lint test check test-integration docker-test verify generate-demo generate-sample-schema db-up db-down db-reset
+.PHONY: fmt check-fmt clippy lint test check test-integration test-cli-integration docker-test verify generate-demo generate-sample-schema db-up db-down db-reset
 
 DATABASE_URL ?= postgres://rqb:rqb@localhost:55432/rqb
 GENERATED_SCHEMA ?= target/generated/rqb_schema.rs
@@ -23,9 +23,12 @@ check: lint test
 test-integration: docker-infra-up
 	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test -p rqb-postgres --features runtime-tokio-postgres --test postgres_integration -- --nocapture
 
+test-cli-integration: docker-infra-up
+	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test -p rqb-cli --test generate_schema -- --nocapture
+
 verify: docker-infra-up
 	cargo build --workspace
-	cargo test --workspace
+	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test --workspace
 	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test -p rqb-postgres --features pool --test postgres_integration -- --nocapture
 
 generate-demo: docker-infra-up

@@ -1,5 +1,7 @@
 FROM rust:1-bookworm
 
+RUN rustup component add rustfmt
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \

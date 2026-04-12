@@ -16,5 +16,6 @@ docker-test:
 	@set -e; \
 	cleanup() { $(DOCKER_TEST_COMPOSE) down --remove-orphans; }; \
 	trap 'status=$$?; cleanup; exit $$status' EXIT INT TERM; \
-	$(DOCKER_TEST_COMPOSE) up -d --build --wait postgres; \
+	$(DOCKER_TEST_COMPOSE) build tests; \
+	$(DOCKER_TEST_COMPOSE) up -d --wait postgres; \
 	$(DOCKER_TEST_COMPOSE) run --rm --no-deps tests

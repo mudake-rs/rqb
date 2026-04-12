@@ -1,0 +1,37 @@
+# Rust build output
+target/
+
+# Generated local artifacts
+/target/generated/
+**/*.rs.bk
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.envrc
+*.local
+
+# Editor and IDE state
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+temp/
+
+# Local agent instructions / scratch context
+.ignore
+.codex/
+.claude/
+AGENTS.md
+CLAUDE.md

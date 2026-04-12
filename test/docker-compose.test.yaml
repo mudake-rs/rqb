@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: rqb
+      POSTGRES_PASSWORD: rqb
+      POSTGRES_DB: rqb
+    tmpfs:
+      - /var/lib/postgresql
+    command: >
+      postgres
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c max_wal_size=256MB
+    volumes:
+      - ../tests/sql/init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+
+  tests:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    working_dir: /app
+    volumes:
+      - ../:/app
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/target
+    environment:
+      RQB_TEST_DATABASE_URL: postgres://rqb:rqb@postgres:5432/rqb
+      RUST_BACKTRACE: 1
+    depends_on:
+      - postgres
+    command: >
+      bash -lc '
+        . /usr/local/cargo/env;
+        until (echo > /dev/tcp/postgres/5432) >/dev/null 2>&1; do sleep 0.5; done;
+        cargo test --workspace &&
+        cargo test --workspace --all-features
+      '
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  cargo-target:

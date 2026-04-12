@@ -1,0 +1,22 @@
+[package]
+name = "rqb-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core AST, validation, and builders for rqb query builder."
+keywords = ["postgres", "query-builder", "sql", "database", "serde"]
+categories = ["database", "web-programming"]
+
+[features]
+default = []
+uuid = ["with-uuid"]
+with-uuid = ["dep:uuid"]
+with-chrono = ["dep:chrono"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }

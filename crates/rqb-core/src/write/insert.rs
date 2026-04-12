@@ -1,0 +1,178 @@
+use serde::Serialize;
+
+use crate::dataset::Dataset;
+use crate::error::{Error, Result};
+use crate::expr::Expr;
+use crate::field::FieldRef;
+use crate::request::SelectQuery;
+use crate::serde_bridge::fields_from_serializable;
+use crate::value::Value;
+
+use super::{
+    ConflictAction, ConflictClause, ConflictTarget, IntoFieldRefs, ReturningMode, WriteAssignment,
+};
+
+pub fn insert(dataset: impl Into<Dataset>) -> InsertBuilder {
+    InsertBuilder::new(dataset)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[must_use]
+pub struct InsertQuery {
+    pub dataset: Dataset,
+    pub rows: Vec<Vec<WriteAssignment>>,
+    pub source: Option<Box<SelectQuery>>,
+    pub returning: ReturningMode,
+    pub conflict: Option<ConflictClause>,
+}
+
+impl InsertQuery {
+    pub fn returning(mut self, fields: impl IntoFieldRefs) -> Self {
+        self.returning = ReturningMode::Fields(fields.into_field_refs());
+        self
+    }
+
+    pub fn returning_all(mut self) -> Self {
+        self.returning = ReturningMode::All;
+        self
+    }
+
+    pub fn returning_all_if_empty(mut self) -> Self {
+        if self.returning.is_none() {
+            self.returning = ReturningMode::All;
+        }
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct InsertBuilder {
+    query: InsertQuery,
+    errors: Vec<Error>,
+}
+
+impl InsertBuilder {
+    pub fn new(dataset: impl Into<Dataset>) -> Self {
+        Self {
+            query: InsertQuery {
+                dataset: dataset.into(),
+                rows: Vec::new(),
+                source: None,
+                returning: ReturningMode::None,
+                conflict: None,
+            },
+            errors: Vec::new(),
+        }
+    }
+
+    pub fn set(mut self, field: impl Into<FieldRef>, value: impl Into<Value>) -> Self {
+        let assignment = WriteAssignment::value(field, value);
+        if let Some(row) = self.query.rows.last_mut() {
+            row.push(assignment);
+        } else {
+            self.query.rows.push(vec![assignment]);
+        }
+        self
+    }
+
+    pub fn value<T>(mut self, record: &T) -> Self
+    where
+        T: Serialize + ?Sized,
+    {
+        match fields_from_serializable(&self.query.dataset, record) {
+            Ok(fields) => self.query.rows.push(
+                fields
+                    .into_iter()
+                    .map(|(field, value)| WriteAssignment::value(field, value))
+                    .collect(),
+            ),
+            Err(error) => self.errors.push(error),
+        }
+        self
+    }
+
+    pub fn values<'a, T, I>(mut self, records: I) -> Self
+    where
+        T: Serialize + 'a,
+        I: IntoIterator<Item = &'a T>,
+    {
+        for record in records {
+            self = self.value(record);
+        }
+        self
+    }
+
+    pub fn from_select(mut self, select: SelectQuery) -> Self {
+        self.query.source = Some(Box::new(select));
+        self
+    }
+
+    returning_method!();
+    apply_method!();
+
+    pub fn on_conflict(self, fields: impl IntoFieldRefs) -> InsertConflictBuilder {
+        InsertConflictBuilder {
+            builder: self,
+            target: ConflictTarget::Columns(fields.into_field_refs()),
+        }
+    }
+
+    pub fn on_conflict_constraint(self, constraint: impl Into<String>) -> InsertConflictBuilder {
+        InsertConflictBuilder {
+            builder: self,
+            target: ConflictTarget::Constraint(constraint.into()),
+        }
+    }
+
+    pub fn filter(mut self, expr: impl Into<Expr>) -> Self {
+        if let Some(ConflictClause {
+            action: ConflictAction::DoUpdate { filter, .. },
+            ..
+        }) = &mut self.query.conflict
+        {
+            *filter = match filter.take() {
+                Some(existing) => Some(existing.and(expr)),
+                None => Some(expr.into()),
+            };
+        } else {
+            self.errors.push(Error::InvalidConflictFilter);
+        }
+        self
+    }
+
+    pub fn build(self) -> Result<InsertQuery> {
+        if let Some(error) = self.errors.into_iter().next() {
+            return Err(error);
+        }
+        Ok(self.query)
+    }
+}
+
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct InsertConflictBuilder {
+    builder: InsertBuilder,
+    target: ConflictTarget,
+}
+
+impl InsertConflictBuilder {
+    pub fn do_update(mut self, fields: impl IntoFieldRefs) -> InsertBuilder {
+        self.builder.query.conflict = Some(ConflictClause {
+            target: self.target,
+            action: ConflictAction::DoUpdate {
+                fields: fields.into_field_refs(),
+                filter: None,
+            },
+        });
+        self.builder
+    }
+
+    pub fn do_nothing(mut self) -> InsertBuilder {
+        self.builder.query.conflict = Some(ConflictClause {
+            target: self.target,
+            action: ConflictAction::DoNothing,
+        });
+        self.builder
+    }
+}

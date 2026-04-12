@@ -1,0 +1,30 @@
+use rqb::prelude::Db;
+
+pub mod orders;
+pub mod schema;
+pub mod users;
+
+pub use orders::OrderService;
+pub use schema::enums::{ORDER_STATUS, USER_STATUS};
+pub use users::UserService;
+
+#[derive(Clone)]
+pub struct AppServices {
+    db: Db,
+}
+
+impl AppServices {
+    pub async fn connect(database_url: &str) -> rqb::postgres::Result<Self> {
+        // One pooled Db is shared by handlers; transaction boundaries stay explicit at call sites.
+        let db = rqb::connect(database_url).await?;
+        Ok(Self::new(db))
+    }
+
+    pub fn new(db: Db) -> Self {
+        Self { db }
+    }
+
+    pub fn db(&self) -> &Db {
+        &self.db
+    }
+}

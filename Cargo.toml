@@ -1,0 +1,32 @@
+[workspace]
+members = [
+    "crates/rqb",
+    "crates/rqb-core",
+    "crates/rqb-postgres",
+    "crates/rqb-cli",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/epolishko/rqb"
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.53", features = ["derive", "env"] }
+heck = "0.5.0"
+prettyplease = "0.2.37"
+proc-macro2 = "1.0.103"
+quote = "1.0.42"
+rqb-core = { version = "0.1.0", path = "crates/rqb-core" }
+rqb-postgres = { version = "0.1.0", path = "crates/rqb-postgres" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+syn = "2.0.111"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
+tokio-postgres = { version = "0.7.15", features = ["with-serde_json-1"] }
+deadpool-postgres = "0.14.1"
+uuid = { version = "1", default-features = false, features = ["serde", "std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }

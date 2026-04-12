@@ -1,0 +1,450 @@
+use std::collections::BTreeSet;
+
+use crate::aggregate::{Aggregate, SelectColumn};
+use crate::dataset::{CteBody, Dataset};
+use crate::error::{Error, Result};
+use crate::expr::{Expr, LogicalOp, Sort};
+use crate::field::{FieldRef, ResolvedField};
+use crate::request::SelectQuery;
+
+use super::operators::{count_raw_placeholders, validate_column_operator, validate_operator};
+use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
+use super::scope::{ExprContext, QueryScope};
+use super::{ValidatedAggregate, ValidatedSelect, ValidatedSort};
+
+impl ValidatedSelect {
+    pub fn new(query: SelectQuery) -> Result<Self> {
+        Self::new_with_outer_datasets(query, &[])
+    }
+
+    pub fn new_with_outer_datasets(query: SelectQuery, outer_datasets: &[Dataset]) -> Result<Self> {
+        if let Some(error) = query.builder_errors.first() {
+            return Err(error.clone());
+        }
+        validate_nested_ctes(&query)?;
+        let scope = QueryScope::new_with_outer(&query, outer_datasets)?;
+        validate_joins(&scope, &query)?;
+
+        let limit = query.request.limit.unwrap_or(query.dataset.default_limit);
+        if limit > query.dataset.max_limit {
+            return Err(Error::LimitExceeded {
+                requested: limit,
+                max: query.dataset.max_limit,
+            });
+        }
+
+        let mut selected_fields = resolve_selection(&scope, &query.request.fields)?;
+        apply_root_output_aliases(&query, &mut selected_fields);
+        let distinct_on = resolve_distinct_on(&scope, &query.distinct_on)?;
+        let aggregates = query
+            .aggregates
+            .iter()
+            .map(|aggregate| validate_aggregate(&scope, aggregate))
+            .collect::<Result<Vec<_>>>()?;
+        let group_by = if !query.group_by.is_empty() {
+            resolve_group_by(&scope, &query.group_by)?
+        } else if !aggregates.is_empty() {
+            selected_fields.clone()
+        } else {
+            Vec::new()
+        };
+        validate_aggregate_aliases(&aggregates)?;
+        validate_grouped_selection(&selected_fields, &group_by, &aggregates)?;
+        let columns = select_columns(&selected_fields, &aggregates);
+        let sort = query
+            .request
+            .sort
+            .iter()
+            .map(|sort| validate_sort(&scope, sort))
+            .collect::<Result<Vec<_>>>()?;
+
+        if let Some(expr) = &query.request.query {
+            validate_expr(&scope, expr, ExprContext::Filter)?;
+        }
+        if let Some(expr) = &query.having {
+            validate_expr(&scope, expr, ExprContext::Having)?;
+        }
+
+        Ok(Self {
+            offset: query.request.offset.unwrap_or(0),
+            limit,
+            selected_fields,
+            distinct_on,
+            group_by,
+            aggregates,
+            columns,
+            sort,
+            query,
+        })
+    }
+}
+
+fn apply_root_output_aliases(query: &SelectQuery, fields: &mut [ResolvedField]) {
+    if query.joins.is_empty() {
+        return;
+    }
+    let root_qualifier = query.dataset.sql_qualifier();
+    for field in fields {
+        if field.alias.is_none() && field.qualifier.as_deref() == Some(root_qualifier) {
+            field.alias = Some(field.api_name.clone());
+        }
+    }
+}
+
+fn resolve_distinct_on(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<ResolvedField>> {
+    fields
+        .iter()
+        .map(|field| resolve_field_in_scope(scope, field))
+        .collect()
+}
+
+fn validate_nested_ctes(query: &SelectQuery) -> Result<()> {
+    for cte in &query.ctes {
+        if let CteBody::Select(select) = &cte.body {
+            let nested = (**select).clone();
+            ValidatedSelect::new(nested)?;
+        }
+    }
+    Ok(())
+}
+fn validate_joins(scope: &QueryScope, query: &SelectQuery) -> Result<()> {
+    for join in &query.joins {
+        match (&join.on, join.kind.requires_condition()) {
+            (Some(on), _) => validate_expr(scope, on, ExprContext::JoinOn)?,
+            (None, true) => {
+                return Err(Error::MissingJoinCondition {
+                    kind: join.kind.as_sql().to_owned(),
+                    dataset: join.dataset.api_name.clone(),
+                });
+            }
+            (None, false) => {}
+        }
+    }
+    Ok(())
+}
+
+fn resolve_selection(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<ResolvedField>> {
+    if fields.is_empty() {
+        return scope
+            .root()
+            .fields
+            .iter()
+            .filter(|field| field.caps.selectable)
+            .map(|field| {
+                resolved_from_field(
+                    scope,
+                    scope.root(),
+                    *field,
+                    &[],
+                    None,
+                    default_qualifier(scope, scope.root()),
+                    None,
+                )
+            })
+            .collect();
+    }
+
+    let mut resolved = Vec::with_capacity(fields.len());
+    for field_ref in fields {
+        let field = resolve_field_in_scope(scope, field_ref)?;
+        if !field.json_path.is_empty() {
+            return Err(Error::NotSelectable {
+                field: field.display_name(),
+            });
+        }
+        if !field.caps.selectable {
+            return Err(Error::NotSelectable {
+                field: field.display_name(),
+            });
+        }
+        resolved.push(field);
+    }
+    Ok(resolved)
+}
+
+fn validate_sort(scope: &QueryScope, sort: &Sort) -> Result<ValidatedSort> {
+    let field = resolve_field_in_scope(scope, &sort.field)?;
+    if !field.json_path.is_empty() || !field.caps.sortable {
+        return Err(Error::NotSortable {
+            field: field.display_name(),
+        });
+    }
+    Ok(ValidatedSort {
+        field,
+        dir: sort.dir,
+        nulls: sort.nulls,
+    })
+}
+
+fn resolve_group_by(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<ResolvedField>> {
+    fields
+        .iter()
+        .map(|field_ref| {
+            let field = resolve_field_in_scope(scope, field_ref)?;
+            if field.is_json_path() {
+                return Err(Error::NotSelectable {
+                    field: field.display_name(),
+                });
+            }
+            Ok(field)
+        })
+        .collect()
+}
+
+fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<ValidatedAggregate> {
+    Ok(match aggregate {
+        Aggregate::Count { alias, filter } => {
+            validate_aggregate_filter(scope, filter)?;
+            ValidatedAggregate::Count {
+                alias: alias.clone(),
+                filter: filter.clone(),
+            }
+        }
+        Aggregate::CountField {
+            field,
+            alias,
+            distinct,
+            filter,
+        } => ValidatedAggregate::CountField {
+            field: resolve_aggregate_field(scope, field)?,
+            alias: alias.clone(),
+            distinct: *distinct,
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+        Aggregate::Sum {
+            field,
+            alias,
+            filter,
+        } => ValidatedAggregate::Sum {
+            field: resolve_aggregate_field(scope, field)?,
+            alias: alias.clone(),
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+        Aggregate::Avg {
+            field,
+            alias,
+            filter,
+        } => ValidatedAggregate::Avg {
+            field: resolve_aggregate_field(scope, field)?,
+            alias: alias.clone(),
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+        Aggregate::Min {
+            field,
+            alias,
+            filter,
+        } => ValidatedAggregate::Min {
+            field: resolve_aggregate_field(scope, field)?,
+            alias: alias.clone(),
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+        Aggregate::Max {
+            field,
+            alias,
+            filter,
+        } => ValidatedAggregate::Max {
+            field: resolve_aggregate_field(scope, field)?,
+            alias: alias.clone(),
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+        Aggregate::JsonAgg {
+            alias,
+            fields,
+            order_by,
+            filter,
+            default_empty,
+        } => {
+            let fields = fields
+                .iter()
+                .map(|field| resolve_aggregate_field(scope, field))
+                .collect::<Result<Vec<_>>>()?;
+            let order_by = order_by
+                .as_ref()
+                .map(|sort| validate_sort(scope, sort))
+                .transpose()?;
+            ValidatedAggregate::JsonAgg {
+                alias: alias.clone(),
+                fields,
+                order_by,
+                filter: validate_aggregate_filter(scope, filter)?,
+                default_empty: *default_empty,
+            }
+        }
+        Aggregate::ArrayAgg {
+            field,
+            alias,
+            distinct,
+            order_by,
+            filter,
+        } => ValidatedAggregate::ArrayAgg {
+            field: resolve_aggregate_field(scope, field)?,
+            alias: alias.clone(),
+            distinct: *distinct,
+            order_by: order_by
+                .as_ref()
+                .map(|sort| validate_sort(scope, sort))
+                .transpose()?,
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+        Aggregate::StringAgg {
+            field,
+            separator,
+            alias,
+            order_by,
+            filter,
+        } => ValidatedAggregate::StringAgg {
+            field: resolve_aggregate_field(scope, field)?,
+            separator: separator.clone(),
+            alias: alias.clone(),
+            order_by: order_by
+                .as_ref()
+                .map(|sort| validate_sort(scope, sort))
+                .transpose()?,
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
+    })
+}
+
+fn validate_aggregate_filter(scope: &QueryScope, filter: &Option<Expr>) -> Result<Option<Expr>> {
+    if let Some(filter) = filter {
+        validate_expr(scope, filter, ExprContext::Filter)?;
+    }
+    Ok(filter.clone())
+}
+
+fn resolve_aggregate_field(scope: &QueryScope, field_ref: &FieldRef) -> Result<ResolvedField> {
+    let field = resolve_field_in_scope(scope, field_ref)?;
+    if field.is_json_path() {
+        return Err(Error::NotSelectable {
+            field: field.display_name(),
+        });
+    }
+    Ok(field)
+}
+
+fn validate_aggregate_aliases(aggregates: &[ValidatedAggregate]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for aggregate in aggregates {
+        let alias = aggregate.alias();
+        if !seen.insert(alias.to_owned()) {
+            return Err(Error::DuplicateAggregateAlias {
+                alias: alias.to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_grouped_selection(
+    selected_fields: &[ResolvedField],
+    group_by: &[ResolvedField],
+    aggregates: &[ValidatedAggregate],
+) -> Result<()> {
+    if group_by.is_empty() || aggregates.is_empty() {
+        return Ok(());
+    }
+    for field in selected_fields {
+        if !group_by
+            .iter()
+            .any(|group| same_resolved_field(group, field))
+        {
+            return Err(Error::UngroupedField {
+                field: field.display_name(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn select_columns(
+    selected_fields: &[ResolvedField],
+    aggregates: &[ValidatedAggregate],
+) -> Vec<SelectColumn> {
+    selected_fields
+        .iter()
+        .cloned()
+        .map(SelectColumn::Field)
+        .chain(aggregates.iter().map(|aggregate| SelectColumn::Aggregate {
+            alias: aggregate.alias().to_owned(),
+            ty: aggregate.aggregate_type(),
+        }))
+        .collect()
+}
+
+fn same_resolved_field(left: &ResolvedField, right: &ResolvedField) -> bool {
+    left.db_name == right.db_name
+        && left.api_name == right.api_name
+        && left.qualifier == right.qualifier
+        && left.explicit_qualifier == right.explicit_qualifier
+        && left.json_path == right.json_path
+}
+
+pub(super) fn validate_expr(scope: &QueryScope, expr: &Expr, context: ExprContext) -> Result<()> {
+    match expr {
+        Expr::Predicate(predicate) => {
+            let field = resolve_field_in_scope(scope, &predicate.field)?;
+            if matches!(context, ExprContext::Filter) && !field.caps.filterable {
+                return Err(Error::NotFilterable {
+                    field: field.display_name(),
+                });
+            }
+            validate_operator(&field, predicate.operator, &predicate.value)
+        }
+        Expr::ColumnPredicate(predicate) => {
+            let left = resolve_field_in_scope(scope, &predicate.left)?;
+            let right = resolve_field_in_scope(scope, &predicate.right)?;
+            validate_column_operator(&left, predicate.operator, &right)
+        }
+        Expr::Subquery(predicate) => {
+            let field = resolve_field_in_scope(scope, &predicate.field)?;
+            if matches!(context, ExprContext::Filter) && !field.caps.filterable {
+                return Err(Error::NotFilterable {
+                    field: field.display_name(),
+                });
+            }
+            let validated = validate_subquery(scope, &predicate.query)?;
+            let selected = validated.columns.len();
+            if selected != 1 {
+                return Err(Error::InvalidSubquerySelection {
+                    expected: 1,
+                    actual: selected,
+                });
+            }
+            Ok(())
+        }
+        Expr::Exists(predicate) => validate_subquery(scope, &predicate.query).map(|_| ()),
+        Expr::Logical(logical) => {
+            if logical.predicates.is_empty() {
+                return Err(Error::EmptyLogical {
+                    logical: logical.logical.as_str().to_owned(),
+                });
+            }
+            if logical.logical == LogicalOp::Not && logical.predicates.len() != 1 {
+                return Err(Error::InvalidNot);
+            }
+            for predicate in &logical.predicates {
+                validate_expr(scope, predicate, context)?;
+            }
+            Ok(())
+        }
+        Expr::Raw(raw) => {
+            let placeholders = count_raw_placeholders(&raw.sql);
+            if placeholders != raw.binds.len() {
+                return Err(Error::RawBindMismatch {
+                    placeholders,
+                    binds: raw.binds.len(),
+                });
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_subquery(scope: &QueryScope, query: &SelectQuery) -> Result<ValidatedSelect> {
+    let outer_datasets = scope
+        .datasets
+        .iter()
+        .map(|scoped| scoped.dataset.clone())
+        .collect::<Vec<_>>();
+    ValidatedSelect::new_with_outer_datasets(query.clone(), &outer_datasets)
+}

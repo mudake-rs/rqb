@@ -1,0 +1,33 @@
+[package]
+name = "rqb-postgres"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PostgreSQL renderer and async executor for rqb query builder."
+keywords = ["postgres", "query-builder", "sql", "database", "async"]
+categories = ["database", "web-programming"]
+
+[features]
+default = []
+runtime-tokio-postgres = ["dep:tokio", "dep:tokio-postgres"]
+runtime-deadpool = ["runtime-tokio-postgres", "dep:deadpool-postgres"]
+pool = ["runtime-deadpool"]
+with-uuid = ["dep:uuid", "rqb-core/with-uuid", "tokio-postgres?/with-uuid-1"]
+with-chrono = ["dep:chrono", "rqb-core/with-chrono", "tokio-postgres?/with-chrono-0_4"]
+
+[dependencies]
+rqb-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+deadpool-postgres = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-postgres = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+
+[[test]]
+name = "postgres_integration"
+path = "tests/postgres_integration.rs"
+required-features = ["runtime-tokio-postgres"]

@@ -1,0 +1,24 @@
+[package]
+name = "rqb"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ergonomic Postgres query builder with JSON search, serde mapping, and async execution."
+keywords = ["postgres", "query-builder", "sql", "database", "async"]
+categories = ["database", "web-programming"]
+
+[features]
+default = []
+uuid = ["rqb-core/uuid"]
+with-uuid = ["rqb-core/with-uuid", "rqb-postgres/with-uuid"]
+with-chrono = ["rqb-core/with-chrono", "rqb-postgres/with-chrono"]
+runtime-tokio-postgres = ["rqb-postgres/runtime-tokio-postgres"]
+runtime-deadpool = ["runtime-tokio-postgres", "rqb-postgres/runtime-deadpool"]
+pool = ["runtime-deadpool", "rqb-postgres/pool"]
+
+[dependencies]
+rqb-core.workspace = true
+rqb-postgres.workspace = true
+serde.workspace = true
+serde_json.workspace = true

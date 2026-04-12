@@ -292,10 +292,6 @@ fn render_relation(relation: &Relation) -> proc_macro2::TokenStream {
                 #dataset_ctor.fields([#(#field_names),*])
             }
 
-            pub fn relation() -> Relation {
-                Relation::new(dataset())
-            }
-
             #relation_ctor
 
             __rqb_relation_wrapper!();
@@ -658,6 +654,7 @@ mod tests {
         assert!(code.contains("FieldType::Timestamp"));
         assert!(code.contains("Dataset::view(\"order_search_view\")"));
         assert!(code.contains("pub fn view() -> Relation"));
+        assert!(!code.contains("pub fn relation()"));
         assert!(code.contains("pub fn created_at(&self) -> FieldRef"));
         assert!(code.contains("macro_rules! __rqb_relation_wrapper"));
         assert!(code.contains("__rqb_relation_wrapper!();"));

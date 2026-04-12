@@ -22,7 +22,7 @@ pub use rqb_postgres::{connect, connect_with_tls};
 pub mod prelude {
     pub use rqb_core::prelude::*;
     pub use rqb_postgres::{
-        BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSearch, DebugSearchSql, DebugSql,
+        BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql,
         Postgres,
     };
 

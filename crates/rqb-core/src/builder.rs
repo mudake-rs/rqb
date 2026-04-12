@@ -191,14 +191,6 @@ impl SelectBuilder {
         self.push_json_agg(alias, fields, true)
     }
 
-    pub fn json_agg_empty<I, F>(self, alias: impl Into<String>, fields: I) -> Self
-    where
-        I: IntoIterator<Item = F>,
-        F: Into<FieldRef>,
-    {
-        self.push_json_agg(alias, fields, true)
-    }
-
     pub fn json_agg_nullable<I, F>(self, alias: impl Into<String>, fields: I) -> Self
     where
         I: IntoIterator<Item = F>,

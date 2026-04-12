@@ -6,7 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{Client, Row, Transaction, types::ToSql};
 
-use crate::{BuildPostgres, BuiltQuery, BuiltSearch, Error, Postgres, Result, row_to_json};
+use crate::{BuildPostgres, BuiltQuery, BuiltSelect, Error, Postgres, Result, row_to_json};
 
 #[allow(async_fn_in_trait)]
 pub trait PgExecutor {
@@ -337,7 +337,7 @@ async fn query_count(exec: &impl PgExecutor, built: BuiltQuery) -> Result<i64> {
 
 async fn query_page_as<T>(
     exec: &impl PgExecutor,
-    built: BuiltSearch,
+    built: BuiltSelect,
     limit: u32,
     offset: u64,
 ) -> Result<Page<T>>

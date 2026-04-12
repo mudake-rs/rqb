@@ -247,6 +247,7 @@ impl Error {
     }
 }
 
+/// A single rendered Postgres statement with collected bind parameters.
 #[derive(Clone, Debug, PartialEq)]
 #[must_use]
 pub struct BuiltQuery {
@@ -280,47 +281,51 @@ impl BuiltQuery {
     }
 }
 
+/// Rendered SELECT statements for page-style execution.
+///
+/// rqb renders both the rows query and matching count query for a select,
+/// because the same builder powers list endpoints and JSON search APIs.
 #[derive(Clone, Debug, PartialEq)]
 #[must_use]
-pub struct BuiltSearch {
+pub struct BuiltSelect {
     pub rows: BuiltQuery,
     pub count: BuiltQuery,
 }
 
-impl BuiltSearch {
-    pub fn debug_sql(&self) -> DebugSearchSql<'_> {
-        DebugSearchSql { search: self }
+impl BuiltSelect {
+    pub fn debug_sql(&self) -> DebugSelectSql<'_> {
+        DebugSelectSql { select: self }
     }
 }
 
 #[must_use]
-pub struct DebugSearchSql<'a> {
-    search: &'a BuiltSearch,
+pub struct DebugSelectSql<'a> {
+    select: &'a BuiltSelect,
 }
 
-impl fmt::Display for DebugSearchSql<'_> {
+impl fmt::Display for DebugSelectSql<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "-- rows")?;
-        writeln!(f, "{}", self.search.rows.debug_sql())?;
+        writeln!(f, "{}", self.select.rows.debug_sql())?;
         writeln!(f)?;
         writeln!(f, "-- count")?;
-        write!(f, "{}", self.search.count.debug_sql())
+        write!(f, "{}", self.select.count.debug_sql())
     }
 }
 
 pub struct Postgres;
 
 impl Postgres {
-    pub fn build(query: SelectQuery) -> Result<BuiltSearch> {
+    pub fn build(query: SelectQuery) -> Result<BuiltSelect> {
         let (built, _, _) = Self::build_page(query)?;
         Ok(built)
     }
 
-    pub(crate) fn build_page(query: SelectQuery) -> Result<(BuiltSearch, u32, u64)> {
+    pub(crate) fn build_page(query: SelectQuery) -> Result<(BuiltSelect, u32, u64)> {
         let validated = ValidatedSelect::new(query)?;
         let limit = validated.limit;
         let offset = validated.offset;
-        let built = BuiltSearch {
+        let built = BuiltSelect {
             rows: Renderer::new().render_rows(&validated)?,
             count: Renderer::new().render_count(&validated)?,
         };
@@ -355,7 +360,7 @@ pub trait BuildPostgres {
 }
 
 impl BuildPostgres for SelectQuery {
-    type Output = BuiltSearch;
+    type Output = BuiltSelect;
 
     fn build_pg(self) -> Result<Self::Output> {
         Postgres::build(self)
@@ -373,7 +378,7 @@ impl BuildRowsPostgres for SelectQuery {
 }
 
 impl BuildPostgres for SelectBuilder {
-    type Output = BuiltSearch;
+    type Output = BuiltSelect;
 
     fn build_pg(self) -> Result<Self::Output> {
         self.build().build_pg()

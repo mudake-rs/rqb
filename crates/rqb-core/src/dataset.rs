@@ -97,6 +97,11 @@ impl Source {
     }
 }
 
+/// Queryable source metadata used by builders and JSON search validation.
+///
+/// A dataset is intentionally broader than a table: it can point at a table,
+/// view, CTE, or raw source and carries the field metadata, limits, and
+/// capabilities needed to validate dynamic requests before rendering SQL.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Dataset {
     pub api_name: String,
@@ -184,6 +189,11 @@ impl Dataset {
     }
 }
 
+/// Alias-aware field accessor used by generated schema modules.
+///
+/// `Relation` is not an ORM relationship. It wraps a dataset alias so generated
+/// helpers can return qualified `FieldRef`s for joins, for example
+/// `orders::table().alias("o").id()`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Relation {
     dataset: Dataset,

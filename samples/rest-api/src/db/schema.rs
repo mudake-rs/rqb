@@ -139,9 +139,6 @@ pub mod app_users {
             CREATED_AT,
         ])
     }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
-    }
     pub fn table() -> Relation {
         Relation::new(dataset())
     }
@@ -181,9 +178,6 @@ pub mod events {
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
     pub fn dataset() -> Dataset {
         Dataset::table("events").fields([ID, ORDER_ID, EVENT_TYPE, PAYLOAD, CREATED_AT])
-    }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -227,9 +221,6 @@ pub mod order_items {
             UNIT_PRICE_CENTS,
             METADATA,
         ])
-    }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -291,9 +282,6 @@ pub mod order_search_view {
             ITEMS_COUNT,
             TOTAL_CENTS,
         ])
-    }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
     }
     pub fn view() -> Relation {
         Relation::new(dataset())
@@ -364,9 +352,6 @@ pub mod orders {
             CREATED_AT,
         ])
     }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
-    }
     pub fn table() -> Relation {
         Relation::new(dataset())
     }
@@ -409,9 +394,6 @@ pub mod organizations {
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
     pub fn dataset() -> Dataset {
         Dataset::table("organizations").fields([ID, SLUG, NAME, SETTINGS, CREATED_AT])
-    }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -456,9 +438,6 @@ pub mod products {
             TAGS,
             CREATED_AT,
         ])
-    }
-    pub fn relation() -> Relation {
-        Relation::new(dataset())
     }
     pub fn table() -> Relation {
         Relation::new(dataset())

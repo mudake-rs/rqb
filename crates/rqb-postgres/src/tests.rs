@@ -1,4 +1,5 @@
 use super::*;
+use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
     Sort, Value, all, avg, count, count_distinct, delete, exists, field, insert, not_exists, raw,
@@ -144,7 +145,7 @@ fn renders_ergonomic_query() {
 
     let expected = format!(
         "SELECT {}, \"email\", {} FROM \"order_search_view\" \
-         WHERE (\"status\" = $1 AND (\"metadata\" #>> ARRAY[$2]::text[])::numeric >= $3::numeric AND \"tags\" && $4::text[]) \
+         WHERE (\"status\" = $1 AND (\"metadata\" #>> ARRAY[$2]::text[])::numeric >= $3::text::numeric AND \"tags\" && $4::text[]) \
          ORDER BY \"created_at\" DESC LIMIT 20 OFFSET 0",
         uuid_projection("\"id\"", "id", false),
         timestamp_projection("\"created_at\"", "createdAt")
@@ -164,14 +165,42 @@ fn json_path_numeric_comparison_keeps_i64_precision() {
     assert!(
         built
             .sql
-            .contains("(\"metadata\" #>> ARRAY[$1]::text[])::numeric >= $2::numeric"),
+            .contains("(\"metadata\" #>> ARRAY[$1]::text[])::numeric >= $2::text::numeric"),
         "{}",
         built.sql
     );
     assert_eq!(
         built.params,
-        vec![Value::String("score".to_owned()), Value::I64(exact)]
+        vec![
+            Value::String("score".to_owned()),
+            Value::String(exact.to_string())
+        ]
     );
+}
+
+#[test]
+fn renders_numeric_float_special_values_as_postgres_literals() {
+    let amounts = Dataset::table("amounts").fields([Field::new("amount", FieldType::Numeric)]);
+    let built = select(amounts)
+        .filter(all([
+            field("amount").gte(f64::INFINITY),
+            field("amount").lte(f64::NEG_INFINITY),
+            field("amount").ne(f64::NAN),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("Infinity".to_owned()),
+            Value::String("-Infinity".to_owned()),
+            Value::String("NaN".to_owned())
+        ]
+    );
+    assert!(built.sql.contains("$1::text::numeric"), "{}", built.sql);
+    assert!(built.sql.contains("$2::text::numeric"), "{}", built.sql);
+    assert!(built.sql.contains("$3::text::numeric"), "{}", built.sql);
 }
 
 #[test]

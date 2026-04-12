@@ -1,4 +1,4 @@
-.PHONY: fmt check-fmt clippy lint test check test-integration verify generate-demo generate-sample-schema db-up db-down db-reset
+.PHONY: fmt check-fmt clippy lint test check test-integration docker-test verify generate-demo generate-sample-schema db-up db-down db-reset
 
 DATABASE_URL ?= postgres://rqb:rqb@localhost:55432/rqb
 GENERATED_SCHEMA ?= target/generated/rqb_schema.rs

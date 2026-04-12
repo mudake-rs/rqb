@@ -405,10 +405,19 @@ make generate-demo
 cargo run --manifest-path samples/rest-api/Cargo.toml
 ```
 
+## Testing
+
+```bash
+make docker-test
+```
+
+This starts a dedicated Docker Compose project, puts Postgres data on tmpfs, runs the test suite in a Rust container, and tears the project down afterwards.
+
 ## Documentation Map
 
 - [docs/guide.md](docs/guide.md): complete API guide
 - [docs/recipes.md](docs/recipes.md): copyable service recipes
+- [docs/testing.md](docs/testing.md): test layout, naming, rendering assertions, and integration pattern
 - [docs/ergonomics.md](docs/ergonomics.md): longer comparison with Diesel from an application ergonomics angle
 - [docs/diesel-migration.md](docs/diesel-migration.md): mapping Diesel patterns to rqb
 - [docs/roadmap.md](docs/roadmap.md): follow-up ergonomics ideas from the sample

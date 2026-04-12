@@ -1,5 +1,7 @@
 .PHONY: docker-infra-up docker-infra-down docker-infra-reset docker-test
 
+DOCKER_TEST_COMPOSE = docker compose -p rqb_test -f test/docker-compose.test.yaml
+
 docker-infra-up:
 	docker compose -f test/docker-compose.yaml up -d --wait postgres
 
@@ -11,8 +13,8 @@ docker-infra-reset:
 	docker compose -f test/docker-compose.yaml up -d --wait postgres
 
 docker-test:
-	docker compose -p rqb_test -f test/docker-compose.test.yaml up -d --no-recreate postgres
-	docker compose -p rqb_test -f test/docker-compose.test.yaml run --rm --no-deps tests; \
-	status=$$?; \
-	docker compose -p rqb_test -f test/docker-compose.test.yaml stop; \
-	exit $$status
+	@set -e; \
+	cleanup() { $(DOCKER_TEST_COMPOSE) down --remove-orphans; }; \
+	trap 'status=$$?; cleanup; exit $$status' EXIT INT TERM; \
+	$(DOCKER_TEST_COMPOSE) up -d --build --wait postgres; \
+	$(DOCKER_TEST_COMPOSE) run --rm --no-deps tests

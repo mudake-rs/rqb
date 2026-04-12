@@ -357,6 +357,7 @@ impl From<SelectQuery> for CteBody {
 #[cfg(test)]
 mod tests {
     use crate::field::FieldType;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 

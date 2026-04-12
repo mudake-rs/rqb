@@ -3,6 +3,7 @@ use crate::{
     Dataset, DbEnum, ElemType, EnumType, Error, Field, FieldType, JsonPathPolicy, Sort, count,
     field, sum,
 };
+use pretty_assertions::assert_eq;
 
 const ASSET_STATE: EnumType = EnumType::new(None, "asset_state", &["active", "archived"]);
 

@@ -77,6 +77,7 @@ fn json_type_name(value: &serde_json::Value) -> &'static str {
 mod tests {
     use super::*;
     use crate::{Dataset, Field, FieldType};
+    use pretty_assertions::assert_eq;
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]

@@ -31,3 +31,6 @@ chrono = { workspace = true, optional = true }
 name = "postgres_integration"
 path = "tests/postgres_integration.rs"
 required-features = ["runtime-tokio-postgres"]
+
+[dev-dependencies]
+pretty_assertions.workspace = true

@@ -1,4 +1,4 @@
-use rqb_core::{FieldType, RawSql, ResolvedField, Source, ValidatedWriteValue, Value};
+use rqb_core::{ElemType, FieldType, RawSql, ResolvedField, Source, ValidatedWriteValue, Value};
 
 use crate::helpers::{
     postgres_cast_sql, postgres_selection_cast, renumber_postgres_placeholders, write_quoted_ident,
@@ -174,9 +174,58 @@ impl Renderer {
     }
 
     pub(super) fn push_typed_param(&mut self, value: &Value, field_type: FieldType) {
+        match field_type {
+            FieldType::Numeric => {
+                self.push_numeric_param(value);
+                return;
+            }
+            FieldType::Array(ElemType::Numeric) => {
+                self.push_numeric_array_param(value);
+                return;
+            }
+            _ => {}
+        }
+
         self.push_param(value);
         if let Some(cast) = postgres_cast_sql(field_type) {
             self.sql.push_str(&cast);
         }
+    }
+
+    fn push_numeric_param(&mut self, value: &Value) {
+        let value = numeric_text_value(value);
+        self.push_param(&value);
+        self.sql.push_str("::text::numeric");
+    }
+
+    fn push_numeric_array_param(&mut self, value: &Value) {
+        let value = match value {
+            Value::Array(values) => Value::Array(values.iter().map(numeric_text_value).collect()),
+            other => numeric_text_value(other),
+        };
+        self.push_param(&value);
+        self.sql.push_str("::text[]::numeric[]");
+    }
+}
+
+fn numeric_text_value(value: &Value) -> Value {
+    match value {
+        Value::Null => Value::Null,
+        Value::I64(value) => Value::String(value.to_string()),
+        Value::F64(value) => Value::String(numeric_f64_text(*value)),
+        Value::String(value) => Value::String(value.clone()),
+        other => other.clone(),
+    }
+}
+
+fn numeric_f64_text(value: f64) -> String {
+    if value.is_nan() {
+        "NaN".to_owned()
+    } else if value == f64::INFINITY {
+        "Infinity".to_owned()
+    } else if value == f64::NEG_INFINITY {
+        "-Infinity".to_owned()
+    } else {
+        value.to_string()
     }
 }

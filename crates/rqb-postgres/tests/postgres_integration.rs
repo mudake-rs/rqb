@@ -1,11 +1,14 @@
+use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, all,
     count, cte, delete, exists, field, insert, not_exists, raw, select, sum, update,
 };
 use rqb_postgres::{
-    BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteWritePostgres, ResultExt,
+    BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteWritePostgres, PgExecutor,
+    ResultExt,
 };
 use serde::{Deserialize, Serialize};
+use tokio_postgres::{Client, Row, types::ToSql};
 
 mod order_search {
     use super::*;
@@ -145,7 +148,7 @@ mod organizations_table {
 
 #[tokio::test]
 async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -177,7 +180,7 @@ async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestRes
 
 #[tokio::test]
 async fn executes_raw_cte_as_search_source() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -205,7 +208,7 @@ async fn executes_raw_cte_as_search_source() -> TestResult {
 
 #[tokio::test]
 async fn executes_raw_source_with_safe_outer_filtering() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -242,7 +245,7 @@ async fn executes_raw_source_with_safe_outer_filtering() -> TestResult {
 
 #[tokio::test]
 async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -272,7 +275,7 @@ async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestRes
 
 #[tokio::test]
 async fn executes_first_class_join_query() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -308,7 +311,7 @@ async fn executes_first_class_join_query() -> TestResult {
 
 #[tokio::test]
 async fn executes_correlated_exists_and_in_subquery() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -371,7 +374,7 @@ async fn executes_correlated_exists_and_in_subquery() -> TestResult {
 
 #[tokio::test]
 async fn executor_api_runs_rows_optional_and_count() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -420,7 +423,7 @@ async fn executor_api_runs_rows_optional_and_count() -> TestResult {
 #[cfg(all(feature = "with-uuid", feature = "with-chrono"))]
 #[tokio::test]
 async fn uuid_chrono_and_page_helpers_are_ergonomic() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -452,7 +455,7 @@ async fn uuid_chrono_and_page_helpers_are_ergonomic() -> TestResult {
 
 #[tokio::test]
 async fn executes_insert_update_delete_and_upsert() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -646,10 +649,11 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
 
 #[tokio::test]
 async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
+    client.batch_execute("SAVEPOINT duplicate_org").await?;
     let duplicate = insert(organizations_table::dataset())
         .set(
             organizations_table::ID,
@@ -662,7 +666,11 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         .unwrap_err();
     assert!(duplicate.is_unique_violation());
     assert!(duplicate.is_constraint("organizations_slug_key"));
+    client
+        .batch_execute("ROLLBACK TO SAVEPOINT duplicate_org")
+        .await?;
 
+    client.batch_execute("SAVEPOINT bad_fk").await?;
     let fk = insert(events_table::dataset())
         .set(events_table::ID, "50000000-0000-0000-0000-000000009902")
         .set(
@@ -675,6 +683,7 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         .await
         .unwrap_err();
     assert!(fk.is_foreign_key_violation());
+    client.batch_execute("ROLLBACK TO SAVEPOINT bad_fk").await?;
 
     let not_found = select(order_search::dataset())
         .fields([order_search::EMAIL])
@@ -704,6 +713,7 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         }
     }
 
+    client.batch_execute("SAVEPOINT mapped_duplicate").await?;
     let mapped = insert(organizations_table::dataset())
         .set(
             organizations_table::ID,
@@ -716,13 +726,16 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         .on_constraint("organizations_slug_key", |_| AppError::EmailTaken)
         .unwrap_err();
     assert!(matches!(mapped, AppError::EmailTaken));
+    client
+        .batch_execute("ROLLBACK TO SAVEPOINT mapped_duplicate")
+        .await?;
 
     Ok(())
 }
 
 #[tokio::test]
 async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -843,7 +856,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
 
 #[tokio::test]
 async fn executes_extended_operators_against_postgres() -> TestResult {
-    let Some(client) = connect().await? else {
+    let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
 
@@ -877,9 +890,9 @@ async fn executes_extended_operators_against_postgres() -> TestResult {
 }
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+type TestSetupResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-async fn connect()
--> Result<Option<tokio_postgres::Client>, Box<dyn std::error::Error + Send + Sync>> {
+async fn begin_test_transaction() -> TestSetupResult<Option<TestDb>> {
     let Some(url) = database_url() else {
         eprintln!("skipping Postgres integration test; set RQB_TEST_DATABASE_URL");
         return Ok(None);
@@ -891,7 +904,87 @@ async fn connect()
             eprintln!("postgres connection error: {error}");
         }
     });
-    Ok(Some(client))
+    client.batch_execute("BEGIN").await?;
+    Ok(Some(TestDb {
+        client: Some(client),
+    }))
+}
+
+struct TestDb {
+    client: Option<Client>,
+}
+
+impl TestDb {
+    fn client(&self) -> &Client {
+        self.client
+            .as_ref()
+            .expect("test database client should stay open until drop")
+    }
+
+    async fn batch_execute(&self, sql: &str) -> Result<(), tokio_postgres::Error> {
+        self.client().batch_execute(sql).await
+    }
+}
+
+impl PgExecutor for TestDb {
+    async fn query(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> rqb_postgres::Result<Vec<Row>> {
+        self.client()
+            .query(sql, params)
+            .await
+            .map_err(PgError::from)
+    }
+
+    async fn query_one(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> rqb_postgres::Result<Row> {
+        self.client()
+            .query_opt(sql, params)
+            .await
+            .map_err(PgError::from)?
+            .ok_or(PgError::NotFound)
+    }
+
+    async fn query_opt(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> rqb_postgres::Result<Option<Row>> {
+        self.client()
+            .query_opt(sql, params)
+            .await
+            .map_err(PgError::from)
+    }
+
+    async fn execute_sql(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> rqb_postgres::Result<u64> {
+        self.client()
+            .execute(sql, params)
+            .await
+            .map_err(PgError::from)
+    }
+}
+
+impl Drop for TestDb {
+    fn drop(&mut self) {
+        let Some(client) = self.client.take() else {
+            return;
+        };
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        handle.spawn(async move {
+            let _ = client.batch_execute("ROLLBACK").await;
+        });
+    }
 }
 
 fn database_url() -> Option<String> {
@@ -900,17 +993,14 @@ fn database_url() -> Option<String> {
         .or_else(|| std::env::var("DATABASE_URL").ok())
 }
 
-async fn query(
-    client: &tokio_postgres::Client,
-    built: &BuiltQuery,
-) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+async fn query(client: &TestDb, built: &BuiltQuery) -> Result<Vec<Row>, tokio_postgres::Error> {
     let params = built.params();
     let refs = params.as_refs();
-    client.query(&built.sql, &refs).await
+    client.client().query(&built.sql, &refs).await
 }
 
 async fn assert_count(
-    client: &tokio_postgres::Client,
+    client: &TestDb,
     built: &BuiltQuery,
     expected: i64,
 ) -> Result<(), tokio_postgres::Error> {

@@ -41,15 +41,9 @@ fn json_to_value(value: serde_json::Value) -> Value {
             if let Some(value) = value.as_i64() {
                 Value::I64(value)
             } else if let Some(value) = value.as_u64() {
-                i64::try_from(value).map_or_else(
-                    |_| {
-                        #[allow(clippy::cast_precision_loss)]
-                        {
-                            Value::F64(value as f64)
-                        }
-                    },
-                    Value::I64,
-                )
+                i64::try_from(value)
+                    .map(Value::I64)
+                    .unwrap_or_else(|_| Value::String(value.to_string()))
             } else {
                 Value::F64(value.as_f64().unwrap_or_default())
             }
@@ -112,5 +106,18 @@ mod tests {
                 .iter()
                 .any(|(field, _)| field.api_name == "totalCents")
         );
+    }
+
+    #[test]
+    fn maps_large_unsigned_numbers_without_precision_loss() {
+        #[derive(Serialize)]
+        struct Record {
+            amount: u64,
+        }
+
+        let dataset = Dataset::table("payments").field(Field::new("amount", FieldType::Numeric));
+        let fields = fields_from_serializable(&dataset, &Record { amount: u64::MAX }).unwrap();
+
+        assert_eq!(fields[0].1, Value::String(u64::MAX.to_string()));
     }
 }

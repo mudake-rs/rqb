@@ -664,10 +664,30 @@ mod tests {
 
     #[test]
     fn maps_postgres_types() {
-        assert!(matches!(
-            map_field_type("ARRAY", "_text", &BTreeMap::new()),
-            ColumnType::Core(FieldType::Array(ElemType::Text))
-        ));
+        for (udt_name, expected) in [
+            ("_text", ElemType::Text),
+            ("_varchar", ElemType::Text),
+            ("_citext", ElemType::Text),
+            ("_int2", ElemType::Int),
+            ("_int4", ElemType::Int),
+            ("_int8", ElemType::BigInt),
+            ("_float4", ElemType::Float),
+            ("_float8", ElemType::Float),
+            ("_numeric", ElemType::Numeric),
+            ("_bool", ElemType::Bool),
+            ("_uuid", ElemType::Uuid),
+            ("_timestamp", ElemType::Timestamp),
+            ("_timestamptz", ElemType::Timestamp),
+            ("_date", ElemType::Date),
+        ] {
+            assert!(
+                matches!(
+                    map_field_type("ARRAY", udt_name, &BTreeMap::new()),
+                    ColumnType::Core(FieldType::Array(actual)) if actual == expected
+                ),
+                "{udt_name} should map to {expected:?}"
+            );
+        }
         assert!(matches!(
             map_field_type("USER-DEFINED", "uuid", &BTreeMap::new()),
             ColumnType::Core(FieldType::Uuid)
@@ -679,6 +699,10 @@ mod tests {
         assert!(matches!(
             map_field_type("timestamp with time zone", "timestamptz", &BTreeMap::new()),
             ColumnType::Core(FieldType::Timestamp)
+        ));
+        assert!(matches!(
+            map_field_type("unknown", "ltree", &BTreeMap::new()),
+            ColumnType::Core(FieldType::Text)
         ));
     }
 
@@ -726,5 +750,24 @@ mod tests {
         assert!(code.contains("impl std::str::FromStr for OrderStatus"));
         assert!(code.contains("FieldType::Enum(super::enums::ORDER_STATUS)"));
         assert!(code.contains("FieldType::Array(ElemType::Enum(super::enums::ORDER_STATUS))"));
+    }
+
+    #[test]
+    fn sanitizes_identifiers_and_disambiguates_enum_variants() {
+        assert_eq!(sanitize_ident("type"), "type_");
+        assert_eq!(sanitize_ident("123bad-name"), "_123bad_name");
+        assert_eq!(sanitize_ident(""), "_");
+
+        let variants = vec![
+            "foo-bar".to_owned(),
+            "foo_bar".to_owned(),
+            "foo bar".to_owned(),
+        ];
+        let names = unique_enum_variant_idents(&variants)
+            .into_iter()
+            .map(|ident| ident.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(names, vec!["FooBar", "FooBar_1", "FooBar_2"]);
     }
 }

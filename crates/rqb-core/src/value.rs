@@ -1,9 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-// Untagged serde is order-sensitive: keep integer before float so JSON whole numbers
-// do not silently lose precision during request deserialization.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+// Custom serde keeps whole numbers exact when possible. Large unsigned JSON
+// numbers become strings instead of silently passing through f64.
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -26,7 +25,41 @@ macro_rules! impl_value_from {
     };
 }
 
+impl<'de> Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        serde_json::Value::deserialize(deserializer).map(Self::from_json_value)
+    }
+}
+
 impl Value {
+    fn from_json_value(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => Self::Null,
+            serde_json::Value::Bool(value) => Self::Bool(value),
+            serde_json::Value::Number(value) => {
+                if let Some(value) = value.as_i64() {
+                    Self::I64(value)
+                } else if let Some(value) = value.as_u64() {
+                    i64::try_from(value)
+                        .map(Self::I64)
+                        .unwrap_or_else(|_| Self::String(value.to_string()))
+                } else if let Some(value) = value.as_f64() {
+                    Self::F64(value)
+                } else {
+                    Self::String(value.to_string())
+                }
+            }
+            serde_json::Value::String(value) => Self::String(value),
+            serde_json::Value::Array(values) => {
+                Self::Array(values.into_iter().map(Self::from_json_value).collect())
+            }
+            serde_json::Value::Object(map) => Self::Json(serde_json::Value::Object(map)),
+        }
+    }
+
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
@@ -157,5 +190,73 @@ where
 impl From<serde_json::Value> for Value {
     fn from(value: serde_json::Value) -> Self {
         Self::Json(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn serde_keeps_whole_numbers_as_i64_before_f64() {
+        let value =
+            serde_json::from_value::<Value>(serde_json::json!(9_007_199_254_740_993_i64)).unwrap();
+
+        assert_eq!(value, Value::I64(9_007_199_254_740_993));
+    }
+
+    #[test]
+    fn serde_keeps_large_unsigned_numbers_lossless_as_strings() {
+        let value = serde_json::from_value::<Value>(serde_json::json!(u64::MAX)).unwrap();
+
+        assert_eq!(value, Value::String(u64::MAX.to_string()));
+    }
+
+    #[test]
+    fn serde_maps_arrays_recursively_and_objects_to_json() {
+        let value =
+            serde_json::from_value::<Value>(serde_json::json!([1, "x", { "nested": true }]))
+                .unwrap();
+
+        assert_eq!(
+            value,
+            Value::Array(vec![
+                Value::I64(1),
+                Value::String("x".to_owned()),
+                Value::Json(serde_json::json!({ "nested": true })),
+            ])
+        );
+    }
+
+    #[test]
+    fn value_type_helpers_describe_runtime_shape() {
+        assert!(Value::Null.is_null());
+        assert!(Value::Bool(true).is_scalar());
+        assert!(Value::I64(1).is_number());
+        assert!(Value::Array(vec![]).is_array());
+        assert_eq!(Value::Json(serde_json::json!({})).type_name(), "json");
+    }
+
+    #[cfg(feature = "with-uuid")]
+    #[test]
+    fn uuid_values_convert_to_strings() {
+        let id = uuid::Uuid::parse_str("10000000-0000-0000-0000-000000000001").unwrap();
+
+        assert_eq!(Value::from(id), Value::String(id.to_string()));
+        assert_eq!(Value::from(&id), Value::String(id.to_string()));
+    }
+
+    #[cfg(feature = "with-chrono")]
+    #[test]
+    fn chrono_values_convert_to_wire_strings() {
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 4, 12).unwrap();
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2026-04-12T10:30:00Z").unwrap();
+
+        assert_eq!(Value::from(date), Value::String("2026-04-12".to_owned()));
+        assert_eq!(
+            Value::from(timestamp),
+            Value::String("2026-04-12T10:30:00+00:00".to_owned())
+        );
     }
 }

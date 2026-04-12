@@ -23,3 +23,23 @@ impl<T> From<Page<T>> for PaginatedResponse<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paginated_response_preserves_page_metadata() {
+        let response = PaginatedResponse::from(Page {
+            items: vec![1, 2],
+            total: 10,
+            limit: 2,
+            offset: 4,
+        });
+
+        assert_eq!(response.items, vec![1, 2]);
+        assert_eq!(response.total, 10);
+        assert_eq!(response.limit, 2);
+        assert_eq!(response.offset, 4);
+    }
+}

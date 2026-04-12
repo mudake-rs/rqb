@@ -154,6 +154,18 @@ fn accepts_array_contains_all_and_elem_match_on_supported_fields() {
 }
 
 #[test]
+fn rejects_array_elem_match_non_scalar_for_sql_arrays() {
+    let query = crate::select(dataset())
+        .filter(field("tags").elem_match(serde_json::json!({"tag": "vip"})))
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "tags" && message == "expected scalar, got json")
+    );
+}
+
+#[test]
 fn accepts_json_keys_exist_all_on_jsonb_fields() {
     let query = crate::select(dataset())
         .filter(field("properties").keys_exist_all(["campaign", "score"]))
@@ -173,6 +185,18 @@ fn rejects_not_contains_on_non_text_fields() {
         err,
         Error::UnsupportedOperator { operator, .. } if operator == "notContains"
     ));
+}
+
+#[test]
+fn rejects_json_value_comparison_on_non_jsonb_fields() {
+    let query = crate::select(dataset())
+        .filter(field("name").eq(serde_json::json!({"name": "Ada"})))
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "name" && message == "JSON values require a JSONB field")
+    );
 }
 
 #[test]
@@ -244,6 +268,46 @@ fn reports_specific_expr_json_shape_errors() {
         err.to_string().contains("predicate is missing `operator`"),
         "{err}"
     );
+}
+
+#[test]
+fn reports_specific_expr_json_shape_errors_for_all_expr_families() {
+    for (json, expected) in [
+        (
+            serde_json::json!("not an object"),
+            "expression must be a JSON object",
+        ),
+        (
+            serde_json::json!({ "logical": "and" }),
+            "logical expression is missing `predicates`",
+        ),
+        (
+            serde_json::json!({ "predicates": [] }),
+            "logical expression is missing `logical`",
+        ),
+        (
+            serde_json::json!({ "left": "a", "operator": "equals" }),
+            "column predicate is missing `right`",
+        ),
+        (
+            serde_json::json!({ "right": "b", "operator": "equals" }),
+            "column predicate is missing `left`",
+        ),
+        (
+            serde_json::json!({ "field": "name", "operator": "unknown" }),
+            "invalid predicate:",
+        ),
+        (
+            serde_json::json!({ "unexpected": true }),
+            "expression must contain `field`, `left`/`right`, or `logical`",
+        ),
+    ] {
+        let err = serde_json::from_value::<crate::Expr>(json).unwrap_err();
+        assert!(
+            err.to_string().contains(expected),
+            "expected `{expected}` in `{err}`"
+        );
+    }
 }
 
 #[test]
@@ -410,7 +474,10 @@ fn rejects_not_in_without_array() {
 #[test]
 fn accepts_is_distinct_from_scalar() {
     let query = crate::select(dataset())
-        .filter(field("name").is_distinct_from("x"))
+        .filter(crate::all([
+            field("name").is_distinct_from("x"),
+            field("state").is_not_distinct_from(()),
+        ]))
         .build();
     ValidatedSelect::new(query).unwrap();
 }
@@ -457,6 +524,18 @@ fn rejects_invalid_enum_array_value() {
 }
 
 #[test]
+fn rejects_invalid_enum_array_elem_match_value() {
+    let query = crate::select(dataset())
+        .filter(field("stateHistory").elem_match("missing"))
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidEnumValue { field, value, .. } if field == "stateHistory" && value == "missing")
+    );
+}
+
+#[test]
 fn accepts_null_write_values_for_enum_fields() {
     let query = crate::update(dataset())
         .set_null("state")
@@ -476,6 +555,72 @@ fn accepts_null_write_values_for_enum_array_fields() {
         .unwrap();
 
     ValidatedUpdate::new(query).unwrap();
+}
+
+#[test]
+fn rejects_write_raw_bind_mismatch_and_set_col_type_mismatch() {
+    let raw_query = crate::update(dataset())
+        .set_raw("name", crate::raw("upper(?)"))
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        ValidatedUpdate::new(raw_query).unwrap_err(),
+        Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        }
+    ));
+
+    let col_query = crate::update(dataset())
+        .set_col("score", "name")
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        ValidatedUpdate::new(col_query).unwrap_err(),
+        Error::IncompatibleColumnTypes { left, right, .. } if left == "score" && right == "name"
+    ));
+}
+
+#[test]
+fn rejects_returning_hidden_fields() {
+    let query = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .returning("blobName")
+        .build()
+        .unwrap();
+
+    let err = ValidatedInsert::new(query).unwrap_err();
+    assert!(matches!(err, Error::NotSelectable { field } if field == "blobName"));
+}
+
+#[test]
+fn rejects_insert_from_select_mixed_sources_and_unknown_targets() {
+    let mixed = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .from_select(crate::select(dataset()).fields(["id"]).build())
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        ValidatedInsert::new(mixed).unwrap_err(),
+        Error::InvalidValue { message, .. }
+            if message == "cannot combine VALUES and SELECT insert sources"
+    ));
+
+    let target = Dataset::table("target").fields([Field::new("id", FieldType::Uuid)]);
+    let unknown_target = insert(target)
+        .from_select(crate::select(dataset()).fields(["name"]).build())
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        ValidatedInsert::new(unknown_target).unwrap_err(),
+        Error::UnknownField { dataset, field } if dataset == "target" && field == "name"
+    ));
 }
 
 #[test]

@@ -124,3 +124,49 @@ fn validate_patch_user(patch: &PatchUserRequest) -> Result<(), ValidationError> 
         Err(error)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn id(value: &str) -> Uuid {
+        Uuid::parse_str(value).unwrap()
+    }
+
+    #[test]
+    fn create_user_request_converts_to_db_model_with_defaults() {
+        let request = CreateUserRequest {
+            organization_id: id("00000000-0000-0000-0000-000000000001"),
+            email: "ada@example.com".to_owned(),
+            status: None,
+            profile: None,
+            tags: None,
+        };
+        request.validate().unwrap();
+
+        let user = CreateUser::from(request);
+        assert_eq!(user.status, "active");
+        assert_eq!(user.tags, Vec::<String>::new());
+        assert!(user.profile.country.is_none());
+    }
+
+    #[test]
+    fn user_request_validation_rejects_unknown_status_bad_email_and_empty_patch() {
+        let create = CreateUserRequest {
+            organization_id: id("00000000-0000-0000-0000-000000000001"),
+            email: "not-an-email".to_owned(),
+            status: Some("paused".to_owned()),
+            profile: None,
+            tags: None,
+        };
+        assert!(create.validate().is_err());
+
+        let patch = PatchUserRequest {
+            email: None,
+            status: None,
+            profile: None,
+            tags: None,
+        };
+        assert!(patch.validate().is_err());
+    }
+}

@@ -89,11 +89,19 @@ impl Renderer {
 
         match operator {
             IsNull => {
-                self.render_text_target(field);
+                if field.is_json_path() {
+                    self.render_text_target(field);
+                } else {
+                    self.render_column_name(field);
+                }
                 self.sql.push_str(" IS NULL");
             }
             IsNotNull => {
-                self.render_text_target(field);
+                if field.is_json_path() {
+                    self.render_text_target(field);
+                } else {
+                    self.render_column_name(field);
+                }
                 self.sql.push_str(" IS NOT NULL");
             }
             Contains => self.render_like(field, value, "%", "%", false),
@@ -244,16 +252,29 @@ impl Renderer {
         self.sql.push(' ');
         self.sql.push_str(op);
         self.sql.push(' ');
-        self.push_typed_param(value, field.ty);
+        if field.ty.is_jsonb() {
+            self.push_typed_param(&value_to_json(value), FieldType::Jsonb);
+        } else {
+            self.push_typed_param(value, field.ty);
+        }
     }
 
     fn render_null_safe_binary(&mut self, field: &ResolvedField, op: &str, value: &Value) {
         if field.is_json_path() {
-            self.render_text_target(field);
+            if value.is_null() {
+                self.render_text_target(field);
+                self.sql.push(' ');
+                self.sql.push_str(op);
+                self.sql.push(' ');
+                self.push_param(value);
+                return;
+            }
+
+            self.render_json_target(field);
             self.sql.push(' ');
             self.sql.push_str(op);
             self.sql.push(' ');
-            self.push_param(value);
+            self.push_typed_param(&value_to_json(value), FieldType::Jsonb);
             return;
         }
 
@@ -261,7 +282,11 @@ impl Renderer {
         self.sql.push(' ');
         self.sql.push_str(op);
         self.sql.push(' ');
-        self.push_typed_param(value, field.ty);
+        if field.ty.is_jsonb() && !value.is_null() {
+            self.push_typed_param(&value_to_json(value), FieldType::Jsonb);
+        } else {
+            self.push_typed_param(value, field.ty);
+        }
     }
 
     fn render_in(&mut self, field: &ResolvedField, value: &Value) {
@@ -374,6 +399,9 @@ impl Renderer {
             self.render_json_path(&field.json_path);
         } else {
             self.render_column_name(field);
+            if field.ty != FieldType::Text {
+                self.sql.push_str("::text");
+            }
         }
     }
 
@@ -388,12 +416,14 @@ impl Renderer {
     }
 
     fn render_column_compare_target(&mut self, field: &ResolvedField, operator: ColumnOperator) {
-        if field.is_json_path()
-            && matches!(operator, ColumnOperator::Equals | ColumnOperator::NotEquals)
-        {
-            self.render_json_target(field);
+        if field.is_json_path() {
+            if matches!(operator, ColumnOperator::Equals | ColumnOperator::NotEquals) {
+                self.render_json_target(field);
+            } else {
+                self.render_text_target(field);
+            }
         } else {
-            self.render_text_target(field);
+            self.render_column_name(field);
         }
     }
 }

@@ -584,12 +584,37 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
 
     let committed_id = "50000000-0000-0000-0000-000000009904";
     let rolled_back_id = "50000000-0000-0000-0000-000000009905";
+    let savepoint_rolled_back_id = "50000000-0000-0000-0000-000000009906";
+    let savepoint_released_id = "50000000-0000-0000-0000-000000009907";
     let order_id = "30000000-0000-0000-0000-000000000001";
 
     let _ = delete(events_table::dataset())
-        .filter(events_table::ID.is_in([committed_id, rolled_back_id]))
+        .filter(events_table::ID.is_in([
+            committed_id,
+            rolled_back_id,
+            savepoint_rolled_back_id,
+            savepoint_released_id,
+        ]))
         .execute(&db)
         .await;
+
+    let read_only_tx = db.begin().serializable().read_only().deferrable().await?;
+    let isolation = read_only_tx
+        .query_one("SHOW transaction_isolation", &[])
+        .await?
+        .get::<_, String>(0);
+    let read_only = read_only_tx
+        .query_one("SHOW transaction_read_only", &[])
+        .await?
+        .get::<_, String>(0);
+    let deferrable = read_only_tx
+        .query_one("SHOW transaction_deferrable", &[])
+        .await?
+        .get::<_, String>(0);
+    assert_eq!(isolation, "serializable");
+    assert_eq!(read_only, "on");
+    assert_eq!(deferrable, "on");
+    read_only_tx.rollback().await?;
 
     let tx = db.begin().serializable().await?;
     insert(events_table::dataset())
@@ -640,8 +665,51 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
         .await?;
     assert!(rolled_back.is_none());
 
+    let tx = db.begin().await?;
+    let savepoint = tx.savepoint("rollback savepoint").await?;
+    assert_eq!(savepoint.name(), "rollback savepoint");
+    insert(events_table::dataset())
+        .set(events_table::ID, savepoint_rolled_back_id)
+        .set(events_table::ORDER_ID, order_id)
+        .set(events_table::EVENT_TYPE, "rqb-savepoint-rollback")
+        .set(
+            events_table::PAYLOAD,
+            serde_json::json!({ "savepoint": "rollback" }),
+        )
+        .execute(&savepoint)
+        .await?;
+    savepoint.rollback().await?;
+    let savepoint_rolled_back: Option<EventRow> = select(events_table::dataset())
+        .fields([events_table::ID, events_table::EVENT_TYPE])
+        .filter(events_table::ID.eq(savepoint_rolled_back_id))
+        .fetch_optional_as(&tx)
+        .await?;
+    assert!(savepoint_rolled_back.is_none());
+
+    let savepoint = tx.savepoint("release_savepoint").await?;
+    insert(events_table::dataset())
+        .set(events_table::ID, savepoint_released_id)
+        .set(events_table::ORDER_ID, order_id)
+        .set(events_table::EVENT_TYPE, "rqb-savepoint-release")
+        .set(
+            events_table::PAYLOAD,
+            serde_json::json!({ "savepoint": "release" }),
+        )
+        .execute(&savepoint)
+        .await?;
+    savepoint.release().await?;
+    tx.commit().await?;
+
+    let savepoint_released: EventRow = select(events_table::dataset())
+        .fields([events_table::ID, events_table::EVENT_TYPE])
+        .filter(events_table::ID.eq(savepoint_released_id))
+        .fetch_one_as(&db)
+        .await?;
+    assert_eq!(savepoint_released.id, savepoint_released_id);
+    assert_eq!(savepoint_released.event_type, "rqb-savepoint-release");
+
     delete(events_table::dataset())
-        .filter(events_table::ID.eq(committed_id))
+        .filter(events_table::ID.is_in([committed_id, savepoint_released_id]))
         .execute(&db)
         .await?;
     Ok(())
@@ -728,6 +796,23 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
     assert!(matches!(mapped, AppError::EmailTaken));
     client
         .batch_execute("ROLLBACK TO SAVEPOINT mapped_duplicate")
+        .await?;
+
+    client.batch_execute("SAVEPOINT mapped_conflict").await?;
+    let mapped = insert(organizations_table::dataset())
+        .set(
+            organizations_table::ID,
+            "00000000-0000-0000-0000-000000009904",
+        )
+        .set(organizations_table::SLUG, "acme")
+        .set(organizations_table::NAME, "Duplicate Acme")
+        .execute(&client)
+        .await
+        .on_conflict(|_| AppError::EmailTaken)
+        .unwrap_err();
+    assert!(matches!(mapped, AppError::EmailTaken));
+    client
+        .batch_execute("ROLLBACK TO SAVEPOINT mapped_conflict")
         .await?;
 
     Ok(())
@@ -863,6 +948,7 @@ async fn executes_extended_operators_against_postgres() -> TestResult {
     let built = select(order_search::dataset())
         .fields([order_search::EMAIL])
         .filter(all([
+            order_search::ID.contains("30000000"),
             order_search::TAGS.has("vip"),
             order_search::TAGS.contains_all(["vip", "gift"]),
             order_search::TAGS.elem_match("vip"),
@@ -870,6 +956,9 @@ async fn executes_extended_operators_against_postgres() -> TestResult {
             order_search::METADATA.key_exists("campaign"),
             order_search::METADATA.keys_exist_any(["score", "missing"]),
             order_search::METADATA.keys_exist_all(["campaign", "score"]),
+            order_search::METADATA
+                .path("score")
+                .is_not_distinct_from(92),
             order_search::EMAIL.regex("^a"),
             order_search::EMAIL.search("ada@example.com"),
             order_search::STATUS.not_in([

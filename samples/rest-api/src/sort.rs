@@ -33,3 +33,41 @@ pub fn parse_sort(input: Option<&str>, default: Sort) -> Result<Sort, AppError> 
         )))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rqb::prelude::{SortDir, field};
+
+    use super::*;
+
+    #[test]
+    fn parse_sort_uses_default_for_missing_or_blank_input() {
+        let default = field("createdAt").desc();
+
+        assert_eq!(parse_sort(None, default.clone()).unwrap().dir, SortDir::Desc);
+        assert_eq!(
+            parse_sort(Some("  "), default).unwrap().field.display_name(),
+            "createdAt"
+        );
+    }
+
+    #[test]
+    fn parse_sort_accepts_trimmed_case_insensitive_direction() {
+        let sort = parse_sort(Some(" email : ASC "), field("createdAt").desc()).unwrap();
+
+        assert_eq!(sort.field.display_name(), "email");
+        assert_eq!(sort.dir, SortDir::Asc);
+    }
+
+    #[test]
+    fn parse_sort_rejects_bad_shape_and_direction() {
+        assert!(matches!(
+            parse_sort(Some("email"), field("createdAt").desc()).unwrap_err(),
+            AppError::BadRequest(_)
+        ));
+        assert!(matches!(
+            parse_sort(Some("email:sideways"), field("createdAt").desc()).unwrap_err(),
+            AppError::BadRequest(_)
+        ));
+    }
+}

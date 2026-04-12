@@ -59,7 +59,12 @@ pub(super) fn validate_operator(
             }
         }
         ArrayElemMatch => {
-            if !(field.ty.is_array() || field.ty.is_jsonb()) {
+            if field.ty.is_array() {
+                require_scalar(field, operator, value)?;
+                if let Some(enum_type) = enum_type_for_array(field) {
+                    require_enum_scalar(field, operator, enum_type, value)?;
+                }
+            } else if !field.ty.is_jsonb() {
                 return unsupported(field, operator);
             }
         }
@@ -102,9 +107,19 @@ pub(super) fn validate_operator(
                 return unsupported(field, operator);
             }
         }
-        Equals | NotEquals | IsDistinctFrom | IsNotDistinctFrom => {
+        Equals | NotEquals => {
             require_scalar_or_json(field, operator, value)?;
+            reject_json_for_non_jsonb_field(field, operator, value)?;
             if let Some(enum_type) = enum_type_for_field(field) {
+                require_enum_scalar(field, operator, enum_type, value)?;
+            }
+        }
+        IsDistinctFrom | IsNotDistinctFrom => {
+            require_scalar_json_or_null(field, operator, value)?;
+            reject_json_for_non_jsonb_field(field, operator, value)?;
+            if !value.is_null()
+                && let Some(enum_type) = enum_type_for_field(field)
+            {
                 require_enum_scalar(field, operator, enum_type, value)?;
             }
         }
@@ -290,6 +305,37 @@ fn require_scalar_or_json(field: &ResolvedField, operator: Operator, value: &Val
             message: format!("expected scalar or JSON, got {}", value.type_name()),
         })
     }
+}
+
+fn require_scalar_json_or_null(
+    field: &ResolvedField,
+    operator: Operator,
+    value: &Value,
+) -> Result<()> {
+    if value.is_scalar() || value.is_null() || matches!(value, Value::Json(_)) {
+        Ok(())
+    } else {
+        Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.as_str().to_owned(),
+            message: format!("expected scalar, JSON, or null, got {}", value.type_name()),
+        })
+    }
+}
+
+fn reject_json_for_non_jsonb_field(
+    field: &ResolvedField,
+    operator: Operator,
+    value: &Value,
+) -> Result<()> {
+    if matches!(value, Value::Json(_)) && !field.ty.is_jsonb() {
+        return Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.as_str().to_owned(),
+            message: "JSON values require a JSONB field".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 fn require_number(field: &ResolvedField, operator: Operator, value: &Value) -> Result<()> {

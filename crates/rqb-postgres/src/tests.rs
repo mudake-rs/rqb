@@ -2,8 +2,8 @@ use super::*;
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
-    Sort, Value, all, avg, count, count_distinct, delete, exists, field, insert, not_exists, raw,
-    select, string_agg, sum, update,
+    Sort, Value, all, array_agg, avg, count, count_distinct, delete, exists, field, insert, max,
+    min, not_exists, raw, select, string_agg, sum, update,
 };
 use serde::Serialize;
 
@@ -291,6 +291,33 @@ fn renders_json_elem_match_and_keys_exist_all() {
 }
 
 #[test]
+fn renders_jsonb_and_json_path_null_safe_comparisons_as_jsonb() {
+    let built = select(orders())
+        .filter(all([
+            field("metadata").eq(serde_json::json!({"gift": true})),
+            field("metadata.score").is_not_distinct_from(92),
+            field("metadata.missing").is_distinct_from(()),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"metadata\" = $1::jsonb"));
+    assert!(
+        built
+            .sql
+            .contains("\"metadata\" #> ARRAY[$2]::text[] IS NOT DISTINCT FROM $3::jsonb")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"metadata\" #>> ARRAY[$4]::text[] IS DISTINCT FROM $5")
+    );
+    assert_eq!(built.params[0], serde_json::json!({"gift": true}).into());
+    assert_eq!(built.params[2], serde_json::json!(92).into());
+    assert_eq!(built.params[4], Value::Null);
+}
+
+#[test]
 fn renders_column_predicate_operator_matrix() {
     let built = select(typed_values())
         .filter(all([
@@ -348,6 +375,22 @@ fn renders_postgres_type_cast_matrix() {
     assert!(built.sql.contains("$9::bigint[]::int[]"));
     assert!(built.sql.contains("$10::text[]::uuid[]"));
     assert!(built.sql.contains("$11::text[]::timestamptz[]"));
+}
+
+#[test]
+fn renders_uuid_text_operators_with_text_casts() {
+    let built = select(typed_values())
+        .filter(all([
+            field("id").contains("10000000"),
+            field("id").starts_with("1000"),
+            field("id").ends_with("0001"),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"id\"::text ILIKE $1 ESCAPE '\\'"));
+    assert!(built.sql.contains("\"id\"::text ILIKE $2 ESCAPE '\\'"));
+    assert!(built.sql.contains("\"id\"::text ILIKE $3 ESCAPE '\\'"));
 }
 
 #[test]
@@ -803,6 +846,42 @@ fn renders_filter_for_non_json_aggregates() {
         built.sql
     );
     assert_eq!(built.params, vec!["paid".into(), "paid".into()]);
+}
+
+#[test]
+fn renders_min_max_array_and_string_aggregate_options() {
+    let built = select(orders())
+        .fields(["status"])
+        .agg(min("createdAt", "firstSeen").filter(field("status").eq("paid")))
+        .agg(max("createdAt", "lastSeen"))
+        .agg(
+            array_agg("email", "emails")
+                .distinct()
+                .order_by(field("email").asc().nulls_last())
+                .filter(field("status").eq("paid")),
+        )
+        .agg(
+            string_agg("email", ";", "emailList")
+                .order_by(field("createdAt").desc().nulls_first())
+                .filter(field("status").eq("paid")),
+        )
+        .group_by(["status"])
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .contains("MIN(\"created_at\") FILTER (WHERE \"status\" = $1)")
+    );
+    assert!(built.sql.contains("MAX(\"created_at\")"));
+    assert!(built.sql.contains(" AS \"lastSeen\""));
+    assert!(built.sql.contains(
+        "to_jsonb(array_agg(DISTINCT \"email\" ORDER BY \"email\" ASC NULLS LAST) FILTER (WHERE \"status\" = $2)) AS \"emails\""
+    ));
+    assert!(built.sql.contains(
+        "string_agg(\"email\", ';' ORDER BY \"created_at\" DESC NULLS FIRST) FILTER (WHERE \"status\" = $3) AS \"emailList\""
+    ));
 }
 
 #[test]
@@ -1410,7 +1489,7 @@ fn renders_is_distinct_from() {
     assert!(
         built
             .sql
-            .contains("\"metadata\" #>> ARRAY[$2]::text[] IS NOT DISTINCT FROM $3")
+            .contains("\"metadata\" #> ARRAY[$2]::text[] IS NOT DISTINCT FROM $3::jsonb")
     );
 }
 

@@ -203,6 +203,10 @@ impl Renderer {
                     self.render_column_name(&sort.field);
                     self.sql.push(' ');
                     self.sql.push_str(sort.dir.as_str());
+                    if let Some(nulls) = sort.nulls {
+                        self.sql.push(' ');
+                        self.sql.push_str(nulls.as_str());
+                    }
                 }
                 self.sql.push(')');
                 self.render_aggregate_filter(validated, filter)?;

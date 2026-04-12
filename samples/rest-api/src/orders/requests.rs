@@ -154,3 +154,60 @@ fn validate_patch_order(patch: &PatchOrderRequest) -> Result<(), ValidationError
         Err(error)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn id(value: &str) -> Uuid {
+        Uuid::parse_str(value).unwrap()
+    }
+
+    fn valid_item() -> CreateOrderItemRequest {
+        CreateOrderItemRequest {
+            product_id: id("40000000-0000-0000-0000-000000000001"),
+            quantity: 2,
+            unit_price_cents: 1_500,
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn create_order_request_converts_to_db_model_with_defaults() {
+        let request = CreateOrderRequest {
+            user_id: id("20000000-0000-0000-0000-000000000001"),
+            channel: "web".to_owned(),
+            status: None,
+            metadata: None,
+            tags: None,
+            items: vec![valid_item()],
+        };
+        request.validate().unwrap();
+
+        let order = CreateOrder::from(request);
+        assert_eq!(order.status, "draft");
+        assert_eq!(order.tags, Vec::<String>::new());
+        assert_eq!(order.items.len(), 1);
+        assert_eq!(order.items[0].metadata, serde_json::json!({}));
+    }
+
+    #[test]
+    fn order_request_validation_rejects_unknown_status_and_empty_patch() {
+        let request = CreateOrderRequest {
+            user_id: id("20000000-0000-0000-0000-000000000001"),
+            channel: "web".to_owned(),
+            status: Some("lost".to_owned()),
+            metadata: None,
+            tags: None,
+            items: vec![valid_item()],
+        };
+        assert!(request.validate().is_err());
+
+        let patch = PatchOrderRequest {
+            status: None,
+            channel: None,
+            metadata: None,
+        };
+        assert!(patch.validate().is_err());
+    }
+}

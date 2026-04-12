@@ -65,3 +65,40 @@ impl ResponseError for AppError {
         HttpResponse::build(self.status_code()).json(ErrorBody { message })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{ResponseError, body::to_bytes, http::StatusCode};
+
+    use super::*;
+
+    #[test]
+    fn app_error_maps_postgres_errors_to_http_boundary_errors() {
+        let not_found = AppError::from(rqb::postgres::Error::NotFound);
+        assert!(matches!(not_found, AppError::NotFound));
+        assert_eq!(not_found.status_code(), StatusCode::NOT_FOUND);
+
+        let unique = AppError::from(rqb::postgres::Error::UniqueViolation {
+            constraint: Some("users_email_key".to_owned()),
+            detail: None,
+        });
+        assert!(matches!(unique, AppError::Conflict(ref name) if name == "users_email_key"));
+        assert_eq!(unique.status_code(), StatusCode::CONFLICT);
+
+        let core = AppError::from(rqb::postgres::Error::Core(rqb::Error::UnknownField {
+            dataset: "orders".to_owned(),
+            field: "missing".to_owned(),
+        }));
+        assert!(matches!(core, AppError::BadRequest(_)));
+        assert_eq!(core.status_code(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn internal_error_response_hides_internal_details() {
+        let response = AppError::Internal("database password leaked".to_owned()).error_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body()).await.unwrap();
+        assert_eq!(body, r#"{"message":"internal server error"}"#);
+    }
+}

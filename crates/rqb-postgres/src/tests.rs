@@ -202,6 +202,28 @@ fn json_path_numeric_comparison_keeps_i64_precision() {
 }
 
 #[test]
+fn renders_known_fields_on_unfielded_dataset_without_descriptor() {
+    let id = Field::new("id", FieldType::Uuid);
+    let total = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
+    let status = Field::new("status", FieldType::Text);
+
+    let built = select(Dataset::table("orders_archive"))
+        .fields([id, total])
+        .filter(status.eq("paid"))
+        .order_by(total.desc())
+        .limit(5)
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.starts_with("SELECT \"id\""));
+    assert!(built.sql.contains("\"total_cents\" AS \"totalCents\""));
+    assert!(built.sql.contains("FROM \"orders_archive\""));
+    assert!(built.sql.contains("WHERE \"status\" = $1"));
+    assert!(built.sql.contains("ORDER BY \"total_cents\" DESC"));
+    assert_eq!(built.params, vec!["paid".into()]);
+}
+
+#[test]
 fn renders_numeric_float_special_values_as_postgres_literals() {
     let amounts = Dataset::table("amounts").fields([Field::new("amount", FieldType::Numeric)]);
     let built = select(amounts)
@@ -1171,6 +1193,126 @@ fn renders_debug_sql_with_params() {
     let debug = built.debug_sql().to_string();
     assert!(debug.starts_with("SELECT \"email\" FROM \"order_search_view\" WHERE \"status\" = $1"));
     assert!(debug.contains("-- params: [String(\"paid\")]"));
+}
+
+#[test]
+fn renders_debug_select_sql_with_rows_and_count() {
+    let built = select(orders())
+        .fields(["email"])
+        .filter(field("status").eq("paid"))
+        .build_pg()
+        .unwrap();
+
+    let debug = built.debug_sql().to_string();
+    assert!(debug.contains("-- rows"));
+    assert!(debug.contains("SELECT \"email\" FROM \"order_search_view\" WHERE \"status\" = $1"));
+    assert!(debug.contains("-- count"));
+    assert!(debug.contains("SELECT count(*) FROM \"order_search_view\" WHERE \"status\" = $1"));
+    assert!(debug.contains("-- params: [String(\"paid\")]"));
+}
+
+#[cfg(feature = "runtime-tokio-postgres")]
+#[test]
+fn page_map_preserves_pagination_metadata() {
+    let page = Page {
+        items: vec![1, 2, 3],
+        total: 30,
+        limit: 3,
+        offset: 6,
+    };
+
+    let mapped = page.map(|value| format!("item-{value}"));
+
+    assert_eq!(mapped.items, vec!["item-1", "item-2", "item-3"]);
+    assert_eq!(mapped.total, 30);
+    assert_eq!(mapped.limit, 3);
+    assert_eq!(mapped.offset, 6);
+}
+
+#[cfg(feature = "runtime-tokio-postgres")]
+#[test]
+fn postgres_error_helpers_classify_variants() {
+    let core = Error::Core(rqb_core::Error::UnknownField {
+        dataset: "orders".to_owned(),
+        field: "missing".to_owned(),
+    });
+    assert!(core.is_core());
+    assert_eq!(
+        core.as_core(),
+        Some(&rqb_core::Error::UnknownField {
+            dataset: "orders".to_owned(),
+            field: "missing".to_owned(),
+        })
+    );
+
+    let unique = Error::UniqueViolation {
+        constraint: Some("users_email_key".to_owned()),
+        detail: Some("duplicate key".to_owned()),
+    };
+    assert!(unique.is_unique_violation());
+    assert!(unique.is_constraint("users_email_key"));
+    assert_eq!(unique.constraint_name(), Some("users_email_key"));
+    assert_eq!(unique.detail(), Some("duplicate key"));
+
+    assert!(
+        Error::ForeignKeyViolation {
+            constraint: None,
+            detail: None,
+        }
+        .is_foreign_key_violation()
+    );
+    assert!(
+        Error::NotNullViolation {
+            column: Some("email".to_owned()),
+        }
+        .is_not_null_violation()
+    );
+    assert!(
+        Error::CheckViolation {
+            constraint: Some("orders_total_positive".to_owned()),
+        }
+        .is_check_violation()
+    );
+    assert!(Error::Connection("closed".to_owned()).is_connection());
+}
+
+#[cfg(feature = "runtime-tokio-postgres")]
+#[test]
+fn result_ext_maps_conflicts_and_preserves_other_errors() {
+    #[derive(Debug, PartialEq)]
+    enum AppError {
+        Conflict,
+        Db,
+    }
+
+    impl From<Error> for AppError {
+        fn from(_: Error) -> Self {
+            Self::Db
+        }
+    }
+
+    let ok = Ok::<_, Error>(7)
+        .on_conflict(|_| AppError::Conflict)
+        .unwrap();
+    assert_eq!(ok, 7);
+
+    let conflict = Err::<(), _>(Error::UniqueViolation {
+        constraint: Some("users_email_key".to_owned()),
+        detail: None,
+    })
+    .on_constraint("users_email_key", |_| AppError::Conflict)
+    .unwrap_err();
+    assert_eq!(conflict, AppError::Conflict);
+
+    let passthrough = Err::<(), _>(Error::CheckViolation {
+        constraint: Some("orders_total_positive".to_owned()),
+    })
+    .on_conflict(|_| AppError::Conflict)
+    .unwrap_err();
+    assert_eq!(passthrough, AppError::Db);
+
+    let optional = Err::<(), _>(Error::NotFound).optional().unwrap();
+    assert_eq!(optional, None);
 }
 
 #[test]

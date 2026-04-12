@@ -671,3 +671,50 @@ impl ResolvedField {
         self.alias.as_deref().unwrap_or(&self.api_name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn field_ref_display_and_serde_keep_known_qualified_paths() {
+        let field = Field::new("metadata", FieldType::Jsonb)
+            .on("o")
+            .path("campaign");
+
+        assert_eq!(field.qualifier(), Some("o"));
+        assert_eq!(field.display_name(), "o.metadata.campaign");
+        assert_eq!(serde_json::to_value(&field).unwrap(), "o.metadata.campaign");
+
+        let decoded = serde_json::from_value::<FieldRef>(serde_json::json!("u.email")).unwrap();
+        assert_eq!(decoded.qualifier(), Some("u"));
+        assert_eq!(decoded.display_name(), "u.email");
+    }
+
+    #[test]
+    fn resolved_field_output_alias_prefers_explicit_alias() {
+        let field = ResolvedField {
+            api_name: "totalCents".to_owned(),
+            db_name: "total_cents".to_owned(),
+            ty: FieldType::BigInt,
+            caps: Capabilities::all(),
+            json_path: Vec::new(),
+            qualifier: Some("o".to_owned()),
+            explicit_qualifier: Some("o".to_owned()),
+            alias: None,
+        };
+
+        assert_eq!(field.display_name(), "o.totalCents");
+        assert_eq!(field.output_alias(), "o_totalCents");
+        assert_eq!(field.object_key(), "totalCents");
+
+        let aliased = ResolvedField {
+            alias: Some("total".to_owned()),
+            ..field
+        };
+        assert_eq!(aliased.output_alias(), "total");
+        assert_eq!(aliased.object_key(), "total");
+    }
+}

@@ -67,6 +67,49 @@ fn rejects_unknown_query_fields() {
 }
 
 #[test]
+fn accepts_known_fields_on_unfielded_dataset_without_joins() {
+    let id = Field::new("id", FieldType::Uuid);
+    let total = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
+    let dataset = Dataset::table("orders_archive");
+
+    let select = crate::select(dataset.clone())
+        .fields([id, total])
+        .filter(total.gte(10_000))
+        .build();
+    let validated = ValidatedSelect::new(select).unwrap();
+    assert_eq!(validated.selected_fields.len(), 2);
+    assert_eq!(validated.selected_fields[1].db_name, "total_cents");
+
+    let insert = insert(dataset.clone())
+        .set(id, "30000000-0000-0000-0000-000000000001")
+        .set(total, 15_900)
+        .build()
+        .unwrap();
+    ValidatedInsert::new(insert).unwrap();
+
+    let update = crate::update(dataset)
+        .set(total, 10_900)
+        .filter(id.eq("30000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+    ValidatedUpdate::new(update).unwrap();
+}
+
+#[test]
+fn rejects_named_fields_on_unfielded_dataset_without_descriptor() {
+    let query = crate::select(Dataset::table("orders_archive"))
+        .fields(["id"])
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::UnknownField { dataset, field }
+            if dataset == "orders_archive" && field == "id"
+    ));
+}
+
+#[test]
 fn rejects_hidden_selection() {
     let query = crate::select(dataset()).fields(["id", "blobName"]).build();
     let err = ValidatedSelect::new(query).unwrap_err();

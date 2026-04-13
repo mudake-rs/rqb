@@ -35,6 +35,7 @@ tmp/
 temp/
 
 # Local agent instructions / scratch context
+local/
 .ignore
 .codex/
 .claude/

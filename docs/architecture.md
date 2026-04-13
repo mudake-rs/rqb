@@ -104,6 +104,11 @@ The target is not to hide SQL behind a generic trait maze. The target is to make
 operator categories explicit: scalar comparison, text match, array membership,
 JSONB key, range/network containment, regex, text search, and subquery.
 
+Rendering has started moving in that direction: `render::expr` dispatches the
+validated expression tree, while `render::predicate` owns concrete SQL for
+field predicates and column predicates. Validation still needs the same kind of
+category split before this pressure point is fully closed.
+
 ### Write Validation Still Reuses Select Machinery
 
 Write filters and write field resolution currently create small throwaway
@@ -160,6 +165,8 @@ rqb-core
 rqb-postgres
   type_sql: Postgres casts, selection repr, array casts
   render: validated models -> BuiltQuery
+  render::expr: validated expression tree dispatch
+  render::predicate: predicate and column-predicate SQL
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
   row_map: typed and raw Row -> serde bridge
@@ -195,6 +202,7 @@ every layer.
 4. Categorize operators.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
    rendering through explicit operator categories to reduce parallel branching.
+   Started in rendering by splitting expression dispatch from predicate SQL.
 
 5. Revisit execution traits.
    Only after rendering and validation are cleaner, decide whether select/write

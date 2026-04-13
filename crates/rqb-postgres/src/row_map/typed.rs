@@ -4,7 +4,7 @@ use tokio_postgres::Row;
 
 use crate::Result;
 
-use super::{
+use super::values::{
     bytes_to_json, date_array_to_json, date_to_json, f64_to_json, read_array, read_scalar,
     timestamp_array_to_json, timestamp_to_json, timestamptz_array_to_json, timestamptz_to_json,
     uuid_array_to_json, uuid_to_json,

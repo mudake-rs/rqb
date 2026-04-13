@@ -158,6 +158,8 @@ coupled:
 ```text
 rqb-core
   metadata: Dataset, Source, Field, FieldType, TypeSpec, capabilities
+  field::{capabilities, reference, resolved}: field metadata, FieldRef API, resolved fields
+  types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
   ast: SelectQuery, SearchRequest, Expr, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> validated models
@@ -169,13 +171,17 @@ rqb-core
   validated: render-ready resolved structs
 
 rqb-postgres
-  type_sql: Postgres casts, selection repr, array casts
+  build: validation + rendering entry points and BuildPostgres traits
+  built: rendered query structs and debug SQL display helpers
+  error: structured Core/Postgres/runtime error surface
+  type_sql::{casts, selection, names}: bind casts, selection repr, type identifiers
   render: validated models -> BuiltQuery
   render::expr: validated expression tree dispatch
   render::predicate: predicate and column-predicate SQL
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
-  row_map: typed and raw Row -> serde bridge
+  row_map::{typed, raw}: metadata-driven and OID-driven Row -> serde bridge
+  row_map::values: shared Row value readers and feature-gated conversions
   executor::driver: PgExecutor implementations for driver/client types and Page
   executor::query: shared low-level query/fetch helpers
   executor::{select, write, raw}: user-facing execution traits

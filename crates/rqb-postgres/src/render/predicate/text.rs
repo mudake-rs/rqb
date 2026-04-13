@@ -28,7 +28,7 @@ impl Renderer {
         } else {
             self.sql.push_str(" ~* ");
         }
-        self.push_param(&Value::String(value.to_owned()));
+        self.push_owned_param(Value::String(value.to_owned()));
     }
 
     pub(super) fn render_text_search(&mut self, field: &ResolvedField, value: &str) {
@@ -42,7 +42,7 @@ impl Renderer {
         self.sql.push_str(") @@ websearch_to_tsquery(");
         self.sql.push_str(&quote_literal(config));
         self.sql.push_str(", ");
-        self.push_param(&Value::String(value.to_owned()));
+        self.push_owned_param(Value::String(value.to_owned()));
         self.sql.push(')');
     }
 
@@ -61,7 +61,7 @@ impl Renderer {
         }
         self.sql.push_str("ILIKE ");
         let pattern = format!("{prefix}{}{suffix}", escape_like(value));
-        self.push_param(&Value::String(pattern));
+        self.push_owned_param(Value::String(pattern));
         self.sql.push_str(" ESCAPE '\\'");
     }
 }

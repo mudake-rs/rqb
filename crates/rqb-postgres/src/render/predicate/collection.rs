@@ -61,7 +61,7 @@ impl Renderer {
     pub(super) fn render_json_key(&mut self, field: &ResolvedField, key: &str) {
         self.render_column_name(field);
         self.sql.push_str(" ? ");
-        self.push_param(&Value::String(key.to_owned()));
+        self.push_owned_param(Value::String(key.to_owned()));
     }
 
     pub(super) fn render_json_key_set(

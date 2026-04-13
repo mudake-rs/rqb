@@ -12,7 +12,7 @@ impl Renderer {
         self.push_owned_param(value.clone());
     }
 
-    fn push_owned_param(&mut self, value: Value) {
+    pub(super) fn push_owned_param(&mut self, value: Value) {
         self.params.push(value);
         self.sql.push('$');
         self.sql.push_str(&self.params.len().to_string());

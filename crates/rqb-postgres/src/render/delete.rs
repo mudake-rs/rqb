@@ -1,4 +1,4 @@
-use rqb_core::{SelectColumn, SelectQuery, ValidatedDelete, ValidatedSelect};
+use rqb_core::{SelectColumn, ValidatedDelete};
 
 use crate::{BuiltQuery, Result};
 
@@ -8,11 +8,8 @@ impl Renderer {
     pub(crate) fn render_delete(mut self, validated: &ValidatedDelete) -> Result<BuiltQuery> {
         self.sql.push_str("DELETE FROM ");
         self.render_write_target(&validated.query.dataset.source);
-        if let Some(expr) = &validated.query.filter {
-            self.sql.push_str(" WHERE ");
-            let select = ValidatedSelect::new(SelectQuery::new(validated.query.dataset.clone()))?;
-            self.render_expr(&select, expr)?;
-        }
+        self.sql.push_str(" WHERE ");
+        self.render_expr(&validated.filter)?;
         self.render_returning(&validated.returning);
         self.columns = validated
             .returning

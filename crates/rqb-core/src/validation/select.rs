@@ -10,7 +10,10 @@ use crate::request::SelectQuery;
 use super::operators::{count_raw_placeholders, validate_column_operator, validate_operator};
 use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
 use super::scope::{ExprContext, QueryScope};
-use super::{ValidatedAggregate, ValidatedSelect, ValidatedSort};
+use super::{
+    ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedExpr, ValidatedJoin,
+    ValidatedSelect, ValidatedSort,
+};
 
 impl ValidatedSelect {
     pub fn new(query: SelectQuery) -> Result<Self> {
@@ -21,10 +24,12 @@ impl ValidatedSelect {
         if let Some(error) = query.builder_errors.first() {
             return Err(error.clone());
         }
-        validate_nested_ctes(&query)?;
         let scope = QueryScope::new_with_outer(&query, outer_datasets)?;
-        validate_joins(&scope, &query)?;
+        let ctes = validate_ctes(&query)?;
+        let joins = validate_joins(&scope, &query)?;
 
+        let limit_explicit = query.request.limit.is_some();
+        let offset_explicit = query.request.offset.is_some();
         let limit = query.request.limit.unwrap_or(query.dataset.default_limit);
         if limit > query.dataset.max_limit {
             return Err(Error::LimitExceeded {
@@ -58,23 +63,37 @@ impl ValidatedSelect {
             .map(|sort| validate_sort(&scope, sort))
             .collect::<Result<Vec<_>>>()?;
 
-        if let Some(expr) = &query.request.query {
-            validate_expr(&scope, expr, ExprContext::Filter)?;
-        }
-        if let Some(expr) = &query.having {
-            validate_expr(&scope, expr, ExprContext::Having)?;
-        }
+        let filter = query
+            .request
+            .query
+            .as_ref()
+            .map(|expr| validate_expr(&scope, expr, ExprContext::Filter))
+            .transpose()?;
+        let having = query
+            .having
+            .as_ref()
+            .map(|expr| validate_expr(&scope, expr, ExprContext::Having))
+            .transpose()?;
 
         Ok(Self {
             offset: query.request.offset.unwrap_or(0),
             limit,
+            limit_explicit,
+            offset_explicit,
+            dataset: query.dataset.clone(),
+            cacheable: query.cacheable,
+            distinct: query.distinct,
+            lock: query.lock,
+            ctes,
+            joins,
             selected_fields,
             distinct_on,
             group_by,
             aggregates,
             columns,
+            filter,
+            having,
             sort,
-            query,
         })
     }
 }
@@ -98,29 +117,58 @@ fn resolve_distinct_on(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<Re
         .collect()
 }
 
-fn validate_nested_ctes(query: &SelectQuery) -> Result<()> {
-    for cte in &query.ctes {
-        if let CteBody::Select(select) = &cte.body {
-            let nested = (**select).clone();
-            ValidatedSelect::new(nested)?;
-        }
-    }
-    Ok(())
+fn validate_ctes(query: &SelectQuery) -> Result<Vec<ValidatedCte>> {
+    query
+        .ctes
+        .iter()
+        .map(|cte| {
+            let body = match &cte.body {
+                CteBody::Raw(raw) => {
+                    let placeholders = count_raw_placeholders(&raw.sql);
+                    if placeholders != raw.binds.len() {
+                        return Err(Error::RawBindMismatch {
+                            placeholders,
+                            binds: raw.binds.len(),
+                        });
+                    }
+                    ValidatedCteBody::Raw(raw.clone())
+                }
+                CteBody::Select(select) => {
+                    ValidatedCteBody::Select(Box::new(ValidatedSelect::new((**select).clone())?))
+                }
+            };
+            Ok(ValidatedCte {
+                name: cte.name.clone(),
+                columns: cte.columns.clone(),
+                recursive: cte.recursive,
+                body,
+            })
+        })
+        .collect()
 }
-fn validate_joins(scope: &QueryScope, query: &SelectQuery) -> Result<()> {
-    for join in &query.joins {
-        match (&join.on, join.kind.requires_condition()) {
-            (Some(on), _) => validate_expr(scope, on, ExprContext::JoinOn)?,
-            (None, true) => {
-                return Err(Error::MissingJoinCondition {
-                    kind: join.kind.as_sql().to_owned(),
-                    dataset: join.dataset.api_name.clone(),
-                });
-            }
-            (None, false) => {}
-        }
-    }
-    Ok(())
+
+fn validate_joins(scope: &QueryScope, query: &SelectQuery) -> Result<Vec<ValidatedJoin>> {
+    query
+        .joins
+        .iter()
+        .map(|join| {
+            let on = match (&join.on, join.kind.requires_condition()) {
+                (Some(on), _) => Some(validate_expr(scope, on, ExprContext::JoinOn)?),
+                (None, true) => {
+                    return Err(Error::MissingJoinCondition {
+                        kind: join.kind.as_sql().to_owned(),
+                        dataset: join.dataset.api_name.clone(),
+                    });
+                }
+                (None, false) => None,
+            };
+            Ok(ValidatedJoin {
+                kind: join.kind,
+                dataset: join.dataset.clone(),
+                on,
+            })
+        })
+        .collect()
 }
 
 fn resolve_selection(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<ResolvedField>> {
@@ -193,13 +241,10 @@ fn resolve_group_by(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<Resol
 
 fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<ValidatedAggregate> {
     Ok(match aggregate {
-        Aggregate::Count { alias, filter } => {
-            validate_aggregate_filter(scope, filter)?;
-            ValidatedAggregate::Count {
-                alias: alias.clone(),
-                filter: filter.clone(),
-            }
-        }
+        Aggregate::Count { alias, filter } => ValidatedAggregate::Count {
+            alias: alias.clone(),
+            filter: validate_aggregate_filter(scope, filter)?,
+        },
         Aggregate::CountField {
             field,
             alias,
@@ -331,11 +376,14 @@ fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<Valid
     })
 }
 
-fn validate_aggregate_filter(scope: &QueryScope, filter: &Option<Expr>) -> Result<Option<Expr>> {
-    if let Some(filter) = filter {
-        validate_expr(scope, filter, ExprContext::Filter)?;
-    }
-    Ok(filter.clone())
+fn validate_aggregate_filter(
+    scope: &QueryScope,
+    filter: &Option<Expr>,
+) -> Result<Option<ValidatedExpr>> {
+    filter
+        .as_ref()
+        .map(|filter| validate_expr(scope, filter, ExprContext::Filter))
+        .transpose()
 }
 
 fn resolve_aggregate_field(
@@ -445,8 +493,12 @@ fn same_resolved_field(left: &ResolvedField, right: &ResolvedField) -> bool {
         && left.json_path == right.json_path
 }
 
-pub(super) fn validate_expr(scope: &QueryScope, expr: &Expr, context: ExprContext) -> Result<()> {
-    match expr {
+pub(super) fn validate_expr(
+    scope: &QueryScope,
+    expr: &Expr,
+    context: ExprContext,
+) -> Result<ValidatedExpr> {
+    Ok(match expr {
         Expr::Predicate(predicate) => {
             let field = resolve_field_in_scope(scope, &predicate.field)?;
             if matches!(context, ExprContext::Filter) && !field.caps.filterable {
@@ -454,12 +506,22 @@ pub(super) fn validate_expr(scope: &QueryScope, expr: &Expr, context: ExprContex
                     field: field.display_name(),
                 });
             }
-            validate_operator(&field, predicate.operator, &predicate.value)
+            validate_operator(&field, predicate.operator, &predicate.value)?;
+            ValidatedExpr::Predicate {
+                field,
+                operator: predicate.operator,
+                value: predicate.value.clone(),
+            }
         }
         Expr::ColumnPredicate(predicate) => {
             let left = resolve_field_in_scope(scope, &predicate.left)?;
             let right = resolve_field_in_scope(scope, &predicate.right)?;
-            validate_column_operator(&left, predicate.operator, &right)
+            validate_column_operator(&left, predicate.operator, &right)?;
+            ValidatedExpr::ColumnPredicate {
+                left,
+                operator: predicate.operator,
+                right,
+            }
         }
         Expr::Subquery(predicate) => {
             let field = resolve_field_in_scope(scope, &predicate.field)?;
@@ -476,9 +538,16 @@ pub(super) fn validate_expr(scope: &QueryScope, expr: &Expr, context: ExprContex
                     actual: selected,
                 });
             }
-            Ok(())
+            ValidatedExpr::Subquery {
+                field,
+                operator: predicate.operator,
+                query: Box::new(validated),
+            }
         }
-        Expr::Exists(predicate) => validate_subquery(scope, &predicate.query).map(|_| ()),
+        Expr::Exists(predicate) => ValidatedExpr::Exists {
+            query: Box::new(validate_subquery(scope, &predicate.query)?),
+            negated: predicate.negated,
+        },
         Expr::Logical(logical) => {
             if logical.predicates.is_empty() {
                 return Err(Error::EmptyLogical {
@@ -488,10 +557,14 @@ pub(super) fn validate_expr(scope: &QueryScope, expr: &Expr, context: ExprContex
             if logical.logical == LogicalOp::Not && logical.predicates.len() != 1 {
                 return Err(Error::InvalidNot);
             }
-            for predicate in &logical.predicates {
-                validate_expr(scope, predicate, context)?;
+            ValidatedExpr::Logical {
+                logical: logical.logical,
+                predicates: logical
+                    .predicates
+                    .iter()
+                    .map(|predicate| validate_expr(scope, predicate, context))
+                    .collect::<Result<Vec<_>>>()?,
             }
-            Ok(())
         }
         Expr::Raw(raw) => {
             let placeholders = count_raw_placeholders(&raw.sql);
@@ -501,9 +574,9 @@ pub(super) fn validate_expr(scope: &QueryScope, expr: &Expr, context: ExprContex
                     binds: raw.binds.len(),
                 });
             }
-            Ok(())
+            ValidatedExpr::Raw(raw.clone())
         }
-    }
+    })
 }
 
 fn validate_subquery(scope: &QueryScope, query: &SelectQuery) -> Result<ValidatedSelect> {

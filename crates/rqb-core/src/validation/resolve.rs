@@ -1,29 +1,8 @@
 use crate::dataset::Dataset;
 use crate::error::{Error, Result};
 use crate::field::{Field, FieldRef, JsonPathPolicy, ResolvedField};
-use crate::request::SelectQuery;
 
 use super::scope::QueryScope;
-
-pub fn resolve_field(dataset: &Dataset, field_ref: &FieldRef) -> Result<ResolvedField> {
-    let query = SelectQuery::new(dataset.clone());
-    let scope = QueryScope::new(&query)?;
-    resolve_field_in_scope(&scope, field_ref)
-}
-
-pub fn resolve_query_field(query: &SelectQuery, field_ref: &FieldRef) -> Result<ResolvedField> {
-    let scope = QueryScope::new(query)?;
-    resolve_field_in_scope(&scope, field_ref)
-}
-
-pub fn resolve_query_field_with_outer(
-    query: &SelectQuery,
-    outer_datasets: &[Dataset],
-    field_ref: &FieldRef,
-) -> Result<ResolvedField> {
-    let scope = QueryScope::new_with_outer(query, outer_datasets)?;
-    resolve_field_in_scope(&scope, field_ref)
-}
 
 pub(super) fn resolve_field_in_scope(
     scope: &QueryScope,

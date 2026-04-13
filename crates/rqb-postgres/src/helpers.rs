@@ -42,11 +42,11 @@ fn write_type_spec(output: &mut String, type_spec: TypeSpec) {
 }
 
 pub(crate) fn needs_count_subquery(validated: &ValidatedSelect) -> bool {
-    validated.query.distinct
+    validated.distinct
         || !validated.distinct_on.is_empty()
         || !validated.group_by.is_empty()
         || !validated.aggregates.is_empty()
-        || validated.query.having.is_some()
+        || validated.having.is_some()
 }
 
 pub(crate) fn column_operator_sql(operator: ColumnOperator) -> &'static str {
@@ -355,33 +355,4 @@ pub(crate) fn value_to_json_array(value: &Value) -> Value {
             _ => unreachable!(),
         }])),
     }
-}
-
-pub(crate) fn renumber_postgres_placeholders(sql: &str, offset: usize) -> String {
-    let mut output = String::with_capacity(sql.len());
-    let chars = sql.as_bytes();
-    let mut idx = 0;
-    while idx < chars.len() {
-        if chars[idx] != b'$' {
-            output.push(chars[idx] as char);
-            idx += 1;
-            continue;
-        }
-
-        let start = idx + 1;
-        let mut end = start;
-        while end < chars.len() && chars[end].is_ascii_digit() {
-            end += 1;
-        }
-        if end == start {
-            output.push('$');
-            idx += 1;
-            continue;
-        }
-        let number = sql[start..end].parse::<usize>().unwrap_or(0);
-        output.push('$');
-        output.push_str(&(number + offset).to_string());
-        idx = end;
-    }
-    output
 }

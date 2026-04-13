@@ -8,25 +8,83 @@ mod write;
 mod tests;
 
 use crate::aggregate::{AggregateType, SelectColumn};
-use crate::expr::{Expr, NullsOrder, SortDir};
+use crate::dataset::{Dataset, JoinKind};
+use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, Operator, SortDir, SubqueryOperator};
 use crate::field::ResolvedField;
-use crate::request::SelectQuery;
+use crate::request::RowLock;
 use crate::value::Value;
 use crate::write::{DeleteQuery, InsertQuery, UpdateQuery};
 
-pub use resolve::{resolve_field, resolve_query_field, resolve_query_field_with_outer};
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedSelect {
-    pub query: SelectQuery,
+    pub dataset: Dataset,
+    pub cacheable: bool,
+    pub distinct: bool,
+    pub ctes: Vec<ValidatedCte>,
+    pub joins: Vec<ValidatedJoin>,
     pub selected_fields: Vec<ResolvedField>,
     pub distinct_on: Vec<ResolvedField>,
     pub group_by: Vec<ResolvedField>,
     pub aggregates: Vec<ValidatedAggregate>,
     pub columns: Vec<SelectColumn>,
+    pub filter: Option<ValidatedExpr>,
+    pub having: Option<ValidatedExpr>,
     pub sort: Vec<ValidatedSort>,
     pub limit: u32,
     pub offset: u64,
+    pub limit_explicit: bool,
+    pub offset_explicit: bool,
+    pub lock: Option<RowLock>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedCte {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub recursive: bool,
+    pub body: ValidatedCteBody,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedCteBody {
+    Raw(crate::RawSql),
+    Select(Box<ValidatedSelect>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedJoin {
+    pub kind: JoinKind,
+    pub dataset: Dataset,
+    pub on: Option<ValidatedExpr>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
+pub enum ValidatedExpr {
+    Predicate {
+        field: ResolvedField,
+        operator: Operator,
+        value: Value,
+    },
+    ColumnPredicate {
+        left: ResolvedField,
+        operator: ColumnOperator,
+        right: ResolvedField,
+    },
+    Subquery {
+        field: ResolvedField,
+        operator: SubqueryOperator,
+        query: Box<ValidatedSelect>,
+    },
+    Exists {
+        query: Box<ValidatedSelect>,
+        negated: bool,
+    },
+    Logical {
+        logical: LogicalOp,
+        predicates: Vec<ValidatedExpr>,
+    },
+    Raw(crate::RawSql),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,7 +125,7 @@ pub enum ValidatedConflictAction {
     DoNothing,
     DoUpdate {
         fields: Vec<ResolvedField>,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
 }
 
@@ -85,12 +143,14 @@ pub struct ValidatedInsert {
 pub struct ValidatedUpdate {
     pub query: UpdateQuery,
     pub assignments: Vec<ValidatedAssignment>,
+    pub filter: Option<ValidatedExpr>,
     pub returning: Vec<ResolvedField>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedDelete {
     pub query: DeleteQuery,
+    pub filter: ValidatedExpr,
     pub returning: Vec<ResolvedField>,
 }
 
@@ -98,39 +158,39 @@ pub struct ValidatedDelete {
 pub enum ValidatedAggregate {
     Count {
         alias: String,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     CountField {
         field: ResolvedField,
         alias: String,
         distinct: bool,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     Sum {
         field: ResolvedField,
         alias: String,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     Avg {
         field: ResolvedField,
         alias: String,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     Min {
         field: ResolvedField,
         alias: String,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     Max {
         field: ResolvedField,
         alias: String,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     JsonAgg {
         alias: String,
         fields: Vec<ResolvedField>,
         order_by: Option<ValidatedSort>,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
         default_empty: bool,
     },
     ArrayAgg {
@@ -138,14 +198,14 @@ pub enum ValidatedAggregate {
         alias: String,
         distinct: bool,
         order_by: Option<ValidatedSort>,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
     StringAgg {
         field: ResolvedField,
         separator: String,
         alias: String,
         order_by: Option<ValidatedSort>,
-        filter: Option<Expr>,
+        filter: Option<ValidatedExpr>,
     },
 }
 

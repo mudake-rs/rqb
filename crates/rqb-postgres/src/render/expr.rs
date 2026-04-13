@@ -1,6 +1,6 @@
 use rqb_core::{
-    ColumnOperator, ElemType, Expr, FieldType, LogicalOp, Operator, ResolvedField,
-    TextSearchConfig, ValidatedSelect, Value,
+    ColumnOperator, ElemType, FieldType, LogicalOp, Operator, ResolvedField, TextSearchConfig,
+    ValidatedExpr, Value,
 };
 
 use crate::Result;
@@ -12,71 +12,72 @@ use crate::helpers::{
 use super::{Renderer, SelectProjection};
 
 impl Renderer {
-    pub(super) fn render_expr(&mut self, validated: &ValidatedSelect, expr: &Expr) -> Result<()> {
+    pub(super) fn render_expr(&mut self, expr: &ValidatedExpr) -> Result<()> {
         match expr {
-            Expr::Predicate(predicate) => {
-                let field = self.resolve_query_field(validated, &predicate.field)?;
-                self.render_predicate(&field, predicate.operator, &predicate.value)
-            }
-            Expr::ColumnPredicate(predicate) => {
-                let left = self.resolve_query_field(validated, &predicate.left)?;
-                let right = self.resolve_query_field(validated, &predicate.right)?;
-                self.render_column_predicate(&left, predicate.operator, &right)
-            }
-            Expr::Subquery(predicate) => {
-                let field = self.resolve_query_field(validated, &predicate.field)?;
-                self.render_column_name(&field);
+            ValidatedExpr::Predicate {
+                field,
+                operator,
+                value,
+            } => self.render_predicate(field, *operator, value),
+            ValidatedExpr::ColumnPredicate {
+                left,
+                operator,
+                right,
+            } => self.render_column_predicate(left, *operator, right),
+            ValidatedExpr::Subquery {
+                field,
+                operator,
+                query,
+            } => {
+                self.render_column_name(field);
                 self.sql.push(' ');
-                self.sql.push_str(predicate.operator.as_sql());
+                self.sql.push_str(operator.as_sql());
                 self.sql.push_str(" (");
-                self.render_subquery(validated, &predicate.query, SelectProjection::Value)?;
+                self.render_subquery(query, SelectProjection::Value)?;
                 self.sql.push(')');
                 Ok(())
             }
-            Expr::Exists(predicate) => {
-                if predicate.negated {
+            ValidatedExpr::Exists { query, negated } => {
+                if *negated {
                     self.sql.push_str("NOT ");
                 }
                 self.sql.push_str("EXISTS (");
-                self.render_subquery(validated, &predicate.query, SelectProjection::Exists)?;
+                self.render_subquery(query, SelectProjection::Exists)?;
                 self.sql.push(')');
                 Ok(())
             }
-            Expr::Logical(logical) => match logical.logical {
+            ValidatedExpr::Logical {
+                logical,
+                predicates,
+            } => match logical {
                 LogicalOp::And | LogicalOp::Or => {
-                    let sep = if logical.logical == LogicalOp::And {
+                    let sep = if *logical == LogicalOp::And {
                         " AND "
                     } else {
                         " OR "
                     };
                     self.sql.push('(');
-                    for (idx, predicate) in logical.predicates.iter().enumerate() {
+                    for (idx, predicate) in predicates.iter().enumerate() {
                         if idx > 0 {
                             self.sql.push_str(sep);
                         }
-                        self.render_expr(validated, predicate)?;
+                        self.render_expr(predicate)?;
                     }
                     self.sql.push(')');
                     Ok(())
                 }
                 LogicalOp::Not => {
                     self.sql.push_str("NOT (");
-                    self.render_expr(validated, &logical.predicates[0])?;
+                    self.render_expr(&predicates[0])?;
                     self.sql.push(')');
                     Ok(())
                 }
             },
-            Expr::Raw(raw) => self.render_raw(raw),
+            ValidatedExpr::Raw(raw) => {
+                self.render_raw(raw);
+                Ok(())
+            }
         }
-    }
-
-    fn resolve_query_field(
-        &self,
-        validated: &ValidatedSelect,
-        field: &rqb_core::FieldRef,
-    ) -> Result<ResolvedField> {
-        rqb_core::resolve_query_field_with_outer(&validated.query, &self.outer_datasets, field)
-            .map_err(Into::into)
     }
 
     fn render_predicate(

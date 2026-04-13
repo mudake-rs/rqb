@@ -736,13 +736,25 @@ fn renders_raw_sql_escaped_question_marks_and_bind_errors() {
         .cte(rqb_core::cte("bad", raw("SELECT ? AS n")))
         .build_rows_pg()
         .unwrap_err();
-    assert!(matches!(too_few, Error::TooFewRawBinds));
+    assert!(matches!(
+        too_few,
+        Error::Core(rqb_core::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        })
+    ));
 
     let unused = select(Dataset::cte("bad").fields([Field::new("n", FieldType::Integer)]))
         .cte(rqb_core::cte("bad", raw("SELECT 1 AS n").bind(1)))
         .build_rows_pg()
         .unwrap_err();
-    assert!(matches!(unused, Error::UnusedRawBinds));
+    assert!(matches!(
+        unused,
+        Error::Core(rqb_core::Error::RawBindMismatch {
+            placeholders: 0,
+            binds: 1
+        })
+    ));
 }
 
 #[test]

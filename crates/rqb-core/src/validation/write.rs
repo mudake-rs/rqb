@@ -1,6 +1,6 @@
 use crate::dataset::{Dataset, Source};
 use crate::error::{Error, Result};
-use crate::expr::{ColumnOperator, Operator};
+use crate::expr::{ColumnOperator, Expr, Operator};
 use crate::field::{FieldRef, ResolvedField};
 use crate::request::SelectQuery;
 use crate::value::Value;
@@ -18,7 +18,8 @@ use super::scope::{ExprContext, QueryScope};
 use super::select::validate_expr;
 use super::{
     ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
-    ValidatedDelete, ValidatedInsert, ValidatedSelect, ValidatedUpdate, ValidatedWriteValue,
+    ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedSelect, ValidatedUpdate,
+    ValidatedWriteValue,
 };
 
 impl ValidatedInsert {
@@ -89,15 +90,16 @@ impl ValidatedUpdate {
             return Err(Error::EmptyUpdate);
         }
         let assignments = validate_assignments(&query.dataset, &query.assignments)?;
-        if let Some(expr) = &query.filter {
-            let select = SelectQuery::new(query.dataset.clone());
-            let scope = QueryScope::new(&select)?;
-            validate_expr(&scope, expr, ExprContext::Filter)?;
-        }
+        let filter = query
+            .filter
+            .as_ref()
+            .map(|expr| validate_write_filter(&query.dataset, expr))
+            .transpose()?;
         let returning = resolve_returning(&query.dataset, &query.returning)?;
         Ok(Self {
             query,
             assignments,
+            filter,
             returning,
         })
     }
@@ -109,12 +111,20 @@ impl ValidatedDelete {
         let Some(expr) = &query.filter else {
             return Err(Error::DeleteWithoutFilter);
         };
-        let select = SelectQuery::new(query.dataset.clone());
-        let scope = QueryScope::new(&select)?;
-        validate_expr(&scope, expr, ExprContext::Filter)?;
+        let filter = validate_write_filter(&query.dataset, expr)?;
         let returning = resolve_returning(&query.dataset, &query.returning)?;
-        Ok(Self { query, returning })
+        Ok(Self {
+            query,
+            filter,
+            returning,
+        })
     }
+}
+
+fn validate_write_filter(dataset: &Dataset, expr: &Expr) -> Result<ValidatedExpr> {
+    let select = SelectQuery::new(dataset.clone());
+    let scope = QueryScope::new(&select)?;
+    validate_expr(&scope, expr, ExprContext::Filter)
 }
 
 fn validate_write_source(dataset: &Dataset) -> Result<()> {
@@ -270,15 +280,11 @@ fn validate_conflict(
                 .iter()
                 .map(|field| resolve_write_field(dataset, field))
                 .collect::<Result<Vec<_>>>()?;
-            if let Some(expr) = filter {
-                let select = SelectQuery::new(dataset.clone());
-                let scope = QueryScope::new(&select)?;
-                validate_expr(&scope, expr, ExprContext::Filter)?;
-            }
-            ValidatedConflictAction::DoUpdate {
-                fields,
-                filter: filter.clone(),
-            }
+            let filter = filter
+                .as_ref()
+                .map(|expr| validate_write_filter(dataset, expr))
+                .transpose()?;
+            ValidatedConflictAction::DoUpdate { fields, filter }
         }
     };
     Ok(ValidatedConflictClause { target, action })

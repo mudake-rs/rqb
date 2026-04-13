@@ -1,24 +1,24 @@
-use rqb_core::{CteBody, ValidatedSelect};
+use rqb_core::{ValidatedCteBody, ValidatedSelect};
 
+use crate::Result;
 use crate::helpers::write_quoted_ident;
-use crate::{Postgres, Result};
 
 use super::Renderer;
 
 impl Renderer {
     pub(super) fn render_ctes(&mut self, validated: &ValidatedSelect) -> Result<()> {
-        if validated.query.ctes.is_empty() {
+        if validated.ctes.is_empty() {
             return Ok(());
         }
 
-        let recursive = validated.query.ctes.iter().any(|cte| cte.recursive);
+        let recursive = validated.ctes.iter().any(|cte| cte.recursive);
         self.sql.push_str(if recursive {
             "WITH RECURSIVE "
         } else {
             "WITH "
         });
 
-        for (idx, cte) in validated.query.ctes.iter().enumerate() {
+        for (idx, cte) in validated.ctes.iter().enumerate() {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
@@ -35,10 +35,9 @@ impl Renderer {
             }
             self.sql.push_str(" AS (");
             match &cte.body {
-                CteBody::Raw(raw) => self.render_raw(raw)?,
-                CteBody::Select(query) => {
-                    let built = Postgres::build_rows((**query).clone())?;
-                    self.append_built_query(built);
+                ValidatedCteBody::Raw(raw) => self.render_raw(raw),
+                ValidatedCteBody::Select(select) => {
+                    self.render_subquery_select(select, super::SelectProjection::Value)?
                 }
             }
             self.sql.push(')');

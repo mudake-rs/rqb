@@ -1,10 +1,10 @@
 use rqb_core::{
-    SelectColumn, SelectQuery, ValidatedConflictAction, ValidatedConflictClause,
-    ValidatedConflictTarget, ValidatedInsert, ValidatedSelect,
+    SelectColumn, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
+    ValidatedInsert,
 };
 
 use crate::helpers::write_quoted_ident;
-use crate::{BuiltQuery, Postgres, Result};
+use crate::{BuiltQuery, Result};
 
 use super::Renderer;
 
@@ -33,8 +33,7 @@ impl Renderer {
 
         if let Some(select) = &validated.from_select {
             self.sql.push(' ');
-            let built = Postgres::build_rows(select.query.clone())?;
-            self.append_built_query(built);
+            self.render_subquery_select(select, super::SelectProjection::Value)?;
         } else {
             self.sql.push_str(" VALUES ");
             for (row_idx, row) in validated.rows.iter().enumerate() {
@@ -53,7 +52,7 @@ impl Renderer {
         }
 
         if let Some(conflict) = &validated.conflict {
-            self.render_conflict(validated, conflict)?;
+            self.render_conflict(conflict)?;
         }
         self.render_returning(&validated.returning);
         self.columns = validated
@@ -65,11 +64,7 @@ impl Renderer {
         Ok(self.finish())
     }
 
-    fn render_conflict(
-        &mut self,
-        validated: &ValidatedInsert,
-        conflict: &ValidatedConflictClause,
-    ) -> Result<()> {
+    fn render_conflict(&mut self, conflict: &ValidatedConflictClause) -> Result<()> {
         self.sql.push_str(" ON CONFLICT ");
         match &conflict.target {
             ValidatedConflictTarget::Columns(fields) => {
@@ -102,9 +97,7 @@ impl Renderer {
                 }
                 if let Some(filter) = filter {
                     self.sql.push_str(" WHERE ");
-                    let select =
-                        ValidatedSelect::new(SelectQuery::new(validated.query.dataset.clone()))?;
-                    self.render_expr(&select, filter)?;
+                    self.render_expr(filter)?;
                 }
             }
         }

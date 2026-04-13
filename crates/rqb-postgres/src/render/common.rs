@@ -2,12 +2,12 @@ use rqb_core::{
     ElemType, FieldType, RawSql, ResolvedField, Source, ValidatedWriteValue, Value, ValueRepr,
 };
 
+use crate::Result;
 use crate::helpers::{
-    array_field_type_for_scalar, postgres_selection_cast, renumber_postgres_placeholders,
-    value_to_json, write_postgres_array_cast_for_scalar, write_postgres_cast, write_quoted_ident,
+    array_field_type_for_scalar, postgres_selection_cast, value_to_json,
+    write_postgres_array_cast_for_scalar, write_postgres_cast, write_quoted_ident,
     write_quoted_qualified,
 };
-use crate::{Error, Result};
 
 use super::Renderer;
 
@@ -105,7 +105,7 @@ impl Renderer {
                 self.push_typed_param(&value_to_json(value), field_type)
             }
             ValidatedWriteValue::Value(value) => self.push_typed_param(value, field_type),
-            ValidatedWriteValue::Raw(raw) => self.render_raw(raw)?,
+            ValidatedWriteValue::Raw(raw) => self.render_raw(raw),
             ValidatedWriteValue::Column(field) => self.render_column_name(field),
         }
         Ok(())
@@ -145,7 +145,7 @@ impl Renderer {
         self.sql.push_str("]::text[]");
     }
 
-    pub(super) fn render_raw(&mut self, raw: &RawSql) -> Result<()> {
+    pub(super) fn render_raw(&mut self, raw: &RawSql) {
         self.cacheable = false;
         let mut bind_index = 0usize;
         let mut chars = raw.sql.chars().peekable();
@@ -159,28 +159,14 @@ impl Renderer {
                 self.sql.push('?');
                 continue;
             }
-            let Some(value) = raw.binds.get(bind_index) else {
-                return Err(Error::TooFewRawBinds);
-            };
+            let value = raw
+                .binds
+                .get(bind_index)
+                .expect("raw SQL bind count validated before rendering");
             bind_index += 1;
             self.push_param(value);
         }
-        if bind_index != raw.binds.len() {
-            return Err(Error::UnusedRawBinds);
-        }
-        Ok(())
-    }
-
-    pub(super) fn append_sql_with_params(&mut self, sql: &str, params: Vec<Value>) {
-        let offset = self.params.len();
-        self.sql
-            .push_str(&renumber_postgres_placeholders(sql, offset));
-        self.params.extend(params);
-    }
-
-    pub(super) fn append_built_query(&mut self, built: crate::BuiltQuery) {
-        self.cacheable &= built.cacheable;
-        self.append_sql_with_params(&built.sql, built.params);
+        debug_assert_eq!(bind_index, raw.binds.len());
     }
 
     pub(super) fn push_param(&mut self, value: &Value) {

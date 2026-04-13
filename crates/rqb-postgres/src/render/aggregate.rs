@@ -1,4 +1,4 @@
-use rqb_core::{Expr, ValidatedAggregate, ValidatedSelect};
+use rqb_core::{ValidatedAggregate, ValidatedExpr};
 
 use crate::Result;
 use crate::helpers::{postgres_selection_cast, quote_literal, write_quoted_ident};
@@ -6,15 +6,11 @@ use crate::helpers::{postgres_selection_cast, quote_literal, write_quoted_ident}
 use super::Renderer;
 
 impl Renderer {
-    pub(super) fn render_aggregate(
-        &mut self,
-        validated: &ValidatedSelect,
-        aggregate: &ValidatedAggregate,
-    ) -> Result<()> {
+    pub(super) fn render_aggregate(&mut self, aggregate: &ValidatedAggregate) -> Result<()> {
         match aggregate {
             ValidatedAggregate::Count { alias, filter } => {
                 self.sql.push_str("COUNT(*)");
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 self.sql.push_str(" AS ");
                 write_quoted_ident(&mut self.sql, alias);
             }
@@ -30,7 +26,7 @@ impl Renderer {
                 }
                 self.render_column_name(field);
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 self.sql.push_str(" AS ");
                 write_quoted_ident(&mut self.sql, alias);
             }
@@ -45,7 +41,7 @@ impl Renderer {
                 self.sql.push_str("SUM(");
                 self.render_column_name(field);
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 if filter.is_some() {
                     self.sql.push(')');
                 }
@@ -63,7 +59,7 @@ impl Renderer {
                 self.sql.push_str("AVG(");
                 self.render_column_name(field);
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 if filter.is_some() {
                     self.sql.push(')');
                 }
@@ -83,7 +79,7 @@ impl Renderer {
                 self.sql.push_str("MIN(");
                 self.render_column_name(field);
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 if wrap_for_cast {
                     self.sql.push(')');
                 }
@@ -106,7 +102,7 @@ impl Renderer {
                 self.sql.push_str("MAX(");
                 self.render_column_name(field);
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 if wrap_for_cast {
                     self.sql.push(')');
                 }
@@ -150,7 +146,7 @@ impl Renderer {
                     }
                 }
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 if *default_empty {
                     self.sql.push_str(", '[]'::jsonb)");
                 }
@@ -183,7 +179,7 @@ impl Renderer {
                     }
                 }
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
             }
@@ -212,7 +208,7 @@ impl Renderer {
                     }
                 }
                 self.sql.push(')');
-                self.render_aggregate_filter(validated, filter)?;
+                self.render_aggregate_filter(filter)?;
                 self.sql.push_str(" AS ");
                 write_quoted_ident(&mut self.sql, alias);
             }
@@ -220,14 +216,10 @@ impl Renderer {
         Ok(())
     }
 
-    fn render_aggregate_filter(
-        &mut self,
-        validated: &ValidatedSelect,
-        filter: &Option<Expr>,
-    ) -> Result<()> {
+    fn render_aggregate_filter(&mut self, filter: &Option<ValidatedExpr>) -> Result<()> {
         if let Some(filter) = filter {
             self.sql.push_str(" FILTER (WHERE ");
-            self.render_expr(validated, filter)?;
+            self.render_expr(filter)?;
             self.sql.push(')');
         }
         Ok(())

@@ -1,4 +1,4 @@
-use rqb_core::{SelectQuery, ValidatedSelect};
+use rqb_core::ValidatedSelect;
 
 use crate::helpers::{needs_count_subquery, write_quoted_ident};
 use crate::{BuiltQuery, Result};
@@ -7,7 +7,7 @@ use super::{LimitPolicy, Renderer, SelectProjection};
 
 impl Renderer {
     pub(crate) fn render_rows(mut self, validated: &ValidatedSelect) -> Result<BuiltQuery> {
-        self.cacheable &= validated.query.cacheable;
+        self.cacheable &= validated.cacheable;
         self.render_ctes(validated)?;
         self.sql.push_str("SELECT ");
         self.render_distinct(validated);
@@ -24,7 +24,7 @@ impl Renderer {
     }
 
     pub(crate) fn render_count(mut self, validated: &ValidatedSelect) -> Result<BuiltQuery> {
-        self.cacheable &= validated.query.cacheable;
+        self.cacheable &= validated.cacheable;
         self.render_ctes(validated)?;
         if needs_count_subquery(validated) {
             self.sql.push_str("SELECT count(*) FROM (SELECT ");
@@ -55,29 +55,21 @@ impl Renderer {
                 self.render_column_name(field);
             }
             self.sql.push_str(") ");
-        } else if validated.query.distinct {
+        } else if validated.distinct {
             self.sql.push_str("DISTINCT ");
         }
     }
 
     pub(super) fn render_subquery(
         &mut self,
-        outer: &ValidatedSelect,
-        query: &SelectQuery,
+        validated: &ValidatedSelect,
         projection: SelectProjection,
     ) -> Result<()> {
-        let mut outer_datasets = self.outer_datasets.clone();
-        outer_datasets.extend(outer.query.scope_datasets());
-        let validated = ValidatedSelect::new_with_outer_datasets(query.clone(), &outer_datasets)?;
-        self.cacheable &= validated.query.cacheable;
-
-        let previous = std::mem::replace(&mut self.outer_datasets, outer_datasets);
-        let result = self.render_subquery_select(&validated, projection);
-        self.outer_datasets = previous;
-        result
+        self.cacheable &= validated.cacheable;
+        self.render_subquery_select(validated, projection)
     }
 
-    fn render_subquery_select(
+    pub(super) fn render_subquery_select(
         &mut self,
         validated: &ValidatedSelect,
         projection: SelectProjection,
@@ -121,7 +113,7 @@ impl Renderer {
             if wrote {
                 self.sql.push_str(", ");
             }
-            self.render_aggregate(validated, aggregate)?;
+            self.render_aggregate(aggregate)?;
             wrote = true;
         }
         Ok(())
@@ -145,34 +137,34 @@ impl Renderer {
             if wrote {
                 self.sql.push_str(", ");
             }
-            self.render_aggregate(validated, aggregate)?;
+            self.render_aggregate(aggregate)?;
             wrote = true;
         }
         Ok(())
     }
 
     fn render_from_and_joins(&mut self, validated: &ValidatedSelect) -> Result<()> {
-        self.render_source(&validated.query.dataset.source);
-        for join in &validated.query.joins {
+        self.render_source(&validated.dataset.source);
+        for join in &validated.joins {
             self.sql.push(' ');
             self.sql.push_str(join.kind.as_sql());
             self.sql.push(' ');
             self.render_source(&join.dataset.source);
             if let Some(on) = &join.on {
                 self.sql.push_str(" ON ");
-                self.render_expr(validated, on)?;
+                self.render_expr(on)?;
             }
         }
         Ok(())
     }
 
     fn render_where(&mut self, validated: &ValidatedSelect) -> Result<()> {
-        let Some(expr) = &validated.query.request.query else {
+        let Some(expr) = &validated.filter else {
             return Ok(());
         };
 
         self.sql.push_str(" WHERE ");
-        self.render_expr(validated, expr)
+        self.render_expr(expr)
     }
 
     fn render_group_by(&mut self, validated: &ValidatedSelect) {
@@ -190,12 +182,12 @@ impl Renderer {
     }
 
     fn render_having(&mut self, validated: &ValidatedSelect) -> Result<()> {
-        let Some(expr) = &validated.query.having else {
+        let Some(expr) = &validated.having else {
             return Ok(());
         };
 
         self.sql.push_str(" HAVING ");
-        self.render_expr(validated, expr)
+        self.render_expr(expr)
     }
 
     fn render_order(&mut self, validated: &ValidatedSelect) {
@@ -219,18 +211,18 @@ impl Renderer {
     }
 
     fn render_limit_offset(&mut self, validated: &ValidatedSelect, policy: LimitPolicy) {
-        if matches!(policy, LimitPolicy::Always) || validated.query.request.limit.is_some() {
+        if matches!(policy, LimitPolicy::Always) || validated.limit_explicit {
             self.sql.push_str(" LIMIT ");
             self.sql.push_str(&validated.limit.to_string());
         }
-        if matches!(policy, LimitPolicy::Always) || validated.query.request.offset.is_some() {
+        if matches!(policy, LimitPolicy::Always) || validated.offset_explicit {
             self.sql.push_str(" OFFSET ");
             self.sql.push_str(&validated.offset.to_string());
         }
     }
 
     fn render_row_lock(&mut self, validated: &ValidatedSelect) {
-        let Some(lock) = validated.query.lock else {
+        let Some(lock) = validated.lock else {
             return;
         };
 

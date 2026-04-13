@@ -156,13 +156,6 @@ impl SelectQuery {
             builder_errors: Vec::new(),
         }
     }
-
-    pub fn scope_datasets(&self) -> Vec<Dataset> {
-        let mut datasets = Vec::with_capacity(self.joins.len() + 1);
-        datasets.push(self.dataset.clone());
-        datasets.extend(self.joins.iter().map(|join| join.dataset.clone()));
-        datasets
-    }
 }
 
 #[cfg(test)]

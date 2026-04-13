@@ -53,12 +53,6 @@ pub enum Error {
     #[error(transparent)]
     Core(#[from] CoreError),
 
-    #[error("raw SQL fragment has too few bind values")]
-    TooFewRawBinds,
-
-    #[error("raw SQL fragment has unused bind values")]
-    UnusedRawBinds,
-
     #[cfg(feature = "runtime-tokio-postgres")]
     #[error("query returned no rows")]
     NotFound,
@@ -183,11 +177,18 @@ impl From<serde_json::Error> for Error {
 }
 
 impl Error {
+    #[cfg(feature = "runtime-tokio-postgres")]
     pub fn as_core(&self) -> Option<&CoreError> {
         match self {
             Self::Core(error) => Some(error),
             _ => None,
         }
+    }
+
+    #[cfg(not(feature = "runtime-tokio-postgres"))]
+    pub fn as_core(&self) -> Option<&CoreError> {
+        let Self::Core(error) = self;
+        Some(error)
     }
 
     pub fn is_core(&self) -> bool {

@@ -1,4 +1,4 @@
-use rqb_core::{SelectColumn, SelectQuery, ValidatedSelect, ValidatedUpdate};
+use rqb_core::{SelectColumn, ValidatedUpdate};
 
 use crate::helpers::write_quoted_ident;
 use crate::{BuiltQuery, Result};
@@ -20,10 +20,9 @@ impl Renderer {
             self.render_write_value(&assignment.value, assignment.field.ty)?;
         }
 
-        if let Some(expr) = &validated.query.filter {
+        if let Some(expr) = &validated.filter {
             self.sql.push_str(" WHERE ");
-            let select = ValidatedSelect::new(SelectQuery::new(validated.query.dataset.clone()))?;
-            self.render_expr(&select, expr)?;
+            self.render_expr(expr)?;
         }
         self.render_returning(&validated.returning);
         self.columns = validated

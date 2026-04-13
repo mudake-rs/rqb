@@ -41,9 +41,9 @@ pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
 pub use validation::{
     ValidatedAggregate, ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause,
-    ValidatedConflictTarget, ValidatedDelete, ValidatedInsert, ValidatedSelect, ValidatedSort,
-    ValidatedUpdate, ValidatedWriteValue, resolve_field, resolve_query_field,
-    resolve_query_field_with_outer,
+    ValidatedConflictTarget, ValidatedCte, ValidatedCteBody, ValidatedDelete, ValidatedExpr,
+    ValidatedInsert, ValidatedJoin, ValidatedSelect, ValidatedSort, ValidatedUpdate,
+    ValidatedWriteValue,
 };
 pub use value::Value;
 pub use write::{
@@ -63,7 +63,6 @@ pub mod prelude {
         SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery,
         Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg, count,
         count_distinct, count_field, cte, delete, exists, field, insert, max, max_agg, min,
-        min_agg, not, not_exists, raw, resolve_query_field_with_outer, select, string_agg, sum,
-        update,
+        min_agg, not, not_exists, raw, select, string_agg, sum, update,
     };
 }

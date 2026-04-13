@@ -86,7 +86,7 @@ Type behavior currently lives in several places:
 - Postgres cast helpers in `rqb-postgres/src/type_sql.rs`
 - parameter conversion in `params.rs`
 - row mapping in `row_map.rs`
-- CLI type introspection and code generation in `rqb-cli/src/main.rs`
+- CLI catalog introspection, type mapping, and code generation modules
 
 This is correct behaviorally, but adding a new type still requires touching
 several files. The target is not a dynamic registry yet. Type classification and
@@ -133,11 +133,12 @@ before serde deserialization.
 That is acceptable for current API endpoints. Direct row deserialization is a
 later performance project, not the first architecture slice.
 
-### CLI Is Monolithic
+### CLI Is Product-Critical
 
-`rqb-cli/src/main.rs` contains introspection, type mapping, rendering, and tests.
-The generated output is product-critical, but the implementation file is large.
-Split it only when the split makes future type/codegen changes safer.
+CLI internals are split by responsibility: catalog introspection, type mapping,
+generated code rendering, identifier hygiene, and shared schema models. The
+generated output is product-critical, so future changes should keep those
+boundaries crisp and verify the golden schema.
 
 ## Target Shape
 
@@ -193,9 +194,9 @@ every layer.
    Only after rendering and validation are cleaner, decide whether select/write
    and raw execution helpers can share implementation without hiding semantics.
 
-6. Split CLI internals.
-   Extract catalog introspection, type mapping, and code rendering when type
-   work starts making `main.rs` harder to change safely.
+6. Split CLI internals. Done.
+   Catalog introspection, type mapping, code rendering, identifier hygiene, and
+   shared schema models now live in separate modules.
 
 ## Non-Goals For This Refactor
 

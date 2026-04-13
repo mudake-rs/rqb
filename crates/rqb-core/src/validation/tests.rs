@@ -155,6 +155,68 @@ fn accepts_json_path_filtering() {
 }
 
 #[test]
+fn lowers_user_predicates_to_concrete_validated_shapes() {
+    let query = crate::select(dataset())
+        .filter(crate::all([
+            field("name").contains("ada"),
+            field("network").contains("10.1.2.0/24"),
+            field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
+            field("score").between(1, 10),
+            field("state").is_in(["active", "archived"]),
+        ]))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+    let ValidatedExpr::Logical { predicates, .. } = validated.filter.unwrap() else {
+        panic!("expected top-level logical expression");
+    };
+
+    assert!(matches!(
+        &predicates[0],
+        ValidatedExpr::Predicate(ValidatedPredicate::Like {
+            pattern: ValidatedLikePattern::Contains,
+            value,
+            negated: false,
+            ..
+        }) if value == "ada"
+    ));
+    assert!(matches!(
+        &predicates[1],
+        ValidatedExpr::Predicate(ValidatedPredicate::Containment {
+            op: ValidatedContainmentOperator::Contains,
+            target: ValidatedContainmentTarget::Network,
+            negated: false,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[2],
+        ValidatedExpr::Predicate(ValidatedPredicate::Containment {
+            op: ValidatedContainmentOperator::Overlaps,
+            target: ValidatedContainmentTarget::Range,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[3],
+        ValidatedExpr::Predicate(ValidatedPredicate::Between {
+            lower: Value::I64(1),
+            upper: Value::I64(10),
+            negated: false,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[4],
+        ValidatedExpr::Predicate(ValidatedPredicate::In {
+            values,
+            negated: false,
+            ..
+        }) if values.len() == 2
+    ));
+}
+
+#[test]
 fn accepts_between_on_numeric_and_temporal_fields() {
     for expr in [
         field("score").between(1, 10),

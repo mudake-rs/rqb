@@ -3,43 +3,74 @@ mod comparison;
 mod target;
 mod text;
 
-use rqb_core::{Operator, OperatorCategory, ResolvedField, Value};
+use rqb_core::ValidatedPredicate;
 
 use crate::Result;
 
 use super::Renderer;
 
 impl Renderer {
-    pub(super) fn render_predicate(
-        &mut self,
-        field: &ResolvedField,
-        operator: Operator,
-        value: &Value,
-    ) -> Result<()> {
-        match operator.category() {
-            OperatorCategory::NullCheck => self.render_null_check(field, operator),
-            OperatorCategory::Contains => self.render_contains_operator(field, operator, value),
-            OperatorCategory::TextAffix => self.render_text_affix_operator(field, operator, value),
-            OperatorCategory::Equality => self.render_equality_operator(field, operator, value),
-            OperatorCategory::NullSafeEquality => {
-                self.render_null_safe_equality_operator(field, operator, value)
+    pub(super) fn render_predicate(&mut self, predicate: &ValidatedPredicate) -> Result<()> {
+        match predicate {
+            ValidatedPredicate::NullCheck { field, negated } => {
+                self.render_null_check(field, *negated)
             }
-            OperatorCategory::Ordering => self.render_ordering_operator(field, operator, value),
-            OperatorCategory::Inclusion => self.render_inclusion_operator(field, operator, value),
-            OperatorCategory::Between => self.render_between_operator(field, operator, value),
-            OperatorCategory::ArraySet => self.render_array_set_operator(field, operator, value),
-            OperatorCategory::ArrayMembership => {
-                self.render_array_membership_operator(field, operator, value)
+            ValidatedPredicate::Binary { field, op, value } => {
+                self.render_binary_predicate(field, *op, value)
             }
-            OperatorCategory::ArrayState => self.render_array_state_operator(field, operator),
-            OperatorCategory::ArrayElementMatch => self.render_array_elem_match(field, value),
-            OperatorCategory::JsonKey => self.render_json_key(field, value),
-            OperatorCategory::JsonKeySet => self.render_json_key_set(field, operator, value),
-            OperatorCategory::Containment => {
-                self.render_containment_operator(field, operator, value)
+            ValidatedPredicate::NullSafeBinary { field, op, value } => {
+                self.render_null_safe_binary_predicate(field, *op, value)
             }
-            OperatorCategory::Regex => self.render_regex_operator(field, operator, value),
-            OperatorCategory::TextSearch => self.render_text_search(field, value),
+            ValidatedPredicate::In {
+                field,
+                values,
+                negated,
+            } => self.render_inclusion_predicate(field, values, *negated),
+            ValidatedPredicate::Between {
+                field,
+                lower,
+                upper,
+                negated,
+            } => self.render_between_predicate(field, lower, upper, *negated),
+            ValidatedPredicate::Like {
+                field,
+                pattern,
+                value,
+                negated,
+            } => self.render_like_predicate(field, *pattern, value, *negated),
+            ValidatedPredicate::Regex {
+                field,
+                value,
+                negated,
+            } => self.render_regex_predicate(field, value, *negated),
+            ValidatedPredicate::TextSearch { field, value } => {
+                self.render_text_search(field, value)
+            }
+            ValidatedPredicate::ArraySet { field, op, value } => {
+                self.render_array_set_predicate(field, *op, value)
+            }
+            ValidatedPredicate::ArrayMembership {
+                field,
+                value,
+                negated,
+            } => self.render_array_membership_predicate(field, value, *negated),
+            ValidatedPredicate::ArrayState { field, empty } => {
+                self.render_array_state_predicate(field, *empty)
+            }
+            ValidatedPredicate::ArrayElemMatch { field, value } => {
+                self.render_array_elem_match(field, value)
+            }
+            ValidatedPredicate::JsonKey { field, key } => self.render_json_key(field, key),
+            ValidatedPredicate::JsonKeySet { field, keys, all } => {
+                self.render_json_key_set(field, keys, *all)
+            }
+            ValidatedPredicate::Containment {
+                field,
+                op,
+                target,
+                value,
+                negated,
+            } => self.render_containment_predicate(field, *op, *target, value, *negated),
         }
         Ok(())
     }

@@ -42,10 +42,12 @@ pub use types::{
     range_type_name,
 };
 pub use validation::{
-    ValidatedAggregate, ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause,
-    ValidatedConflictTarget, ValidatedCte, ValidatedCteBody, ValidatedDelete, ValidatedExpr,
-    ValidatedInsert, ValidatedJoin, ValidatedSelect, ValidatedSort, ValidatedUpdate,
-    ValidatedWriteValue,
+    ValidatedAggregate, ValidatedArraySetOperator, ValidatedAssignment, ValidatedBinaryOperator,
+    ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
+    ValidatedContainmentOperator, ValidatedContainmentTarget, ValidatedCte, ValidatedCteBody,
+    ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedJoin, ValidatedLikePattern,
+    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedSelect, ValidatedSort,
+    ValidatedUpdate, ValidatedWriteValue,
 };
 pub use value::Value;
 pub use write::{

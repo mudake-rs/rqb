@@ -7,11 +7,7 @@ use super::{Renderer, SelectProjection};
 impl Renderer {
     pub(super) fn render_expr(&mut self, expr: &ValidatedExpr) -> Result<()> {
         match expr {
-            ValidatedExpr::Predicate {
-                field,
-                operator,
-                value,
-            } => self.render_predicate(field, *operator, value),
+            ValidatedExpr::Predicate(predicate) => self.render_predicate(predicate),
             ValidatedExpr::ColumnPredicate {
                 left,
                 operator,

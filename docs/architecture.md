@@ -162,7 +162,8 @@ rqb-core
   types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
   ast: SelectQuery, SearchRequest, Expr, OperatorCategory, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
-  validate: AST -> validated models
+  validate: AST -> concrete validated models
+  validation::ValidatedPredicate: lowered predicate shapes used by renderers
   validation::aggregate: aggregate fields, filters, aliases, and grouping rules
   validation::expr: validated expression tree construction
   validation::sort: validated sort field construction
@@ -217,7 +218,8 @@ every layer.
 4. Categorize operators.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
    rendering through explicit operator categories to reduce parallel branching.
-   Started with `OperatorCategory`, validation dispatch, and rendering dispatch.
+   Started with `OperatorCategory`, validation dispatch, rendering dispatch, and
+   `ValidatedPredicate` lowering for user predicates.
 
 5. Revisit execution traits.
    Only after rendering and validation are cleaner, decide whether select/write

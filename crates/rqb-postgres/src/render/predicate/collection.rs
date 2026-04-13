@@ -1,4 +1,7 @@
-use rqb_core::{ElemType, FieldType, Operator, ResolvedField, Value};
+use rqb_core::{
+    FieldType, ResolvedField, ValidatedArraySetOperator, ValidatedContainmentOperator,
+    ValidatedContainmentTarget, Value,
+};
 
 use crate::helpers::value_to_json_array;
 use crate::type_sql::array_element_field_type;
@@ -6,45 +9,36 @@ use crate::type_sql::array_element_field_type;
 use super::super::Renderer;
 
 impl Renderer {
-    pub(super) fn render_array_set_operator(
+    pub(super) fn render_array_set_predicate(
         &mut self,
         field: &ResolvedField,
-        operator: Operator,
+        op: ValidatedArraySetOperator,
         value: &Value,
     ) {
         self.render_column_name(field);
-        match operator {
-            Operator::ArrayContainsAny => self.sql.push_str(" && "),
-            Operator::ArrayContainsAll => self.sql.push_str(" @> "),
-            _ => unreachable!("operator category validated by Operator::category"),
+        match op {
+            ValidatedArraySetOperator::OverlapsAny => self.sql.push_str(" && "),
+            ValidatedArraySetOperator::ContainsAll => self.sql.push_str(" @> "),
         }
         self.push_typed_param(value, field.ty);
     }
 
-    pub(super) fn render_array_membership_operator(
+    pub(super) fn render_array_membership_predicate(
         &mut self,
         field: &ResolvedField,
-        operator: Operator,
         value: &Value,
+        negated: bool,
     ) {
-        match operator {
-            Operator::ArrayContains => self.render_array_contains(field, value, false),
-            Operator::ArrayNotContains => self.render_array_contains(field, value, true),
-            _ => unreachable!("operator category validated by Operator::category"),
-        }
+        self.render_array_contains(field, value, negated);
     }
 
-    pub(super) fn render_array_state_operator(
-        &mut self,
-        field: &ResolvedField,
-        operator: Operator,
-    ) {
+    pub(super) fn render_array_state_predicate(&mut self, field: &ResolvedField, empty: bool) {
         self.sql.push_str("cardinality(");
         self.render_column_name(field);
-        match operator {
-            Operator::ArrayIsEmpty => self.sql.push_str(") = 0"),
-            Operator::ArrayIsNotEmpty => self.sql.push_str(") > 0"),
-            _ => unreachable!("operator category validated by Operator::category"),
+        if empty {
+            self.sql.push_str(") = 0");
+        } else {
+            self.sql.push_str(") > 0");
         }
     }
 
@@ -64,37 +58,45 @@ impl Renderer {
         }
     }
 
-    pub(super) fn render_json_key(&mut self, field: &ResolvedField, value: &Value) {
+    pub(super) fn render_json_key(&mut self, field: &ResolvedField, key: &str) {
         self.render_column_name(field);
         self.sql.push_str(" ? ");
-        self.push_param(value);
+        self.push_param(&Value::String(key.to_owned()));
     }
 
     pub(super) fn render_json_key_set(
         &mut self,
         field: &ResolvedField,
-        operator: Operator,
-        value: &Value,
+        keys: &[String],
+        all: bool,
     ) {
         self.render_column_name(field);
-        match operator {
-            Operator::JsonKeysExistAny => self.sql.push_str(" ?| "),
-            Operator::JsonKeysExistAll => self.sql.push_str(" ?& "),
-            _ => unreachable!("operator category validated by Operator::category"),
+        if all {
+            self.sql.push_str(" ?& ");
+        } else {
+            self.sql.push_str(" ?| ");
         }
-        self.push_typed_param(value, FieldType::Array(ElemType::Text));
+        self.push_string_array_param(keys);
     }
 
-    pub(super) fn render_containment_operator(
+    pub(super) fn render_containment_predicate(
         &mut self,
         field: &ResolvedField,
-        operator: Operator,
+        op: ValidatedContainmentOperator,
+        target: ValidatedContainmentTarget,
         value: &Value,
+        negated: bool,
     ) {
-        match operator {
-            Operator::ContainedBy => self.render_contained_by(field, value),
-            Operator::Overlaps => self.render_overlaps(field, value),
-            _ => unreachable!("operator category validated by Operator::category"),
+        if negated {
+            self.sql.push_str("NOT (");
+        }
+        self.render_column_name(field);
+        self.sql.push(' ');
+        self.sql.push_str(containment_operator_sql(op, target));
+        self.sql.push(' ');
+        self.push_typed_param(value, field.ty);
+        if negated {
+            self.sql.push(')');
         }
     }
 
@@ -110,20 +112,17 @@ impl Renderer {
             self.sql.push(')');
         }
     }
+}
 
-    fn render_contained_by(&mut self, field: &ResolvedField, value: &Value) {
-        self.render_column_name(field);
-        if field.ty.is_network() {
-            self.sql.push_str(" <<= ");
-        } else {
-            self.sql.push_str(" <@ ");
-        }
-        self.push_typed_param(value, field.ty);
-    }
-
-    fn render_overlaps(&mut self, field: &ResolvedField, value: &Value) {
-        self.render_column_name(field);
-        self.sql.push_str(" && ");
-        self.push_typed_param(value, field.ty);
+fn containment_operator_sql(
+    op: ValidatedContainmentOperator,
+    target: ValidatedContainmentTarget,
+) -> &'static str {
+    match (op, target) {
+        (ValidatedContainmentOperator::Contains, ValidatedContainmentTarget::Network) => ">>=",
+        (ValidatedContainmentOperator::Contains, ValidatedContainmentTarget::Range) => "@>",
+        (ValidatedContainmentOperator::ContainedBy, ValidatedContainmentTarget::Network) => "<<=",
+        (ValidatedContainmentOperator::ContainedBy, ValidatedContainmentTarget::Range) => "<@",
+        (ValidatedContainmentOperator::Overlaps, _) => "&&",
     }
 }

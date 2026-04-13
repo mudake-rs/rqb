@@ -1,92 +1,65 @@
-use rqb_core::{FieldType, Operator, ResolvedField, Value};
+use rqb_core::{
+    FieldType, ResolvedField, ValidatedBinaryOperator, ValidatedNullSafeBinaryOperator, Value,
+};
 
 use crate::helpers::value_to_json;
 
 use super::super::Renderer;
 
 impl Renderer {
-    pub(super) fn render_null_check(&mut self, field: &ResolvedField, operator: Operator) {
+    pub(super) fn render_null_check(&mut self, field: &ResolvedField, negated: bool) {
         if field.is_json_path() {
             self.render_text_target(field);
         } else {
             self.render_column_name(field);
         }
-        match operator {
-            Operator::IsNull => self.sql.push_str(" IS NULL"),
-            Operator::IsNotNull => self.sql.push_str(" IS NOT NULL"),
-            _ => unreachable!("operator category validated by Operator::category"),
+        if negated {
+            self.sql.push_str(" IS NOT NULL");
+        } else {
+            self.sql.push_str(" IS NULL");
         }
     }
 
-    pub(super) fn render_equality_operator(
+    pub(super) fn render_binary_predicate(
         &mut self,
         field: &ResolvedField,
-        operator: Operator,
+        op: ValidatedBinaryOperator,
         value: &Value,
     ) {
-        match operator {
-            Operator::Equals => self.render_binary(field, "=", value),
-            Operator::NotEquals => self.render_binary(field, "<>", value),
-            _ => unreachable!("operator category validated by Operator::category"),
+        self.render_binary(field, binary_operator_sql(op), value);
+    }
+
+    pub(super) fn render_null_safe_binary_predicate(
+        &mut self,
+        field: &ResolvedField,
+        op: ValidatedNullSafeBinaryOperator,
+        value: &Value,
+    ) {
+        self.render_null_safe_binary(field, null_safe_binary_operator_sql(op), value);
+    }
+
+    pub(super) fn render_inclusion_predicate(
+        &mut self,
+        field: &ResolvedField,
+        values: &[Value],
+        negated: bool,
+    ) {
+        if negated {
+            self.render_not_in(field, values);
+        } else {
+            self.render_in(field, values);
         }
     }
 
-    pub(super) fn render_null_safe_equality_operator(
+    pub(super) fn render_between_predicate(
         &mut self,
         field: &ResolvedField,
-        operator: Operator,
-        value: &Value,
+        lower: &Value,
+        upper: &Value,
+        negated: bool,
     ) {
-        match operator {
-            Operator::IsDistinctFrom => {
-                self.render_null_safe_binary(field, "IS DISTINCT FROM", value)
-            }
-            Operator::IsNotDistinctFrom => {
-                self.render_null_safe_binary(field, "IS NOT DISTINCT FROM", value)
-            }
-            _ => unreachable!("operator category validated by Operator::category"),
-        }
-    }
-
-    pub(super) fn render_ordering_operator(
-        &mut self,
-        field: &ResolvedField,
-        operator: Operator,
-        value: &Value,
-    ) {
-        match operator {
-            Operator::Gt => self.render_binary(field, ">", value),
-            Operator::Gte => self.render_binary(field, ">=", value),
-            Operator::Lt => self.render_binary(field, "<", value),
-            Operator::Lte => self.render_binary(field, "<=", value),
-            _ => unreachable!("operator category validated by Operator::category"),
-        }
-    }
-
-    pub(super) fn render_inclusion_operator(
-        &mut self,
-        field: &ResolvedField,
-        operator: Operator,
-        value: &Value,
-    ) {
-        match operator {
-            Operator::In => self.render_in(field, value),
-            Operator::NotIn => self.render_not_in(field, value),
-            _ => unreachable!("operator category validated by Operator::category"),
-        }
-    }
-
-    pub(super) fn render_between_operator(
-        &mut self,
-        field: &ResolvedField,
-        operator: Operator,
-        value: &Value,
-    ) {
-        match operator {
-            Operator::Between => self.render_between(field, value),
-            Operator::NotBetween => self.render_not_between(field, value),
-            _ => unreachable!("operator category validated by Operator::category"),
-        }
+        let op = if negated { "NOT BETWEEN" } else { "BETWEEN" };
+        self.render_between_op(field, lower, upper, op);
     }
 
     fn render_binary(&mut self, field: &ResolvedField, op: &str, value: &Value) {
@@ -152,19 +125,15 @@ impl Renderer {
         }
     }
 
-    fn render_in(&mut self, field: &ResolvedField, value: &Value) {
-        let Value::Array(values) = value else {
-            unreachable!("validated by rqb-core");
-        };
+    fn render_in(&mut self, field: &ResolvedField, values: &[Value]) {
         if values.is_empty() {
             self.sql.push_str("FALSE");
             return;
         }
-
         if field.is_json_path() {
             self.render_json_target(field);
             self.sql.push_str(" = ANY(");
-            self.push_jsonb_array_param(value);
+            self.push_jsonb_array_values_param(values);
             self.sql.push(')');
             return;
         }
@@ -172,48 +141,34 @@ impl Renderer {
         self.render_column_name(field);
         self.sql.push_str(" = ANY(");
         if field.ty.is_jsonb() {
-            self.push_jsonb_array_param(value);
+            self.push_jsonb_array_values_param(values);
         } else {
-            self.push_scalar_array_param(value, field.ty);
+            self.push_scalar_array_values_param(values, field.ty);
         }
         self.sql.push(')');
     }
 
-    fn render_not_in(&mut self, field: &ResolvedField, value: &Value) {
-        let Value::Array(values) = value else {
-            unreachable!("validated by rqb-core");
-        };
+    fn render_not_in(&mut self, field: &ResolvedField, values: &[Value]) {
         if values.is_empty() {
             self.sql.push_str("TRUE");
             return;
         }
 
         self.sql.push_str("NOT (");
-        self.render_in(field, value);
+        self.render_in(field, values);
         self.sql.push(')');
     }
 
-    fn render_between(&mut self, field: &ResolvedField, value: &Value) {
-        self.render_between_op(field, value, "BETWEEN")
-    }
-
-    fn render_not_between(&mut self, field: &ResolvedField, value: &Value) {
-        self.render_between_op(field, value, "NOT BETWEEN")
-    }
-
-    fn render_between_op(&mut self, field: &ResolvedField, value: &Value, op: &str) {
-        let Value::Array(values) = value else {
-            unreachable!("validated by rqb-core");
-        };
+    fn render_between_op(&mut self, field: &ResolvedField, lower: &Value, upper: &Value, op: &str) {
         if field.is_json_path() {
             self.sql.push('(');
             self.render_text_target(field);
             self.sql.push_str(")::numeric ");
             self.sql.push_str(op);
             self.sql.push(' ');
-            self.push_typed_param(&values[0], FieldType::Numeric);
+            self.push_typed_param(lower, FieldType::Numeric);
             self.sql.push_str(" AND ");
-            self.push_typed_param(&values[1], FieldType::Numeric);
+            self.push_typed_param(upper, FieldType::Numeric);
             return;
         }
 
@@ -221,8 +176,26 @@ impl Renderer {
         self.sql.push(' ');
         self.sql.push_str(op);
         self.sql.push(' ');
-        self.push_typed_param(&values[0], field.ty);
+        self.push_typed_param(lower, field.ty);
         self.sql.push_str(" AND ");
-        self.push_typed_param(&values[1], field.ty);
+        self.push_typed_param(upper, field.ty);
+    }
+}
+
+fn binary_operator_sql(op: ValidatedBinaryOperator) -> &'static str {
+    match op {
+        ValidatedBinaryOperator::Eq => "=",
+        ValidatedBinaryOperator::NotEq => "<>",
+        ValidatedBinaryOperator::Lt => "<",
+        ValidatedBinaryOperator::Lte => "<=",
+        ValidatedBinaryOperator::Gt => ">",
+        ValidatedBinaryOperator::Gte => ">=",
+    }
+}
+
+fn null_safe_binary_operator_sql(op: ValidatedNullSafeBinaryOperator) -> &'static str {
+    match op {
+        ValidatedNullSafeBinaryOperator::DistinctFrom => "IS DISTINCT FROM",
+        ValidatedNullSafeBinaryOperator::NotDistinctFrom => "IS NOT DISTINCT FROM",
     }
 }

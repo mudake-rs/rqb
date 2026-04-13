@@ -14,7 +14,7 @@ mod tests;
 
 use crate::aggregate::{AggregateType, SelectColumn};
 use crate::dataset::{Dataset, JoinKind};
-use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, Operator, SortDir, SubqueryOperator};
+use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, SortDir, SubqueryOperator};
 use crate::field::ResolvedField;
 use crate::request::RowLock;
 use crate::value::Value;
@@ -65,11 +65,7 @@ pub struct ValidatedJoin {
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum ValidatedExpr {
-    Predicate {
-        field: ResolvedField,
-        operator: Operator,
-        value: Value,
-    },
+    Predicate(ValidatedPredicate),
     ColumnPredicate {
         left: ResolvedField,
         operator: ColumnOperator,
@@ -89,6 +85,126 @@ pub enum ValidatedExpr {
         predicates: Vec<ValidatedExpr>,
     },
     Raw(crate::RawSql),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedPredicate {
+    NullCheck {
+        field: ResolvedField,
+        negated: bool,
+    },
+    Binary {
+        field: ResolvedField,
+        op: ValidatedBinaryOperator,
+        value: Value,
+    },
+    NullSafeBinary {
+        field: ResolvedField,
+        op: ValidatedNullSafeBinaryOperator,
+        value: Value,
+    },
+    In {
+        field: ResolvedField,
+        values: Vec<Value>,
+        negated: bool,
+    },
+    Between {
+        field: ResolvedField,
+        lower: Value,
+        upper: Value,
+        negated: bool,
+    },
+    Like {
+        field: ResolvedField,
+        pattern: ValidatedLikePattern,
+        value: String,
+        negated: bool,
+    },
+    Regex {
+        field: ResolvedField,
+        value: String,
+        negated: bool,
+    },
+    TextSearch {
+        field: ResolvedField,
+        value: String,
+    },
+    ArraySet {
+        field: ResolvedField,
+        op: ValidatedArraySetOperator,
+        value: Value,
+    },
+    ArrayMembership {
+        field: ResolvedField,
+        value: Value,
+        negated: bool,
+    },
+    ArrayState {
+        field: ResolvedField,
+        empty: bool,
+    },
+    ArrayElemMatch {
+        field: ResolvedField,
+        value: Value,
+    },
+    JsonKey {
+        field: ResolvedField,
+        key: String,
+    },
+    JsonKeySet {
+        field: ResolvedField,
+        keys: Vec<String>,
+        all: bool,
+    },
+    Containment {
+        field: ResolvedField,
+        op: ValidatedContainmentOperator,
+        target: ValidatedContainmentTarget,
+        value: Value,
+        negated: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidatedBinaryOperator {
+    Eq,
+    NotEq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidatedNullSafeBinaryOperator {
+    DistinctFrom,
+    NotDistinctFrom,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidatedLikePattern {
+    Contains,
+    StartsWith,
+    EndsWith,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidatedArraySetOperator {
+    OverlapsAny,
+    ContainsAll,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidatedContainmentOperator {
+    Contains,
+    ContainedBy,
+    Overlaps,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidatedContainmentTarget {
+    Range,
+    Network,
 }
 
 #[derive(Clone, Debug, PartialEq)]

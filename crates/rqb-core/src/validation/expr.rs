@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use crate::expr::{Expr, LogicalOp};
 use crate::request::SelectQuery;
 
-use super::operators::{count_raw_placeholders, validate_operator};
+use super::operators::{count_raw_placeholders, validate_predicate};
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
 use super::value_type::validate_column_operator;
@@ -21,12 +21,11 @@ pub(super) fn validate_expr(
                     field: field.display_name(),
                 });
             }
-            validate_operator(&field, predicate.operator, &predicate.value)?;
-            ValidatedExpr::Predicate {
-                field,
-                operator: predicate.operator,
-                value: predicate.value.clone(),
-            }
+            ValidatedExpr::Predicate(validate_predicate(
+                &field,
+                predicate.operator,
+                &predicate.value,
+            )?)
         }
         Expr::ColumnPredicate(predicate) => {
             let left = resolve_field_in_scope(scope, &predicate.left)?;

@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::users::{User, UserWithOrders as DbUserWithOrders};
+use crate::db::{
+    UserStatus,
+    users::{User, UserWithOrders as DbUserWithOrders},
+};
 
 pub use crate::db::users::{OrderSummary, UserProfile};
 
@@ -12,7 +15,7 @@ pub struct UserResponse {
     pub id: Uuid,
     pub organization_id: Uuid,
     pub email: String,
-    pub status: String,
+    pub status: UserStatus,
     pub profile: UserProfile,
     pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
@@ -38,7 +41,7 @@ pub struct UserWithOrders {
     pub id: Uuid,
     pub organization_id: Uuid,
     pub email: String,
-    pub status: String,
+    pub status: UserStatus,
     pub profile: UserProfile,
     pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,

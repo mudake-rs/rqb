@@ -5,7 +5,7 @@ pub mod schema;
 pub mod users;
 
 pub use orders::OrderService;
-pub use schema::enums::{ORDER_STATUS, USER_STATUS};
+pub use schema::enums::{OrderStatus, UserStatus};
 pub use users::UserService;
 
 #[derive(Clone)]

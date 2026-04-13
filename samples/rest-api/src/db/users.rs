@@ -3,11 +3,11 @@ use rqb::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::schema::{app_users as users, orders};
+use super::schema::{app_users as users, enums::OrderStatus, enums::UserStatus, orders};
 
 #[derive(Debug, Clone)]
 pub struct UserListQuery {
-    pub status: Option<String>,
+    pub status: Option<UserStatus>,
     pub tag: Option<String>,
     pub limit: u32,
     pub offset: u64,
@@ -17,7 +17,7 @@ pub struct UserListQuery {
 pub struct CreateUser {
     pub organization_id: Uuid,
     pub email: String,
-    pub status: String,
+    pub status: UserStatus,
     pub profile: UserProfile,
     pub tags: Vec<String>,
 }
@@ -28,7 +28,7 @@ pub struct UserPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
+    pub status: Option<UserStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<UserProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,7 +41,7 @@ pub struct User {
     pub id: Uuid,
     pub organization_id: Uuid,
     pub email: String,
-    pub status: String,
+    pub status: UserStatus,
     pub profile: UserProfile,
     pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
@@ -62,7 +62,7 @@ pub struct UserWithOrders {
     pub id: Uuid,
     pub organization_id: Uuid,
     pub email: String,
-    pub status: String,
+    pub status: UserStatus,
     pub profile: UserProfile,
     pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
@@ -73,7 +73,7 @@ pub struct UserWithOrders {
 #[serde(rename_all = "camelCase")]
 pub struct OrderSummary {
     pub id: Uuid,
-    pub status: String,
+    pub status: OrderStatus,
     pub channel: String,
     pub created_at: DateTime<Utc>,
 }
@@ -84,7 +84,7 @@ struct NewUser {
     id: Uuid,
     organization_id: Uuid,
     email: String,
-    status: String,
+    status: UserStatus,
     profile: UserProfile,
     tags: Vec<String>,
 }

@@ -4,7 +4,7 @@ use validator::{Validate, ValidationError};
 
 use crate::{
     db::{
-        ORDER_STATUS,
+        OrderStatus,
         orders::{CreateOrder, CreateOrderItem, OrderListQuery, OrderMetadata, OrderPatch},
         schema::order_search_view as order_search,
     },
@@ -16,8 +16,7 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderListParams {
-    #[validate(length(min = 1, max = 32), custom(function = "validate_order_status"))]
-    pub status: Option<String>,
+    pub status: Option<OrderStatus>,
     #[validate(length(min = 1, max = 32))]
     pub channel: Option<String>,
     #[validate(range(min = 0))]
@@ -59,8 +58,7 @@ pub struct CreateOrderRequest {
     pub user_id: Uuid,
     #[validate(length(min = 1, max = 32))]
     pub channel: String,
-    #[validate(length(min = 1, max = 32), custom(function = "validate_order_status"))]
-    pub status: Option<String>,
+    pub status: Option<OrderStatus>,
     pub metadata: Option<OrderMetadata>,
     #[validate(length(max = 16))]
     pub tags: Option<Vec<String>>,
@@ -84,7 +82,7 @@ impl From<CreateOrderRequest> for CreateOrder {
     fn from(request: CreateOrderRequest) -> Self {
         Self {
             user_id: request.user_id,
-            status: request.status.unwrap_or_else(|| "draft".to_owned()),
+            status: request.status.unwrap_or(OrderStatus::Draft),
             channel: request.channel,
             metadata: request.metadata.unwrap_or_default(),
             tags: request.tags.unwrap_or_default(),
@@ -113,8 +111,7 @@ impl From<CreateOrderItemRequest> for CreateOrderItem {
 #[serde(rename_all = "camelCase")]
 pub struct PatchOrderRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[validate(length(min = 1, max = 32), custom(function = "validate_order_status"))]
-    pub status: Option<String>,
+    pub status: Option<OrderStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[validate(length(min = 1, max = 32))]
     pub channel: Option<String>,
@@ -129,18 +126,6 @@ impl From<PatchOrderRequest> for OrderPatch {
             channel: request.channel,
             metadata: request.metadata,
         }
-    }
-}
-
-fn validate_order_status(status: &str) -> Result<(), ValidationError> {
-    // ORDER_STATUS comes from CLI-generated schema metadata, so request validation and query
-    // validation share the same enum source of truth.
-    if ORDER_STATUS.contains(status) {
-        Ok(())
-    } else {
-        let mut error = ValidationError::new("unknown_order_status");
-        error.message = Some(format!("unknown order status `{status}`").into());
-        Err(error)
     }
 }
 
@@ -185,7 +170,7 @@ mod tests {
         request.validate().unwrap();
 
         let order = CreateOrder::from(request);
-        assert_eq!(order.status, "draft");
+        assert_eq!(order.status, OrderStatus::Draft);
         assert_eq!(order.tags, Vec::<String>::new());
         assert_eq!(order.items.len(), 1);
         assert_eq!(order.items[0].metadata, serde_json::json!({}));
@@ -194,7 +179,7 @@ mod tests {
     #[test]
     fn order_list_params_convert_to_query_with_defaults_and_sort() {
         let params = OrderListParams {
-            status: Some("paid".to_owned()),
+            status: Some(OrderStatus::Paid),
             channel: Some("web".to_owned()),
             min_total: Some(1_000),
             sort: Some("totalCents:desc".to_owned()),
@@ -204,7 +189,7 @@ mod tests {
         params.validate().unwrap();
 
         let query = params.into_query().unwrap();
-        assert_eq!(query.status.as_deref(), Some("paid"));
+        assert_eq!(query.status, Some(OrderStatus::Paid));
         assert_eq!(query.channel.as_deref(), Some("web"));
         assert_eq!(query.min_total, Some(1_000));
         assert_eq!(query.limit, DEFAULT_LIMIT);
@@ -213,16 +198,18 @@ mod tests {
     }
 
     #[test]
-    fn order_request_validation_rejects_unknown_status_and_empty_patch() {
-        let request = CreateOrderRequest {
-            user_id: id("20000000-0000-0000-0000-000000000001"),
-            channel: "web".to_owned(),
-            status: Some("lost".to_owned()),
-            metadata: None,
-            tags: None,
-            items: vec![valid_item()],
-        };
-        assert!(request.validate().is_err());
+    fn order_request_deserialization_rejects_unknown_status_and_validation_rejects_empty_patch() {
+        let request = serde_json::json!({
+            "userId": "20000000-0000-0000-0000-000000000001",
+            "channel": "web",
+            "status": "lost",
+            "items": [{
+                "productId": "40000000-0000-0000-0000-000000000001",
+                "quantity": 2,
+                "unitPriceCents": 1500
+            }]
+        });
+        assert!(serde_json::from_value::<CreateOrderRequest>(request).is_err());
 
         let patch = PatchOrderRequest {
             status: None,

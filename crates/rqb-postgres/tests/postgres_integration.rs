@@ -19,7 +19,8 @@ mod order_search {
         &["draft", "paid", "cancelled", "refunded"],
     );
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
     pub enum OrderStatus {
         Draft,
         Paid,
@@ -836,8 +837,8 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
     struct OrderRow {
         id: String,
         email: String,
-        status: String,
-        status_history: Vec<String>,
+        status: order_search::OrderStatus,
+        status_history: Vec<order_search::OrderStatus>,
         tags: Vec<String>,
         metadata: Metadata,
         created_at: String,
@@ -860,8 +861,14 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
         .await?;
     assert_eq!(order.email, "ada@example.com");
     assert_eq!(order.id, "30000000-0000-0000-0000-000000000001");
-    assert_eq!(order.status, "paid");
-    assert_eq!(order.status_history, vec!["draft", "paid"]);
+    assert_eq!(order.status, order_search::OrderStatus::Paid);
+    assert_eq!(
+        order.status_history,
+        vec![
+            order_search::OrderStatus::Draft,
+            order_search::OrderStatus::Paid
+        ]
+    );
     assert_eq!(order.tags, vec!["vip", "gift"]);
     assert_eq!(order.metadata.score, 92);
     assert!(order.metadata.gift);
@@ -871,7 +878,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
 
     #[derive(Debug, Deserialize)]
     struct StatusRollup {
-        status: String,
+        status: order_search::OrderStatus,
         count: i64,
         total: f64,
     }
@@ -886,7 +893,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
         .await?;
     let paid = rollups
         .iter()
-        .find(|rollup| rollup.status == "paid")
+        .find(|rollup| rollup.status == order_search::OrderStatus::Paid)
         .expect("paid rollup should exist");
     assert_eq!(paid.count, 3);
     assert_eq!(paid.total, 33_800.0);
@@ -900,7 +907,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
     #[derive(Debug, Deserialize)]
     struct NestedOrder {
         id: String,
-        status: String,
+        status: order_search::OrderStatus,
     }
 
     let nested: Vec<UserOrders> = select(users_table::dataset().alias("u"))
@@ -927,7 +934,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
         nested[0].orders[0].id,
         "30000000-0000-0000-0000-000000000001"
     );
-    assert_eq!(nested[0].orders[0].status, "paid");
+    assert_eq!(nested[0].orders[0].status, order_search::OrderStatus::Paid);
 
     let none: Option<OrderRow> = select(order_search::dataset())
         .fields([order_search::ID, order_search::EMAIL])

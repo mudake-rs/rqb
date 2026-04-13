@@ -1,6 +1,6 @@
 # rqb sample REST API
 
-Small actix-web app that uses rqb for reads, writes, joins, JSONB, batch insert, transactions, typed UUID/date-time rows, validation, generated schema metadata, and JSON `SearchRequest`.
+Small actix-web app that uses rqb for reads, writes, joins, JSONB, batch insert, transactions, typed UUID/date-time rows, generated enum DTOs, validation, generated schema metadata, and JSON `SearchRequest`.
 
 The code is split into thin HTTP handlers, request/response DTOs, input validation, and a `src/db/` layer. The DB layer owns generated schema metadata, write models, and services where rqb is used directly.
 

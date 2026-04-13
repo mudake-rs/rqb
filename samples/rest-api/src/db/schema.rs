@@ -39,11 +39,16 @@ pub mod enums {
         "order_status",
         &["draft", "paid", "cancelled", "refunded"],
     );
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, rqb::serde::Serialize, rqb::serde::Deserialize)]
+    #[serde(crate = "rqb::serde")]
     pub enum OrderStatus {
+        #[serde(rename = "draft")]
         Draft,
+        #[serde(rename = "paid")]
         Paid,
+        #[serde(rename = "cancelled")]
         Cancelled,
+        #[serde(rename = "refunded")]
         Refunded,
     }
     impl OrderStatus {
@@ -81,9 +86,12 @@ pub mod enums {
     }
     pub const USER_STATUS: EnumType =
         EnumType::new(Some("public"), "user_status", &["active", "disabled"]);
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, rqb::serde::Serialize, rqb::serde::Deserialize)]
+    #[serde(crate = "rqb::serde")]
     pub enum UserStatus {
+        #[serde(rename = "active")]
         Active,
+        #[serde(rename = "disabled")]
         Disabled,
     }
     impl UserStatus {

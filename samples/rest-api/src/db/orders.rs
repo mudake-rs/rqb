@@ -3,11 +3,13 @@ use rqb::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::schema::{events, order_items, order_search_view as order_search, orders};
+use super::schema::{
+    enums::OrderStatus, events, order_items, order_search_view as order_search, orders,
+};
 
 #[derive(Debug, Clone)]
 pub struct OrderListQuery {
-    pub status: Option<String>,
+    pub status: Option<OrderStatus>,
     pub channel: Option<String>,
     pub min_total: Option<i64>,
     pub sort: Sort,
@@ -18,7 +20,7 @@ pub struct OrderListQuery {
 #[derive(Debug, Clone)]
 pub struct CreateOrder {
     pub user_id: Uuid,
-    pub status: String,
+    pub status: OrderStatus,
     pub channel: String,
     pub metadata: OrderMetadata,
     pub tags: Vec<String>,
@@ -37,7 +39,7 @@ pub struct CreateOrderItem {
 #[serde(rename_all = "camelCase")]
 pub struct OrderPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
+    pub status: Option<OrderStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -50,8 +52,8 @@ pub struct Order {
     pub id: Uuid,
     pub email: String,
     pub organization_id: Uuid,
-    pub status: String,
-    pub status_history: Vec<String>,
+    pub status: OrderStatus,
+    pub status_history: Vec<OrderStatus>,
     pub channel: String,
     pub total_cents: i64,
     pub items_count: i64,
@@ -74,7 +76,7 @@ pub struct OrderMetadata {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderStats {
-    pub status: String,
+    pub status: OrderStatus,
     pub orders: i64,
     pub total_cents: f64,
 }
@@ -84,8 +86,8 @@ pub struct OrderStats {
 struct NewOrder {
     id: Uuid,
     user_id: Uuid,
-    status: String,
-    status_history: Vec<String>,
+    status: OrderStatus,
+    status_history: Vec<OrderStatus>,
     channel: String,
     metadata: OrderMetadata,
     tags: Vec<String>,
@@ -144,7 +146,7 @@ impl OrderService {
             .value(&NewOrder {
                 id: order_id,
                 user_id: order.user_id,
-                status: order.status.clone(),
+                status: order.status,
                 status_history: vec![order.status],
                 channel: order.channel,
                 metadata: order.metadata,

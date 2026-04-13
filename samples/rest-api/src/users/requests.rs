@@ -4,7 +4,7 @@ use validator::{Validate, ValidationError};
 
 use crate::{
     db::{
-        USER_STATUS,
+        UserStatus,
         users::{CreateUser, UserListQuery, UserPatch, UserProfile},
     },
     pagination::{DEFAULT_LIMIT, DEFAULT_OFFSET},
@@ -13,8 +13,7 @@ use crate::{
 #[derive(Debug, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct UserListParams {
-    #[validate(length(min = 1, max = 32), custom(function = "validate_user_status"))]
-    pub status: Option<String>,
+    pub status: Option<UserStatus>,
     #[validate(length(min = 1, max = 32))]
     pub tag: Option<String>,
     #[validate(range(min = 1, max = 100))]
@@ -52,8 +51,7 @@ pub struct CreateUserRequest {
     pub organization_id: Uuid,
     #[validate(email)]
     pub email: String,
-    #[validate(length(min = 1, max = 32), custom(function = "validate_user_status"))]
-    pub status: Option<String>,
+    pub status: Option<UserStatus>,
     pub profile: Option<UserProfile>,
     #[validate(length(max = 16))]
     pub tags: Option<Vec<String>>,
@@ -64,7 +62,7 @@ impl From<CreateUserRequest> for CreateUser {
         Self {
             organization_id: request.organization_id,
             email: request.email,
-            status: request.status.unwrap_or_else(|| "active".to_owned()),
+            status: request.status.unwrap_or(UserStatus::Active),
             profile: request.profile.unwrap_or_default(),
             tags: request.tags.unwrap_or_default(),
         }
@@ -79,8 +77,7 @@ pub struct PatchUserRequest {
     #[validate(email)]
     pub email: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[validate(length(min = 1, max = 32), custom(function = "validate_user_status"))]
-    pub status: Option<String>,
+    pub status: Option<UserStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<UserProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,17 +93,6 @@ impl From<PatchUserRequest> for UserPatch {
             profile: request.profile,
             tags: request.tags,
         }
-    }
-}
-
-fn validate_user_status(status: &str) -> Result<(), ValidationError> {
-    // USER_STATUS is re-exported from the CLI-generated schema, not duplicated by hand here.
-    if USER_STATUS.contains(status) {
-        Ok(())
-    } else {
-        let mut error = ValidationError::new("unknown_user_status");
-        error.message = Some(format!("unknown user status `{status}`").into());
-        Err(error)
     }
 }
 
@@ -145,7 +131,7 @@ mod tests {
         request.validate().unwrap();
 
         let user = CreateUser::from(request);
-        assert_eq!(user.status, "active");
+        assert_eq!(user.status, UserStatus::Active);
         assert_eq!(user.tags, Vec::<String>::new());
         assert!(user.profile.country.is_none());
     }
@@ -153,7 +139,7 @@ mod tests {
     #[test]
     fn user_list_params_convert_to_query_with_defaults() {
         let params = UserListParams {
-            status: Some("active".to_owned()),
+            status: Some(UserStatus::Active),
             tag: Some("vip".to_owned()),
             limit: None,
             offset: None,
@@ -161,18 +147,25 @@ mod tests {
         params.validate().unwrap();
 
         let query = UserListQuery::from(params);
-        assert_eq!(query.status.as_deref(), Some("active"));
+        assert_eq!(query.status, Some(UserStatus::Active));
         assert_eq!(query.tag.as_deref(), Some("vip"));
         assert_eq!(query.limit, DEFAULT_LIMIT);
         assert_eq!(query.offset, DEFAULT_OFFSET);
     }
 
     #[test]
-    fn user_request_validation_rejects_unknown_status_bad_email_and_empty_patch() {
+    fn user_request_rejects_unknown_status_bad_email_and_empty_patch() {
+        let create = serde_json::json!({
+            "organizationId": "00000000-0000-0000-0000-000000000001",
+            "email": "ada@example.com",
+            "status": "paused"
+        });
+        assert!(serde_json::from_value::<CreateUserRequest>(create).is_err());
+
         let create = CreateUserRequest {
             organization_id: id("00000000-0000-0000-0000-000000000001"),
             email: "not-an-email".to_owned(),
-            status: Some("paused".to_owned()),
+            status: Some(UserStatus::Active),
             profile: None,
             tags: None,
         };

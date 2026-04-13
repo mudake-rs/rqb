@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::orders::{Order, OrderMetadata, OrderStats as DbOrderStats};
+use crate::db::{
+    OrderStatus,
+    orders::{Order, OrderMetadata, OrderStats as DbOrderStats},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,8 +13,8 @@ pub struct OrderResponse {
     pub id: Uuid,
     pub email: String,
     pub organization_id: Uuid,
-    pub status: String,
-    pub status_history: Vec<String>,
+    pub status: OrderStatus,
+    pub status_history: Vec<OrderStatus>,
     pub channel: String,
     pub total_cents: i64,
     pub items_count: i64,
@@ -41,7 +44,7 @@ impl From<Order> for OrderResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderStats {
-    pub status: String,
+    pub status: OrderStatus,
     pub orders: i64,
     pub total_cents: f64,
 }

@@ -38,7 +38,8 @@ pub async fn create_order(
     payload: web::Json<CreateOrderRequest>,
 ) -> Result<impl Responder, AppError> {
     let payload = payload.into_inner();
-    // Enum values are validated against the generated rqb EnumType metadata in the DTO module.
+    // Generated enum DTO fields deserialize before validation, so unknown statuses never reach
+    // the service layer as arbitrary strings.
     payload.validate()?;
     // Explicit transaction example: the handler owns the boundary, and the DB service receives &Tx.
     let tx = services.db().begin().await?;

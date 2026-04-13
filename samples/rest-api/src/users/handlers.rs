@@ -39,7 +39,7 @@ pub async fn create_user(
     payload: web::Json<CreateUserRequest>,
 ) -> Result<impl Responder, AppError> {
     let payload = payload.into_inner();
-    // Generated enum metadata is reused by the DTO validators for status strings.
+    // Generated enum DTO fields deserialize before validation, so services receive typed values.
     payload.validate()?;
     let response = UserResponse::from(UserService::create(services.db(), payload.into()).await?);
     Ok(HttpResponse::Ok().json(response))

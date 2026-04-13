@@ -1,0 +1,2 @@
+-- Uses the shared `order_search_view` from ../../tests/sql/init.sql.
+-- The sample keeps query shape server-owned and lets JSON choose fields/filter/sort.

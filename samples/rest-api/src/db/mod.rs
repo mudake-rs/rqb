@@ -1,10 +1,10 @@
 use rqb::prelude::Db;
 
 pub mod orders;
-pub mod schema;
 pub mod users;
 
 pub use orders::OrderService;
+pub use rqb_sample_base::schema;
 pub use schema::enums::{OrderStatus, UserStatus};
 pub use users::UserService;
 

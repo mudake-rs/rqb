@@ -1,0 +1,14 @@
+-- Excerpt from ../../tests/sql/init.sql.
+-- The sample uses generated metadata from ../sample-base/src/schema.rs.
+--
+-- CREATE DOMAIN uint_256 AS NUMERIC NOT NULL
+--     CHECK (VALUE >= 0 AND VALUE < 2::numeric ^ 256)
+--     CHECK (SCALE(VALUE) = 0);
+--
+-- CREATE TABLE withdrawals (
+--     id UUID PRIMARY KEY,
+--     user_id UUID NOT NULL,
+--     amount uint_256 NOT NULL,
+--     amount_history uint_256[] NOT NULL DEFAULT '{}',
+--     wallet_address TEXT NOT NULL
+-- );

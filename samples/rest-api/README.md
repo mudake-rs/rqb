@@ -1,15 +1,15 @@
 # rqb sample REST API
 
-Small actix-web app that uses rqb for reads, writes, joins, JSONB, batch insert, transactions, typed UUID/date-time rows, generated enum DTOs, validation, generated schema metadata, and JSON `SearchRequest`.
+Small actix-web app that uses rqb for reads, writes, joins, JSONB, batch insert, transactions, typed UUID/date-time rows, generated enum DTOs, validation, shared generated schema metadata, and JSON `SearchRequest`.
 
-The code is split into thin HTTP handlers, request/response DTOs, input validation, and a `src/db/` layer. The DB layer owns generated schema metadata, write models, and services where rqb is used directly.
+The code is split into thin HTTP handlers, request DTOs, input validation, pagination responses, and a `src/db/` layer. The DB layer owns write/read models and services where rqb is used directly; generated metadata comes from `samples/sample-base`.
 
 The order service intentionally shows both transaction styles: `create` uses explicit `begin()/commit()`, while `delete` uses closure-style `transaction(txn!(...))`.
 
-The schema in `src/db/schema.rs` is produced by `rqb-cli` from the Postgres schema. After changing `tests/sql/init.sql`, regenerate it from the repository root:
+The schema in `samples/sample-base/src/schema.rs` is produced by `rqb-cli` from the Postgres schema. After changing `tests/sql/init.sql`, regenerate it from the repository root:
 
 ```bash
-make generate-demo
+make generate-sample-base-schema
 ```
 
 ## Run
@@ -28,15 +28,14 @@ The sample is intentionally not a workspace member, so use `--manifest-path`.
 ## What To Read
 
 ```text
-src/db/schema.rs       generated rqb metadata and relation helpers
+../sample-base/src/schema.rs generated rqb metadata and relation helpers
 src/db/orders.rs       DB models plus OrderService queries/writes
 src/db/users.rs        joined user/order aggregate query
 src/orders/handlers.rs thin HTTP layer, validation, transaction boundaries
 src/orders/requests.rs HTTP DTOs only
-src/orders/responses.rs DB model to API response mapping
 ```
 
-The DB layer does not depend on HTTP DTOs. Handlers convert request DTOs into DB write/query models and convert DB models back into response DTOs.
+The DB layer does not depend on HTTP DTOs. Handlers convert request DTOs into DB write/query models; fixed-shape DB models are returned directly when the API shape is the same.
 
 ## Endpoints
 

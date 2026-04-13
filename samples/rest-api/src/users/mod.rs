@@ -1,6 +1,5 @@
 pub mod handlers;
 pub mod requests;
-pub mod responses;
 
 use actix_web::web;
 

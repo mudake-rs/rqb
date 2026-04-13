@@ -1,0 +1,1 @@
+-- Uses orders and order_items from ../../tests/sql/init.sql.

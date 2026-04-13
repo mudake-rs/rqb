@@ -6,10 +6,7 @@ use crate::{
     db::{AppServices, UserService},
     error::AppError,
     pagination::PaginatedResponse,
-    users::{
-        requests::{CreateUserRequest, PatchUserRequest, UserListParams},
-        responses::{UserResponse, UserWithOrders},
-    },
+    users::requests::{CreateUserRequest, PatchUserRequest, UserListParams},
 };
 
 pub async fn list_users(
@@ -20,7 +17,7 @@ pub async fn list_users(
     // Keep web validation at the boundary; services receive already-normalized DTOs.
     params.validate()?;
     let page = UserService::list(services.db(), params.into()).await?;
-    let response = PaginatedResponse::from(page.map(UserResponse::from));
+    let response = PaginatedResponse::from(page);
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -29,8 +26,7 @@ pub async fn get_user(
     path: web::Path<Uuid>,
 ) -> Result<impl Responder, AppError> {
     // The "get user" route intentionally returns a nested orders aggregate, not only app_users.
-    let response =
-        UserWithOrders::from(UserService::get_with_orders(services.db(), path.into_inner()).await?);
+    let response = UserService::get_with_orders(services.db(), path.into_inner()).await?;
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -41,7 +37,7 @@ pub async fn create_user(
     let payload = payload.into_inner();
     // Generated enum DTO fields deserialize before validation, so services receive typed values.
     payload.validate()?;
-    let response = UserResponse::from(UserService::create(services.db(), payload.into()).await?);
+    let response = UserService::create(services.db(), payload.into()).await?;
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -53,8 +49,6 @@ pub async fn patch_user(
     let payload = payload.into_inner();
     // Empty patch bodies are rejected before rqb sees the write builder.
     payload.validate()?;
-    let response = UserResponse::from(
-        UserService::patch(services.db(), path.into_inner(), payload.into()).await?,
-    );
+    let response = UserService::patch(services.db(), path.into_inner(), payload.into()).await?;
     Ok(HttpResponse::Ok().json(response))
 }

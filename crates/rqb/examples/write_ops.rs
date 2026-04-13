@@ -1,3 +1,8 @@
+//! Render INSERT, partial UPDATE, and DELETE from serde write models.
+//!
+//! `value` and `set_from` use normal serde structs, including
+//! `skip_serializing_if` for partial updates.
+
 use rqb::prelude::*;
 use serde::Serialize;
 

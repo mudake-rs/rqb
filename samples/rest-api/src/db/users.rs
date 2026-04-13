@@ -158,11 +158,10 @@ impl UserService {
         patch: UserPatch,
     ) -> rqb::postgres::Result<User> {
         // `set_from` skips None fields through serde and default returning gives the updated DTO.
-        let updated = update(users::dataset())
+        update(users::dataset())
             .set_from(&patch)
             .filter(users::ID.eq(id))
-            .fetch_optional_as(exec)
-            .await?;
-        updated.ok_or(rqb::postgres::Error::NotFound)
+            .fetch_one_as(exec)
+            .await
     }
 }

@@ -1,0 +1,1 @@
+-- Uses app_users, orders, and order_search_view from ../../tests/sql/init.sql.

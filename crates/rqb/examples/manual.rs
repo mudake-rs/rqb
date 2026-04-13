@@ -1,3 +1,8 @@
+//! Build a typed SELECT by hand from field metadata.
+//!
+//! This is the smallest useful rqb shape: define fields, define a dataset,
+//! compose filters, and inspect the rendered Postgres SQL.
+
 use rqb::prelude::*;
 
 const ID: Field = Field::new("id", FieldType::Uuid);
@@ -16,8 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let built = select(orders)
         .fields([ID, EMAIL, CREATED_AT])
+        .filter_option(Some("paid"), |status| STATUS.eq(status))
         .filter(all([
-            STATUS.eq("paid"),
             TAGS.contains_any(["vip", "gift"]),
             METADATA.path("score").gte(80),
         ]))

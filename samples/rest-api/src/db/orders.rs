@@ -184,15 +184,12 @@ impl OrderService {
     ) -> rqb::postgres::Result<Order> {
         // We only need a marker row from the write. The public response is loaded from
         // `order_search_view`, where totals and user fields are already joined/precomputed.
-        let updated = update(orders::dataset())
+        update(orders::dataset())
             .set_from(&patch)
             .filter(orders::ID.eq(id))
             .returning([orders::ID])
-            .fetch_optional(exec)
+            .fetch_one(exec)
             .await?;
-        if updated.is_none() {
-            return Err(rqb::postgres::Error::NotFound);
-        }
         Self::get(exec, id).await
     }
 

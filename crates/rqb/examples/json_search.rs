@@ -1,7 +1,13 @@
+//! Merge a client JSON SearchRequest with server-owned filters.
+//!
+//! The client can choose fields, filters, sort, limit, and offset. The server
+//! still owns the dataset and can add required predicates before rendering.
+
 use rqb::prelude::*;
 
 const ID: Field = Field::new("id", FieldType::Uuid);
 const EMAIL: Field = Field::new("email", FieldType::Text);
+const ORGANIZATION_ID: Field = Field::mapped("organizationId", "organization_id", FieldType::Uuid);
 const STATUS: Field = Field::new("status", FieldType::Text);
 const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
 const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
@@ -11,7 +17,15 @@ const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Ti
 
 fn order_search() -> Dataset {
     Dataset::view("order_search_view")
-        .fields([ID, EMAIL, STATUS, TOTAL_CENTS, METADATA, CREATED_AT])
+        .fields([
+            ID,
+            EMAIL,
+            ORGANIZATION_ID,
+            STATUS,
+            TOTAL_CENTS,
+            METADATA,
+            CREATED_AT,
+        ])
         .default_limit(20)
         .max_limit(100)
 }
@@ -32,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }))?;
 
     let built = select(order_search())
-        .filter(STATUS.ne("cancelled"))
+        .filter(ORGANIZATION_ID.eq("00000000-0000-0000-0000-000000000001"))
         .request(request)
         .build_pg()?;
 

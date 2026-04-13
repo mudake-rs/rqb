@@ -1,0 +1,2 @@
+-- Uses generated metadata from ../sample-base/src/schema.rs.
+-- The physical schema is initialized by ../../tests/sql/init.sql via `make db-up`.

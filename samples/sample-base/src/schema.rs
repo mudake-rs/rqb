@@ -124,6 +124,13 @@ pub mod enums {
         }
     }
 }
+pub mod types {
+    use rqb::prelude::*;
+    pub const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+        .base(TypeFamily::Numeric)
+        .value_repr(ValueRepr::DecimalString)
+        .select_repr(SelectRepr::Text);
+}
 pub mod app_users {
     use rqb::prelude::*;
     pub const ID: Field = Field::new("id", FieldType::Uuid);
@@ -425,6 +432,82 @@ pub mod organizations {
         }
     }
 }
+pub mod pg_type_examples {
+    use rqb::prelude::*;
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const DISPLAY_NAME: Field = Field::mapped("displayName", "display_name", FieldType::Citext);
+    pub const PAYLOAD: Field = Field::new("payload", FieldType::Bytea);
+    pub const IP_ADDR: Field = Field::mapped("ipAddr", "ip_addr", FieldType::Inet);
+    pub const NETWORK: Field = Field::new("network", FieldType::Cidr);
+    pub const ACTIVE_WINDOW: Field = Field::mapped(
+        "activeWindow",
+        "active_window",
+        FieldType::Range(ElemType::Timestamptz),
+    );
+    pub const LOCAL_WINDOW: Field = Field::mapped(
+        "localWindow",
+        "local_window",
+        FieldType::Range(ElemType::Timestamp),
+    );
+    pub const BILLING_DATES: Field = Field::mapped(
+        "billingDates",
+        "billing_dates",
+        FieldType::Range(ElemType::Date),
+    );
+    pub const CREATED_LOCAL: Field =
+        Field::mapped("createdLocal", "created_local", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
+    pub fn dataset() -> Dataset {
+        Dataset::table("pg_type_examples").fields([
+            ID,
+            DISPLAY_NAME,
+            PAYLOAD,
+            IP_ADDR,
+            NETWORK,
+            ACTIVE_WINDOW,
+            LOCAL_WINDOW,
+            BILLING_DATES,
+            CREATED_LOCAL,
+            CREATED_AT,
+        ])
+    }
+    pub fn table() -> Relation {
+        Relation::new(dataset())
+    }
+    __rqb_relation_wrapper!();
+    impl Relation {
+        pub fn id(&self) -> FieldRef {
+            self.inner.field(ID)
+        }
+        pub fn display_name(&self) -> FieldRef {
+            self.inner.field(DISPLAY_NAME)
+        }
+        pub fn payload(&self) -> FieldRef {
+            self.inner.field(PAYLOAD)
+        }
+        pub fn ip_addr(&self) -> FieldRef {
+            self.inner.field(IP_ADDR)
+        }
+        pub fn network(&self) -> FieldRef {
+            self.inner.field(NETWORK)
+        }
+        pub fn active_window(&self) -> FieldRef {
+            self.inner.field(ACTIVE_WINDOW)
+        }
+        pub fn local_window(&self) -> FieldRef {
+            self.inner.field(LOCAL_WINDOW)
+        }
+        pub fn billing_dates(&self) -> FieldRef {
+            self.inner.field(BILLING_DATES)
+        }
+        pub fn created_local(&self) -> FieldRef {
+            self.inner.field(CREATED_LOCAL)
+        }
+        pub fn created_at(&self) -> FieldRef {
+            self.inner.field(CREATED_AT)
+        }
+    }
+}
 pub mod products {
     use rqb::prelude::*;
     pub const ID: Field = Field::new("id", FieldType::Uuid);
@@ -469,6 +552,55 @@ pub mod products {
         }
         pub fn tags(&self) -> FieldRef {
             self.inner.field(TAGS)
+        }
+        pub fn created_at(&self) -> FieldRef {
+            self.inner.field(CREATED_AT)
+        }
+    }
+}
+pub mod withdrawals {
+    use rqb::prelude::*;
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&super::types::UINT_256));
+    pub const AMOUNT_HISTORY: Field = Field::mapped(
+        "amountHistory",
+        "amount_history",
+        FieldType::Array(ElemType::Custom(&super::types::UINT_256)),
+    )
+    .sortable(false);
+    pub const WALLET_ADDRESS: Field =
+        Field::mapped("walletAddress", "wallet_address", FieldType::Text);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
+    pub fn dataset() -> Dataset {
+        Dataset::table("withdrawals").fields([
+            ID,
+            USER_ID,
+            AMOUNT,
+            AMOUNT_HISTORY,
+            WALLET_ADDRESS,
+            CREATED_AT,
+        ])
+    }
+    pub fn table() -> Relation {
+        Relation::new(dataset())
+    }
+    __rqb_relation_wrapper!();
+    impl Relation {
+        pub fn id(&self) -> FieldRef {
+            self.inner.field(ID)
+        }
+        pub fn user_id(&self) -> FieldRef {
+            self.inner.field(USER_ID)
+        }
+        pub fn amount(&self) -> FieldRef {
+            self.inner.field(AMOUNT)
+        }
+        pub fn amount_history(&self) -> FieldRef {
+            self.inner.field(AMOUNT_HISTORY)
+        }
+        pub fn wallet_address(&self) -> FieldRef {
+            self.inner.field(WALLET_ADDRESS)
         }
         pub fn created_at(&self) -> FieldRef {
             self.inner.field(CREATED_AT)

@@ -1,8 +1,8 @@
-.PHONY: fmt check-fmt clippy lint test check test-integration test-cli-integration docker-test verify generate-demo generate-sample-schema db-up db-down db-reset
+.PHONY: fmt check-fmt clippy lint test check test-integration test-cli-integration docker-test verify generate-demo generate-sample-schema generate-sample-base-schema db-up db-down db-reset
 
 DATABASE_URL ?= postgres://rqb:rqb@localhost:55432/rqb
 GENERATED_SCHEMA ?= target/generated/rqb_schema.rs
-SAMPLE_SCHEMA ?= samples/rest-api/src/db/schema.rs
+SAMPLE_SCHEMA ?= samples/sample-base/src/schema.rs
 
 fmt:
 	cargo fmt --all
@@ -40,6 +40,8 @@ generate-demo: docker-infra-up
 generate-sample-schema: docker-infra-up
 	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema public --out "$(SAMPLE_SCHEMA)"
 	rustfmt "$(SAMPLE_SCHEMA)"
+
+generate-sample-base-schema: generate-sample-schema
 
 db-up: docker-infra-up
 

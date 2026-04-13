@@ -1524,12 +1524,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rqb-sample-base"
+version = "0.1.0"
+dependencies = [
+ "rqb",
+ "uuid",
+]
+
+[[package]]
 name = "rqb-sample-rest"
 version = "0.1.0"
 dependencies = [
  "actix-web",
  "chrono",
  "rqb",
+ "rqb-sample-base",
  "serde",
  "serde_json",
  "thiserror",

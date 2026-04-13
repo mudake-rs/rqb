@@ -6,10 +6,7 @@ use validator::Validate;
 use crate::{
     db::{AppServices, OrderService},
     error::AppError,
-    orders::{
-        requests::{CreateOrderRequest, OrderListParams, PatchOrderRequest},
-        responses::{OrderResponse, OrderStats},
-    },
+    orders::requests::{CreateOrderRequest, OrderListParams, PatchOrderRequest},
     pagination::PaginatedResponse,
 };
 
@@ -21,7 +18,7 @@ pub async fn list_orders(
     // HTTP-layer validation checks request shape before the service builds an rqb query.
     params.validate()?;
     let page = OrderService::list(services.db(), params.into_query()?).await?;
-    let response = PaginatedResponse::from(page.map(OrderResponse::from));
+    let response = PaginatedResponse::from(page);
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -29,7 +26,7 @@ pub async fn get_order(
     services: web::Data<AppServices>,
     path: web::Path<Uuid>,
 ) -> Result<impl Responder, AppError> {
-    let response = OrderResponse::from(OrderService::get(services.db(), path.into_inner()).await?);
+    let response = OrderService::get(services.db(), path.into_inner()).await?;
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -45,8 +42,7 @@ pub async fn create_order(
     let tx = services.db().begin().await?;
     let order = OrderService::create(&tx, payload.into()).await?;
     tx.commit().await?;
-    let response = OrderResponse::from(order);
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(order))
 }
 
 pub async fn patch_order(
@@ -57,9 +53,7 @@ pub async fn patch_order(
     let payload = payload.into_inner();
     // Patch DTOs reject empty bodies, so the service does not run UPDATE with no assignments.
     payload.validate()?;
-    let response = OrderResponse::from(
-        OrderService::patch(services.db(), path.into_inner(), payload.into()).await?,
-    );
+    let response = OrderService::patch(services.db(), path.into_inner(), payload.into()).await?;
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -73,16 +67,11 @@ pub async fn delete_order(
         .db()
         .transaction(txn!(|tx| { OrderService::delete(tx, id).await }))
         .await?;
-    let response = OrderResponse::from(order);
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(order))
 }
 
 pub async fn order_stats(services: web::Data<AppServices>) -> Result<impl Responder, AppError> {
-    let response = OrderService::stats(services.db())
-        .await?
-        .into_iter()
-        .map(OrderStats::from)
-        .collect::<Vec<_>>();
+    let response = OrderService::stats(services.db()).await?;
     Ok(HttpResponse::Ok().json(response))
 }
 

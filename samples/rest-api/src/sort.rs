@@ -44,9 +44,15 @@ mod tests {
     fn parse_sort_uses_default_for_missing_or_blank_input() {
         let default = field("createdAt").desc();
 
-        assert_eq!(parse_sort(None, default.clone()).unwrap().dir, SortDir::Desc);
         assert_eq!(
-            parse_sort(Some("  "), default).unwrap().field.display_name(),
+            parse_sort(None, default.clone()).unwrap().dir,
+            SortDir::Desc
+        );
+        assert_eq!(
+            parse_sort(Some("  "), default)
+                .unwrap()
+                .field
+                .display_name(),
             "createdAt"
         );
     }

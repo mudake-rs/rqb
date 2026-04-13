@@ -1,4 +1,4 @@
-use rqb_core::{AggregateType, ElemType, FieldType, SelectColumn};
+use rqb_core::{AggregateType, ElemType, FieldType, SelectColumn, SelectRepr, TypeFamily};
 use serde_json::{Map, Number, Value as JsonValue};
 use tokio_postgres::{Row, types::FromSql};
 
@@ -29,10 +29,31 @@ fn field_to_json(row: &Row, alias: &str, field_type: FieldType) -> Result<JsonVa
         FieldType::BigInt => read_scalar(row, alias, |value: i64| {
             JsonValue::Number(Number::from(value))
         }),
-        FieldType::Float | FieldType::Numeric => read_scalar(row, alias, f64_to_json),
+        FieldType::Float => read_scalar(row, alias, f64_to_json),
+        FieldType::Numeric => read_scalar(row, alias, JsonValue::String),
         FieldType::Bool => read_scalar(row, alias, JsonValue::Bool),
         FieldType::Jsonb => read_scalar(row, alias, |value| value),
+        FieldType::Custom(type_spec) => custom_field_to_json(row, alias, *type_spec),
         FieldType::Array(elem_type) => array_to_json(row, alias, elem_type),
+    }
+}
+
+fn custom_field_to_json(
+    row: &Row,
+    alias: &str,
+    type_spec: rqb_core::TypeSpec,
+) -> Result<JsonValue> {
+    if type_spec.select_repr == SelectRepr::Text {
+        return read_scalar(row, alias, JsonValue::String);
+    }
+
+    match type_spec.family {
+        TypeFamily::Text | TypeFamily::Uuid | TypeFamily::Timestamp | TypeFamily::Date => {
+            read_scalar(row, alias, JsonValue::String)
+        }
+        TypeFamily::Numeric => read_scalar(row, alias, JsonValue::String),
+        TypeFamily::Bool => read_scalar(row, alias, JsonValue::Bool),
+        TypeFamily::Jsonb => read_scalar(row, alias, |value| value),
     }
 }
 
@@ -62,7 +83,8 @@ fn array_to_json(row: &Row, alias: &str, elem_type: ElemType) -> Result<JsonValu
         ElemType::BigInt => read_array(row, alias, |value: i64| {
             JsonValue::Number(Number::from(value))
         }),
-        ElemType::Float | ElemType::Numeric => read_array(row, alias, f64_to_json),
+        ElemType::Float => read_array(row, alias, f64_to_json),
+        ElemType::Numeric => read_array(row, alias, JsonValue::String),
         ElemType::Bool => read_array(row, alias, JsonValue::Bool),
     }
 }

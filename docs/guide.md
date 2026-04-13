@@ -404,6 +404,7 @@ JSON path comparisons use `#>` for JSON equality and `#>>` for text/numeric oper
 | `&str`, `String` | `String` | text, uuid, timestamp, date, enum as needed |
 | integer types | `I64` | bigint, int |
 | `f32`, `f64` | `F64` | double precision, numeric |
+| exact numeric strings | `String` | numeric and numeric-like domains |
 | `bool` | `Bool` | boolean |
 | `serde_json::Value` | `Json` | jsonb |
 | `Vec<T>`, `[T; N]` | `Array` | array casts from field type |
@@ -420,9 +421,11 @@ UUID, timestamp, date, and enum inputs can be strings. With `with-uuid` and `wit
 | `Text`, `Uuid`, `Timestamp`, `Date`, `Enum` | string | `String`, `uuid::Uuid`, chrono types with serde |
 | `Integer` | number | `i32` |
 | `BigInt` | number | `i64` |
-| `Float`, `Numeric` | number | `f64` |
+| `Float` | number | `f64` |
+| `Numeric` | string | `String` or an exact decimal wrapper |
 | `Bool` | boolean | `bool` |
 | `Jsonb` | JSON value | nested struct or `serde_json::Value` |
+| `Custom(TypeSpec)` with `SelectRepr::Text` | string | `String` or a serde-compatible newtype |
 | `Array(elem)` | JSON array | `Vec<T>` |
 
 Root fields in joined queries use clean aliases like `id` and `email`. Joined flat fields still use aliases like `o_status`. Aggregate aliases are used exactly as given.
@@ -526,4 +529,21 @@ cargo run -p rqb-cli -- generate \
   --out target/generated/rqb_schema.rs
 ```
 
-The CLI introspects tables, views, arrays, JSONB columns, and Postgres enums. Generated modules contain `Field` constants, `dataset()` functions, relation helpers, and serde-compatible Rust enum wrappers. Generated enums serialize and deserialize as the exact Postgres labels, so fixed-shape DTOs can use them directly instead of validating status strings by hand.
+The CLI introspects tables, views, arrays, JSONB columns, Postgres enums, and Postgres domains. Generated modules contain `Field` constants, `dataset()` functions, relation helpers, domain `TypeSpec` constants, and serde-compatible Rust enum wrappers. Generated enums serialize and deserialize as the exact Postgres labels, so fixed-shape DTOs can use them directly instead of validating status strings by hand.
+
+Numeric domains are generated as custom field types that bind through exact decimal strings and select as text:
+
+```rust
+pub mod types {
+    use rqb::prelude::*;
+
+    pub const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+        .base(TypeFamily::Numeric)
+        .value_repr(ValueRepr::DecimalString)
+        .select_repr(SelectRepr::Text);
+}
+
+pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&types::UINT_256));
+```
+
+That keeps values such as `uint_256` and large `numeric` amounts out of `f64`.

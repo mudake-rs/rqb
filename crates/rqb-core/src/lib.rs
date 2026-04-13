@@ -34,7 +34,7 @@ pub use expr::{
 };
 pub use field::{
     Capabilities, DbEnum, ElemType, EnumType, Field, FieldRef, FieldType, JsonPathPolicy,
-    ResolvedField, TextSearchConfig,
+    ResolvedField, SelectRepr, TextSearchConfig, TypeFamily, TypeSpec, ValueRepr,
 };
 pub use raw::{RawSql, raw};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
@@ -59,10 +59,11 @@ pub mod prelude {
         EnumType, ExistsPredicate, Expr, Field, FieldRef, FieldType, InsertBuilder,
         InsertConflictBuilder, InsertQuery, Join, JoinKind, JsonPathPolicy, LockMode, LockWait,
         LogicalOp, NullsOrder, Operator, RawSql, Relation, ReturningMode, RowLock, SearchRequest,
-        SelectBuilder, SelectColumn, SelectQuery, Sort, SortDir, SubqueryOperator,
-        SubqueryPredicate, TextSearchConfig, UpdateBuilder, UpdateQuery, Value, WriteAssignment,
-        WriteValue, all, any, array_agg, avg, count, count_distinct, count_field, cte, delete,
-        exists, field, insert, max, max_agg, min, min_agg, not, not_exists, raw,
-        resolve_query_field_with_outer, select, string_agg, sum, update,
+        SelectBuilder, SelectColumn, SelectQuery, SelectRepr, Sort, SortDir, SubqueryOperator,
+        SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery,
+        Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg, count,
+        count_distinct, count_field, cte, delete, exists, field, insert, max, max_agg, min,
+        min_agg, not, not_exists, raw, resolve_query_field_with_outer, select, string_agg, sum,
+        update,
     };
 }

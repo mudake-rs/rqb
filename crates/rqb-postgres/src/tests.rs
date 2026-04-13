@@ -2,8 +2,9 @@ use super::*;
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
-    Sort, Value, all, array_agg, avg, count, count_distinct, delete, exists, field, insert, max,
-    min, not_exists, raw, select, string_agg, sum, update,
+    SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, count,
+    count_distinct, delete, exists, field, insert, max, min, not_exists, raw, select, string_agg,
+    sum, update,
 };
 use serde::Serialize;
 
@@ -57,6 +58,7 @@ fn typed_values() -> Dataset {
         Field::new("a", FieldType::Integer),
         Field::new("b", FieldType::BigInt),
         Field::new("amount", FieldType::Numeric),
+        Field::mapped("uintAmount", "uint_amount", FieldType::Custom(&UINT_256)),
         Field::new("ratio", FieldType::Float),
         Field::new("active", FieldType::Bool),
         Field::mapped("happenedOn", "happened_on", FieldType::Date),
@@ -78,6 +80,10 @@ const ORDER_STATUS: EnumType = EnumType::new(
     "order_status",
     &["draft", "paid", "cancelled", "refunded"],
 );
+const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+    .base(TypeFamily::Numeric)
+    .value_repr(ValueRepr::DecimalString)
+    .select_repr(SelectRepr::Text);
 
 #[cfg(feature = "with-uuid")]
 fn uuid_projection(expr: &str, alias: &str, force_alias: bool) -> String {
@@ -198,6 +204,51 @@ fn json_path_numeric_comparison_keeps_i64_precision() {
             Value::String("score".to_owned()),
             Value::String(exact.to_string())
         ]
+    );
+}
+
+#[test]
+fn renders_custom_numeric_domain_losslessly() {
+    let built = select(typed_values())
+        .fields(["uintAmount"])
+        .filter(all([
+            field("uintAmount").gte("900719925474099312345678901234567890"),
+            field("uintAmount").lt(42_i64),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"uint_amount\"::text AS \"uintAmount\" FROM \"typed_values\" \
+         WHERE (\"uint_amount\" >= $1::text::\"public\".\"uint_256\" AND \"uint_amount\" < $2::text::\"public\".\"uint_256\") \
+         LIMIT 100 OFFSET 0"
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("900719925474099312345678901234567890".to_owned()),
+            Value::String("42".to_owned())
+        ]
+    );
+}
+
+#[test]
+fn renders_numeric_selection_as_text_to_preserve_precision() {
+    let built = select(typed_values())
+        .fields(["amount"])
+        .filter(field("amount").eq("9007199254740993"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"amount\"::text AS \"amount\" FROM \"typed_values\" \
+         WHERE \"amount\" = $1::text::numeric LIMIT 100 OFFSET 0"
+    );
+    assert_eq!(
+        built.params,
+        vec![Value::String("9007199254740993".to_owned())]
     );
 }
 

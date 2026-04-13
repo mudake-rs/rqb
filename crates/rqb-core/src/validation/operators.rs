@@ -1,6 +1,8 @@
 use crate::error::{Error, Result};
 use crate::expr::{ColumnOperator, Operator};
-use crate::field::{ElemType, EnumType, FieldType, ResolvedField, TextSearchConfig};
+use crate::field::{
+    ElemType, EnumType, FieldType, ResolvedField, TextSearchConfig, TypeFamily, TypeSpec, ValueRepr,
+};
 use crate::value::Value;
 
 pub(super) fn validate_operator(
@@ -34,10 +36,7 @@ pub(super) fn validate_operator(
                 };
                 require_number(field, operator, &values[0])?;
                 require_number(field, operator, &values[1])?;
-            } else if !(field.ty.is_numeric()
-                || field.ty.is_temporal()
-                || field.ty == FieldType::Text)
-            {
+            } else if !(field.ty.is_numeric() || field.ty.is_temporal() || field.ty.is_text()) {
                 return unsupported(field, operator);
             } else {
                 require_array_values_for_field_type(field, operator.as_str(), value)?;
@@ -109,14 +108,13 @@ pub(super) fn validate_operator(
         }
         Contains | NotContains | StartsWith | EndsWith | NotStartsWith | NotEndsWith => {
             require_string(field, operator, value)?;
-            if !(field.ty == FieldType::Text || field.ty == FieldType::Uuid || field.is_json_path())
-            {
+            if !(field.ty.is_text() || field.ty == FieldType::Uuid || field.is_json_path()) {
                 return unsupported(field, operator);
             }
         }
         Regex | NotRegex => {
             require_string(field, operator, value)?;
-            if !(field.ty == FieldType::Text || field.is_json_path()) {
+            if !(field.ty.is_text() || field.is_json_path()) {
                 return unsupported(field, operator);
             }
         }
@@ -126,10 +124,7 @@ pub(super) fn validate_operator(
                 require_number(field, operator, value)?;
             } else if let Some(enum_type) = enum_type_for_field(field) {
                 require_enum_scalar(field, operator, enum_type, value)?;
-            } else if !(field.ty.is_numeric()
-                || field.ty.is_temporal()
-                || field.ty == FieldType::Text)
-            {
+            } else if !(field.ty.is_numeric() || field.ty.is_temporal() || field.ty.is_text()) {
                 return unsupported(field, operator);
             } else {
                 validate_value_for_field_type(field, operator.as_str(), value)?;
@@ -333,6 +328,9 @@ fn require_value_for_field_type(
         FieldType::Enum(enum_type) => {
             require_enum_scalar_by_name(field, operator, enum_type, value)
         }
+        FieldType::Custom(type_spec) => {
+            require_value_for_type_spec(field, operator, *type_spec, value)
+        }
         FieldType::Array(elem_type) => {
             let Value::Array(values) = value else {
                 return Err(Error::InvalidValue {
@@ -347,6 +345,116 @@ fn require_value_for_field_type(
             Ok(())
         }
     }
+}
+
+fn require_value_for_type_spec(
+    field: &ResolvedField,
+    operator: &str,
+    type_spec: TypeSpec,
+    value: &Value,
+) -> Result<()> {
+    match type_spec.value_repr {
+        ValueRepr::DecimalString => require_value_shape(
+            field,
+            operator,
+            value,
+            "integer or decimal string",
+            |value| match value {
+                Value::I64(_) => true,
+                Value::String(value) => looks_like_decimal(value),
+                _ => false,
+            },
+        ),
+        ValueRepr::String => require_value_shape(field, operator, value, "string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        ValueRepr::Native => match type_spec.family {
+            TypeFamily::Text => require_value_shape(field, operator, value, "string", |value| {
+                matches!(value, Value::String(_))
+            }),
+            TypeFamily::Numeric => require_value_shape(
+                field,
+                operator,
+                value,
+                "number or numeric string",
+                |value| value.is_number() || matches!(value, Value::String(_)),
+            ),
+            TypeFamily::Bool => require_value_shape(field, operator, value, "bool", |value| {
+                matches!(value, Value::Bool(_))
+            }),
+            TypeFamily::Uuid => {
+                require_value_shape(field, operator, value, "UUID string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
+            TypeFamily::Timestamp => {
+                require_value_shape(field, operator, value, "timestamp string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
+            TypeFamily::Date => {
+                require_value_shape(field, operator, value, "date string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
+            TypeFamily::Jsonb => {
+                if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
+                    reject_non_finite_numbers(field, operator, value)?;
+                    Ok(())
+                } else {
+                    Err(Error::InvalidValue {
+                        field: field.display_name(),
+                        operator: operator.to_owned(),
+                        message: format!(
+                            "expected scalar, array, or JSON, got {}",
+                            value.type_name()
+                        ),
+                    })
+                }
+            }
+        },
+    }
+}
+
+fn looks_like_decimal(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut idx = 0;
+    if bytes.is_empty() {
+        return false;
+    }
+    if matches!(bytes[idx], b'+' | b'-') {
+        idx += 1;
+    }
+
+    let before_dot = consume_digits(bytes, &mut idx);
+    let mut after_dot = 0;
+    if idx < bytes.len() && bytes[idx] == b'.' {
+        idx += 1;
+        after_dot = consume_digits(bytes, &mut idx);
+    }
+    if before_dot + after_dot == 0 {
+        return false;
+    }
+
+    if idx < bytes.len() && matches!(bytes[idx], b'e' | b'E') {
+        idx += 1;
+        if idx < bytes.len() && matches!(bytes[idx], b'+' | b'-') {
+            idx += 1;
+        }
+        if consume_digits(bytes, &mut idx) == 0 {
+            return false;
+        }
+    }
+
+    idx == bytes.len()
+}
+
+fn consume_digits(bytes: &[u8], idx: &mut usize) -> usize {
+    let start = *idx;
+    while *idx < bytes.len() && bytes[*idx].is_ascii_digit() {
+        *idx += 1;
+    }
+    *idx - start
 }
 
 fn require_value_for_elem_type(

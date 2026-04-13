@@ -2,16 +2,21 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DROP VIEW IF EXISTS order_search_view;
 DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS withdrawals;
 DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS app_users;
 DROP TABLE IF EXISTS organizations;
+DROP DOMAIN IF EXISTS uint_256;
 DROP TYPE IF EXISTS order_status;
 DROP TYPE IF EXISTS user_status;
 
 CREATE TYPE user_status AS ENUM ('active', 'disabled');
 CREATE TYPE order_status AS ENUM ('draft', 'paid', 'cancelled', 'refunded');
+CREATE DOMAIN uint_256 AS NUMERIC NOT NULL
+    CHECK (VALUE >= 0 AND VALUE < 2::numeric ^ 256)
+    CHECK (SCALE(VALUE) = 0);
 
 CREATE TABLE organizations (
     id UUID PRIMARY KEY,
@@ -69,6 +74,14 @@ CREATE TABLE events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE withdrawals (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES app_users(id),
+    amount uint_256 NOT NULL,
+    wallet_address TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX idx_users_profile_gin ON app_users USING GIN (profile);
 CREATE INDEX idx_users_tags ON app_users USING GIN (tags);
 CREATE INDEX idx_products_attributes_gin ON products USING GIN (attributes);
@@ -108,6 +121,10 @@ INSERT INTO events (id, order_id, event_type, payload, created_at) VALUES
 ('50000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'paid', '{"gateway":"stripe","risk":12}', '2026-02-01T10:01:00Z'),
 ('50000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', 'paid', '{"gateway":"adyen","risk":60}', '2026-02-02T10:01:00Z'),
 ('50000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000003', 'created', '{"gateway":null,"risk":0}', '2026-02-03T10:01:00Z');
+
+INSERT INTO withdrawals (id, user_id, amount, wallet_address, created_at) VALUES
+('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '900719925474099312345678901234567890'::uint_256, '0xabc', '2026-02-04T10:00:00Z'),
+('60000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '42'::uint_256, '0xdef', '2026-02-05T10:00:00Z');
 
 CREATE VIEW order_search_view AS
 SELECT

@@ -1,4 +1,6 @@
-use rqb_core::{ElemType, FieldType, RawSql, ResolvedField, Source, ValidatedWriteValue, Value};
+use rqb_core::{
+    ElemType, FieldType, RawSql, ResolvedField, Source, ValidatedWriteValue, Value, ValueRepr,
+};
 
 use crate::helpers::{
     postgres_cast_sql, postgres_selection_cast, renumber_postgres_placeholders, value_to_json,
@@ -197,6 +199,10 @@ impl Renderer {
                 self.push_numeric_array_param(value);
                 return;
             }
+            FieldType::Custom(type_spec) if type_spec.value_repr == ValueRepr::DecimalString => {
+                self.push_decimal_string_param(value, field_type);
+                return;
+            }
             _ => {}
         }
 
@@ -210,6 +216,14 @@ impl Renderer {
         let value = numeric_text_value(value);
         self.push_param(&value);
         self.sql.push_str("::text::numeric");
+    }
+
+    fn push_decimal_string_param(&mut self, value: &Value, field_type: FieldType) {
+        let value = numeric_text_value(value);
+        self.push_param(&value);
+        if let Some(cast) = postgres_cast_sql(field_type) {
+            self.sql.push_str(&cast);
+        }
     }
 
     fn push_numeric_array_param(&mut self, value: &Value) {

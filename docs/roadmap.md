@@ -34,14 +34,15 @@ This belongs in sample/application code rather than core rqb.
 
 `PHILOSOPHY.md` describes the target type model: rqb owns broad Postgres and common extension type support, while project-specific domains and scalars are declared through metadata.
 
-This is not fully implemented yet. The current type model is still mostly a closed `FieldType` / `ElemType` / `Value` set. Before beta, add a vertical slice for exact numeric/domain support:
+The first scalar-domain vertical slice is implemented: `TypeSpec` metadata, `FieldType::Custom`, CLI domain introspection, exact decimal-string binding, text selection for exact numeric fields, and runtime tests against a `uint_256` domain.
 
-- represent exact `numeric` without silently converting through `f64`
-- introspect Postgres domains in the CLI instead of flattening them to text or their base type
-- generate project-local type metadata for domains such as `uint_256`
-- validate domain/custom scalar input through metadata, including JSON `SearchRequest`
-- render lossless casts and selection output for exact values
-- keep built-in Postgres types on fast paths
+Remaining work before beta:
+
+- custom domain arrays
+- richer per-domain validation rules beyond decimal shape
+- serde-friendly generated Rust newtypes for common exact domains
+- exact aggregate output for `sum` / `avg` when the result is numeric
+- library-owned extension types such as `citext`, `inet`, `ltree`, ranges, and `pgvector`
 
 The BFM `uint_256` domain is the reference use case for this work.
 

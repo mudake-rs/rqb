@@ -1,4 +1,7 @@
-use rqb_core::{ColumnOperator, ElemType, EnumType, FieldType, ValidatedSelect, Value};
+use rqb_core::{
+    ColumnOperator, ElemType, EnumType, FieldType, SelectRepr, TypeSpec, ValidatedSelect, Value,
+    ValueRepr,
+};
 
 pub(crate) fn quote_ident(ident: &str) -> String {
     let mut output = String::with_capacity(ident.len() + 2);
@@ -25,6 +28,13 @@ fn quote_enum_type(enum_type: EnumType) -> String {
     match enum_type.schema {
         Some(schema) => format!("{}.{}", quote_ident(schema), quote_ident(enum_type.name)),
         None => quote_ident(enum_type.name),
+    }
+}
+
+pub(crate) fn quote_type_spec(type_spec: TypeSpec) -> String {
+    match type_spec.schema {
+        Some(schema) => format!("{}.{}", quote_ident(schema), quote_ident(type_spec.name)),
+        None => quote_ident(type_spec.name),
     }
 }
 
@@ -84,6 +94,7 @@ pub(crate) fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
         FieldType::Numeric => Some("::numeric"),
         FieldType::Text
         | FieldType::Bool
+        | FieldType::Custom(_)
         | FieldType::Enum(_)
         | FieldType::Array(ElemType::Enum(_)) => None,
     }
@@ -95,6 +106,13 @@ pub(crate) fn postgres_cast_sql(field_type: FieldType) -> Option<String> {
         FieldType::Array(ElemType::Enum(enum_type)) => {
             Some(format!("::text[]::{}[]", quote_enum_type(enum_type)))
         }
+        FieldType::Custom(type_spec) => {
+            let cast_prefix = match type_spec.value_repr {
+                ValueRepr::String | ValueRepr::DecimalString => "::text::",
+                ValueRepr::Native => "::",
+            };
+            Some(format!("{cast_prefix}{}", quote_type_spec(*type_spec)))
+        }
         other => postgres_cast(other).map(ToOwned::to_owned),
     }
 }
@@ -105,6 +123,9 @@ pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static 
         FieldType::Timestamp | FieldType::Date => chrono_selection_cast(),
         FieldType::Enum(_) => Some("::text"),
         FieldType::Array(ElemType::Enum(_)) => Some("::text[]"),
+        FieldType::Numeric => Some("::text"),
+        FieldType::Array(ElemType::Numeric) => Some("::text[]"),
+        FieldType::Custom(type_spec) if type_spec.select_repr == SelectRepr::Text => Some("::text"),
         _ => None,
     }
 }

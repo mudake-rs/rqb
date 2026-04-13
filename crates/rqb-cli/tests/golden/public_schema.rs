@@ -124,6 +124,13 @@ pub mod enums {
         }
     }
 }
+pub mod types {
+    use rqb::prelude::*;
+    pub const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+        .base(TypeFamily::Numeric)
+        .value_repr(ValueRepr::DecimalString)
+        .select_repr(SelectRepr::Text);
+}
 pub mod app_users {
     use rqb::prelude::*;
     pub const ID: Field = Field::new("id", FieldType::Uuid);
@@ -469,6 +476,39 @@ pub mod products {
         }
         pub fn tags(&self) -> FieldRef {
             self.inner.field(TAGS)
+        }
+        pub fn created_at(&self) -> FieldRef {
+            self.inner.field(CREATED_AT)
+        }
+    }
+}
+pub mod withdrawals {
+    use rqb::prelude::*;
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&super::types::UINT_256));
+    pub const WALLET_ADDRESS: Field =
+        Field::mapped("walletAddress", "wallet_address", FieldType::Text);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub fn dataset() -> Dataset {
+        Dataset::table("withdrawals").fields([ID, USER_ID, AMOUNT, WALLET_ADDRESS, CREATED_AT])
+    }
+    pub fn table() -> Relation {
+        Relation::new(dataset())
+    }
+    __rqb_relation_wrapper!();
+    impl Relation {
+        pub fn id(&self) -> FieldRef {
+            self.inner.field(ID)
+        }
+        pub fn user_id(&self) -> FieldRef {
+            self.inner.field(USER_ID)
+        }
+        pub fn amount(&self) -> FieldRef {
+            self.inner.field(AMOUNT)
+        }
+        pub fn wallet_address(&self) -> FieldRef {
+            self.inner.field(WALLET_ADDRESS)
         }
         pub fn created_at(&self) -> FieldRef {
             self.inner.field(CREATED_AT)

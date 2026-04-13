@@ -1,13 +1,17 @@
 use super::*;
 use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType, Join,
-    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, Sort, Value, avg, count,
-    count_field, field, insert, max, min, string_agg, sum,
+    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr, Sort, TypeFamily,
+    TypeSpec, Value, ValueRepr, avg, count, count_field, field, insert, max, min, string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
 
 const ASSET_STATE: EnumType = EnumType::new(None, "asset_state", &["active", "archived"]);
+const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+    .base(TypeFamily::Numeric)
+    .value_repr(ValueRepr::DecimalString)
+    .select_repr(SelectRepr::Text);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AssetState {
@@ -47,6 +51,7 @@ fn dataset() -> Dataset {
         Field::new("internal", FieldType::Text).filterable(false),
         Field::new("score", FieldType::Integer),
         Field::new("amount", FieldType::Numeric),
+        Field::mapped("uintAmount", "uint_amount", FieldType::Custom(&UINT_256)),
         Field::new("active", FieldType::Bool),
         Field::mapped("createdAt", "created_at", FieldType::Timestamp),
         Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false),
@@ -569,6 +574,55 @@ fn accepts_numeric_strings_only_for_numeric_fields() {
         .build();
 
     ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn accepts_exact_decimal_strings_for_custom_numeric_domains() {
+    let query = crate::select(dataset())
+        .filter(crate::all([
+            field("uintAmount").eq("900719925474099312345678901234567890"),
+            field("uintAmount").gte(10_i64),
+            field("uintAmount").lte_col(field("amount")),
+        ]))
+        .build();
+
+    ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn validates_custom_numeric_domains_from_json_requests() {
+    let request: crate::SearchRequest = serde_json::from_value(serde_json::json!({
+        "query": {
+            "field": "uintAmount",
+            "operator": "gte",
+            "value": "900719925474099312345678901234567890"
+        }
+    }))
+    .unwrap();
+
+    let query = crate::select(dataset()).request(request).build();
+    ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn rejects_inexact_values_for_decimal_string_domains() {
+    for (expr, expected) in [
+        (
+            field("uintAmount").eq(1.25),
+            "expected integer or decimal string, got f64",
+        ),
+        (
+            field("uintAmount").eq("not-a-number"),
+            "expected integer or decimal string, got string",
+        ),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidValue { ref field, ref message, .. } if field == "uintAmount" && message == expected),
+            "unexpected error: {err}"
+        );
+    }
 }
 
 #[test]

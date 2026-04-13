@@ -132,6 +132,77 @@ where
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub enum TypeFamily {
+    Text,
+    Numeric,
+    Bool,
+    Uuid,
+    Timestamp,
+    Date,
+    Jsonb,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ValueRepr {
+    Native,
+    String,
+    DecimalString,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SelectRepr {
+    Native,
+    Text,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypeSpec {
+    pub schema: Option<&'static str>,
+    pub name: &'static str,
+    pub family: TypeFamily,
+    pub value_repr: ValueRepr,
+    pub select_repr: SelectRepr,
+}
+
+impl TypeSpec {
+    pub const fn domain(schema: Option<&'static str>, name: &'static str) -> Self {
+        Self {
+            schema,
+            name,
+            family: TypeFamily::Text,
+            value_repr: ValueRepr::String,
+            select_repr: SelectRepr::Text,
+        }
+    }
+
+    pub const fn base(mut self, family: TypeFamily) -> Self {
+        self.family = family;
+        self
+    }
+
+    pub const fn value_repr(mut self, value_repr: ValueRepr) -> Self {
+        self.value_repr = value_repr;
+        self
+    }
+
+    pub const fn select_repr(mut self, select_repr: SelectRepr) -> Self {
+        self.select_repr = select_repr;
+        self
+    }
+
+    pub fn display_name(self) -> String {
+        match self.schema {
+            Some(schema) => format!("{schema}.{}", self.name),
+            None => self.name.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum FieldType {
     Text,
     Integer,
@@ -144,12 +215,14 @@ pub enum FieldType {
     Date,
     Jsonb,
     Enum(EnumType),
+    Custom(&'static TypeSpec),
     Array(ElemType),
 }
 
 impl FieldType {
     pub fn is_jsonb(self) -> bool {
         matches!(self, Self::Jsonb)
+            || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Jsonb)
     }
 
     pub fn is_array(self) -> bool {
@@ -160,11 +233,21 @@ impl FieldType {
         matches!(
             self,
             Self::Integer | Self::BigInt | Self::Float | Self::Numeric
-        )
+        ) || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Numeric)
     }
 
     pub fn is_temporal(self) -> bool {
         matches!(self, Self::Timestamp | Self::Date)
+            || matches!(
+                self,
+                Self::Custom(type_spec)
+                    if matches!(type_spec.family, TypeFamily::Timestamp | TypeFamily::Date)
+            )
+    }
+
+    pub fn is_text(self) -> bool {
+        matches!(self, Self::Text)
+            || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Text)
     }
 
     pub fn as_str(self) -> &'static str {
@@ -180,6 +263,7 @@ impl FieldType {
             Self::Date => "date",
             Self::Jsonb => "jsonb",
             Self::Enum(enum_type) => enum_type.name,
+            Self::Custom(type_spec) => type_spec.name,
             Self::Array(elem) => match elem {
                 ElemType::Text => "text[]",
                 ElemType::Int => "int[]",

@@ -1,7 +1,8 @@
 use pretty_assertions::assert_eq;
 use rqb_core::{
-    Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, all,
-    count, cte, delete, exists, field, insert, not_exists, raw, select, sum, update,
+    Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
+    SelectRepr, TypeFamily, TypeSpec, ValueRepr, all, count, cte, delete, exists, field, insert,
+    not_exists, raw, select, sum, update,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteWritePostgres, PgExecutor,
@@ -150,6 +151,26 @@ mod organizations_table {
     }
 }
 
+mod withdrawals_table {
+    use super::*;
+
+    pub const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+        .base(TypeFamily::Numeric)
+        .value_repr(ValueRepr::DecimalString)
+        .select_repr(SelectRepr::Text);
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&UINT_256));
+    pub const WALLET_ADDRESS: Field =
+        Field::mapped("walletAddress", "wallet_address", FieldType::Text);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+
+    pub fn dataset() -> Dataset {
+        Dataset::table("withdrawals").fields([ID, USER_ID, AMOUNT, WALLET_ADDRESS, CREATED_AT])
+    }
+}
+
 #[tokio::test]
 async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
@@ -179,6 +200,59 @@ async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestRes
     assert_eq!(rows[0].get::<_, String>("email"), "ada@example.com");
     assert_eq!(rows[0].get::<_, i64>("totalCents"), 15_900);
     assert_count(&client, &built.count, 1).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    struct Withdrawal {
+        id: String,
+        amount: String,
+    }
+
+    let high_value = "900719925474099312345678901234567890";
+    let rows: Vec<Withdrawal> = select(withdrawals_table::dataset())
+        .fields([withdrawals_table::ID, withdrawals_table::AMOUNT])
+        .filter(withdrawals_table::AMOUNT.gte(high_value))
+        .fetch_as(&client)
+        .await?;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "60000000-0000-0000-0000-000000000001");
+    assert_eq!(rows[0].amount, high_value);
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NewWithdrawal<'a> {
+        id: &'a str,
+        user_id: &'a str,
+        amount: &'a str,
+        wallet_address: &'a str,
+    }
+
+    let inserted = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+    insert(withdrawals_table::dataset())
+        .value(&NewWithdrawal {
+            id: "60000000-0000-0000-0000-000000000003",
+            user_id: "10000000-0000-0000-0000-000000000001",
+            amount: inserted,
+            wallet_address: "0xfeed",
+        })
+        .execute(&client)
+        .await?;
+
+    let row: Withdrawal = select(withdrawals_table::dataset())
+        .fields([withdrawals_table::ID, withdrawals_table::AMOUNT])
+        .filter(withdrawals_table::ID.eq("60000000-0000-0000-0000-000000000003"))
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(row.amount, inserted);
+
     Ok(())
 }
 

@@ -378,10 +378,7 @@ fn validate_ordered_aggregate_field(_aggregate: &str, field: &ResolvedField) -> 
 }
 
 fn validate_string_aggregate_field(field: &ResolvedField) -> Result<()> {
-    if matches!(
-        field.ty,
-        crate::field::FieldType::Text | crate::field::FieldType::Enum(_)
-    ) {
+    if field.ty.is_text() || matches!(field.ty, crate::field::FieldType::Enum(_)) {
         return Ok(());
     }
     Err(Error::UnsupportedAggregateField {

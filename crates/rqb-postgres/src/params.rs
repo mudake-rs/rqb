@@ -23,6 +23,7 @@ enum PgParam {
     I64(i64),
     F64(f64),
     String(String),
+    Bytes(Vec<u8>),
     Json(serde_json::Value),
     BoolVec(Vec<bool>),
     I64Vec(Vec<i64>),
@@ -39,6 +40,7 @@ impl PgParam {
             Self::I64(value) => value,
             Self::F64(value) => value,
             Self::String(value) => value,
+            Self::Bytes(value) => value,
             Self::Json(value) => value,
             Self::BoolVec(value) => value,
             Self::I64Vec(value) => value,
@@ -56,6 +58,7 @@ fn convert_param(value: &Value) -> PgParam {
         Value::I64(value) => PgParam::I64(*value),
         Value::F64(value) => PgParam::F64(*value),
         Value::String(value) => PgParam::String(value.clone()),
+        Value::Bytes(value) => PgParam::Bytes(value.clone()),
         Value::Json(value) => PgParam::Json(value.clone()),
         Value::Array(values) => convert_array_param(values),
     }
@@ -106,6 +109,12 @@ fn param_value_to_json(value: &Value) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         Value::String(value) => serde_json::Value::String(value.clone()),
+        Value::Bytes(value) => serde_json::Value::Array(
+            value
+                .iter()
+                .map(|byte| serde_json::Value::Number((*byte).into()))
+                .collect(),
+        ),
         Value::Array(values) => {
             serde_json::Value::Array(values.iter().map(param_value_to_json).collect())
         }

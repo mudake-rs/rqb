@@ -50,6 +50,7 @@ macro_rules! delegate_col_ops {
 #[serde(rename_all = "camelCase")]
 pub enum ElemType {
     Text,
+    Citext,
     Int,
     BigInt,
     Float,
@@ -57,6 +58,7 @@ pub enum ElemType {
     Bool,
     Uuid,
     Timestamp,
+    Timestamptz,
     Date,
     Enum(EnumType),
 }
@@ -65,6 +67,7 @@ impl ElemType {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Text => "text",
+            Self::Citext => "citext",
             Self::Int => "int",
             Self::BigInt => "bigint",
             Self::Float => "float",
@@ -72,6 +75,7 @@ impl ElemType {
             Self::Bool => "bool",
             Self::Uuid => "uuid",
             Self::Timestamp => "timestamp",
+            Self::Timestamptz => "timestamptz",
             Self::Date => "date",
             Self::Enum(enum_type) => enum_type.name,
         }
@@ -138,8 +142,12 @@ pub enum TypeFamily {
     Bool,
     Uuid,
     Timestamp,
+    Timestamptz,
     Date,
     Jsonb,
+    Bytes,
+    Network,
+    Range,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -205,6 +213,7 @@ impl TypeSpec {
 #[serde(rename_all = "camelCase")]
 pub enum FieldType {
     Text,
+    Citext,
     Integer,
     BigInt,
     Float,
@@ -212,10 +221,15 @@ pub enum FieldType {
     Bool,
     Uuid,
     Timestamp,
+    Timestamptz,
     Date,
     Jsonb,
+    Bytea,
+    Inet,
+    Cidr,
     Enum(EnumType),
     Custom(&'static TypeSpec),
+    Range(ElemType),
     Array(ElemType),
 }
 
@@ -229,6 +243,16 @@ impl FieldType {
         matches!(self, Self::Array(_))
     }
 
+    pub fn is_range(self) -> bool {
+        matches!(self, Self::Range(_))
+            || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Range)
+    }
+
+    pub fn is_network(self) -> bool {
+        matches!(self, Self::Inet | Self::Cidr)
+            || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Network)
+    }
+
     pub fn is_numeric(self) -> bool {
         matches!(
             self,
@@ -237,22 +261,26 @@ impl FieldType {
     }
 
     pub fn is_temporal(self) -> bool {
-        matches!(self, Self::Timestamp | Self::Date)
+        matches!(self, Self::Timestamp | Self::Timestamptz | Self::Date)
             || matches!(
                 self,
                 Self::Custom(type_spec)
-                    if matches!(type_spec.family, TypeFamily::Timestamp | TypeFamily::Date)
+                    if matches!(
+                        type_spec.family,
+                        TypeFamily::Timestamp | TypeFamily::Timestamptz | TypeFamily::Date
+                    )
             )
     }
 
     pub fn is_text(self) -> bool {
-        matches!(self, Self::Text)
+        matches!(self, Self::Text | Self::Citext)
             || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Text)
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Text => "text",
+            Self::Citext => "citext",
             Self::Integer => "integer",
             Self::BigInt => "bigint",
             Self::Float => "float",
@@ -260,12 +288,18 @@ impl FieldType {
             Self::Bool => "bool",
             Self::Uuid => "uuid",
             Self::Timestamp => "timestamp",
+            Self::Timestamptz => "timestamptz",
             Self::Date => "date",
             Self::Jsonb => "jsonb",
+            Self::Bytea => "bytea",
+            Self::Inet => "inet",
+            Self::Cidr => "cidr",
             Self::Enum(enum_type) => enum_type.name,
             Self::Custom(type_spec) => type_spec.name,
+            Self::Range(elem) => range_type_name(elem),
             Self::Array(elem) => match elem {
                 ElemType::Text => "text[]",
+                ElemType::Citext => "citext[]",
                 ElemType::Int => "int[]",
                 ElemType::BigInt => "bigint[]",
                 ElemType::Float => "float[]",
@@ -273,6 +307,7 @@ impl FieldType {
                 ElemType::Bool => "bool[]",
                 ElemType::Uuid => "uuid[]",
                 ElemType::Timestamp => "timestamp[]",
+                ElemType::Timestamptz => "timestamptz[]",
                 ElemType::Date => "date[]",
                 ElemType::Enum(_) => "enum[]",
             },
@@ -285,6 +320,18 @@ impl FieldType {
             Self::Array(ElemType::Enum(enum_type)) => Some(enum_type),
             _ => None,
         }
+    }
+}
+
+pub fn range_type_name(elem: ElemType) -> &'static str {
+    match elem {
+        ElemType::Int => "int4range",
+        ElemType::BigInt => "int8range",
+        ElemType::Numeric => "numrange",
+        ElemType::Timestamp => "tsrange",
+        ElemType::Timestamptz => "tstzrange",
+        ElemType::Date => "daterange",
+        _ => "range",
     }
 }
 
@@ -432,6 +479,8 @@ impl Field {
         key_exists,
         keys_exist_any,
         keys_exist_all,
+        contained_by,
+        overlaps,
         regex,
         not_regex,
         search,
@@ -600,6 +649,8 @@ impl FieldRef {
         key_exists => JsonKeyExists,
         keys_exist_any => JsonKeysExistAny,
         keys_exist_all => JsonKeysExistAll,
+        contained_by => ContainedBy,
+        overlaps => Overlaps,
         regex => Regex,
         not_regex => NotRegex,
         search => TextSearch,

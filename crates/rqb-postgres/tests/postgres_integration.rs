@@ -1,8 +1,8 @@
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
-    SelectRepr, TypeFamily, TypeSpec, ValueRepr, all, count, cte, delete, exists, field, insert,
-    not_exists, raw, select, sum, update,
+    SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, count, cte, delete, exists, field,
+    insert, not_exists, raw, select, sum, update,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteWritePostgres, PgExecutor,
@@ -65,7 +65,7 @@ mod order_search {
     pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub const ITEMS_COUNT: Field = Field::mapped("itemsCount", "items_count", FieldType::BigInt);
     pub const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
 
@@ -101,7 +101,7 @@ mod orders_table {
     pub const ID: Field = Field::new("id", FieldType::Uuid);
     pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
     pub const STATUS: Field = Field::new("status", FieldType::Enum(ORDER_STATUS));
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
     pub fn dataset() -> Dataset {
         Dataset::table("orders").fields([ID, USER_ID, STATUS, CREATED_AT])
@@ -132,7 +132,7 @@ mod events_table {
     pub const PAYLOAD: Field = Field::new("payload", FieldType::Jsonb)
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
     pub fn dataset() -> Dataset {
         Dataset::table("events").fields([ID, ORDER_ID, EVENT_TYPE, PAYLOAD, CREATED_AT])
@@ -164,10 +164,53 @@ mod withdrawals_table {
     pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&UINT_256));
     pub const WALLET_ADDRESS: Field =
         Field::mapped("walletAddress", "wallet_address", FieldType::Text);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
     pub fn dataset() -> Dataset {
         Dataset::table("withdrawals").fields([ID, USER_ID, AMOUNT, WALLET_ADDRESS, CREATED_AT])
+    }
+}
+
+mod pg_type_examples {
+    use super::*;
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const DISPLAY_NAME: Field = Field::mapped("displayName", "display_name", FieldType::Citext);
+    pub const PAYLOAD: Field = Field::new("payload", FieldType::Bytea);
+    pub const IP_ADDR: Field = Field::mapped("ipAddr", "ip_addr", FieldType::Inet);
+    pub const NETWORK: Field = Field::new("network", FieldType::Cidr);
+    pub const ACTIVE_WINDOW: Field = Field::mapped(
+        "activeWindow",
+        "active_window",
+        FieldType::Range(ElemType::Timestamptz),
+    );
+    pub const LOCAL_WINDOW: Field = Field::mapped(
+        "localWindow",
+        "local_window",
+        FieldType::Range(ElemType::Timestamp),
+    );
+    pub const BILLING_DATES: Field = Field::mapped(
+        "billingDates",
+        "billing_dates",
+        FieldType::Range(ElemType::Date),
+    );
+    pub const CREATED_LOCAL: Field =
+        Field::mapped("createdLocal", "created_local", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
+
+    pub fn dataset() -> Dataset {
+        Dataset::table("pg_type_examples").fields([
+            ID,
+            DISPLAY_NAME,
+            PAYLOAD,
+            IP_ADDR,
+            NETWORK,
+            ACTIVE_WINDOW,
+            LOCAL_WINDOW,
+            BILLING_DATES,
+            CREATED_LOCAL,
+            CREATED_AT,
+        ])
     }
 }
 
@@ -252,6 +295,63 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
         .fetch_one_as(&client)
         .await?;
     assert_eq!(row.amount, inserted);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PgTypeExample {
+        display_name: String,
+        payload: Vec<u8>,
+        ip_addr: String,
+        network: String,
+        active_window: String,
+        local_window: String,
+        billing_dates: String,
+        created_local: String,
+        created_at: String,
+    }
+
+    let rows: Vec<PgTypeExample> = select(pg_type_examples::dataset())
+        .fields([
+            pg_type_examples::DISPLAY_NAME,
+            pg_type_examples::PAYLOAD,
+            pg_type_examples::IP_ADDR,
+            pg_type_examples::NETWORK,
+            pg_type_examples::ACTIVE_WINDOW,
+            pg_type_examples::LOCAL_WINDOW,
+            pg_type_examples::BILLING_DATES,
+            pg_type_examples::CREATED_LOCAL,
+            pg_type_examples::CREATED_AT,
+        ])
+        .filter(all([
+            pg_type_examples::DISPLAY_NAME.eq("ada"),
+            pg_type_examples::PAYLOAD.eq(Value::bytes([0xde, 0xad, 0xbe, 0xef])),
+            pg_type_examples::NETWORK.contains("10.1.2.0/24"),
+            pg_type_examples::ACTIVE_WINDOW.overlaps("[2026-02-15T00:00:00Z,2026-02-20T00:00:00Z)"),
+            pg_type_examples::BILLING_DATES.contains("[2026-02-10,2026-02-11)"),
+        ]))
+        .fetch_as(&client)
+        .await?;
+
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.display_name, "Ada");
+    assert_eq!(row.payload, vec![0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(row.ip_addr, "10.1.2.3/32");
+    assert_eq!(row.network, "10.1.0.0/16");
+    assert!(row.active_window.contains("2026-02-01"));
+    assert!(row.local_window.contains("2026-02-01"));
+    assert_eq!(row.billing_dates, "[2026-02-01,2026-03-01)");
+    assert_eq!(row.created_local, "2026-02-01 12:30:00");
+    assert!(row.created_at.starts_with("2026-02-01T12:30:00"));
 
     Ok(())
 }

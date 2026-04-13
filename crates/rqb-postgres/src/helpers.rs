@@ -76,17 +76,24 @@ pub(crate) fn escape_like(value: &str) -> String {
 pub(crate) fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
     match field_type {
         FieldType::Uuid => Some("::text::uuid"),
-        FieldType::Timestamp => Some("::text::timestamptz"),
+        FieldType::Timestamp => Some("::text::timestamp"),
+        FieldType::Timestamptz => Some("::text::timestamptz"),
         FieldType::Date => Some("::text::date"),
         FieldType::Jsonb => Some("::jsonb"),
+        FieldType::Bytea => Some("::bytea"),
+        FieldType::Citext => Some("::text::citext"),
+        FieldType::Inet => Some("::text::inet"),
+        FieldType::Cidr => Some("::text::cidr"),
         FieldType::Array(ElemType::Text) => Some("::text[]"),
+        FieldType::Array(ElemType::Citext) => Some("::text[]::citext[]"),
         FieldType::Array(ElemType::Int) => Some("::bigint[]::int[]"),
         FieldType::Array(ElemType::BigInt) => Some("::bigint[]"),
         FieldType::Array(ElemType::Uuid) => Some("::text[]::uuid[]"),
         FieldType::Array(ElemType::Float) => Some("::double precision[]"),
         FieldType::Array(ElemType::Numeric) => Some("::numeric[]"),
         FieldType::Array(ElemType::Bool) => Some("::boolean[]"),
-        FieldType::Array(ElemType::Timestamp) => Some("::text[]::timestamptz[]"),
+        FieldType::Array(ElemType::Timestamp) => Some("::text[]::timestamp[]"),
+        FieldType::Array(ElemType::Timestamptz) => Some("::text[]::timestamptz[]"),
         FieldType::Array(ElemType::Date) => Some("::text[]::date[]"),
         FieldType::Integer => Some("::bigint::int"),
         FieldType::BigInt => Some("::bigint"),
@@ -96,6 +103,7 @@ pub(crate) fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
         | FieldType::Bool
         | FieldType::Custom(_)
         | FieldType::Enum(_)
+        | FieldType::Range(_)
         | FieldType::Array(ElemType::Enum(_)) => None,
     }
 }
@@ -105,6 +113,9 @@ pub(crate) fn postgres_cast_sql(field_type: FieldType) -> Option<String> {
         FieldType::Enum(enum_type) => Some(format!("::text::{}", quote_enum_type(enum_type))),
         FieldType::Array(ElemType::Enum(enum_type)) => {
             Some(format!("::text[]::{}[]", quote_enum_type(enum_type)))
+        }
+        FieldType::Range(elem_type) => {
+            Some(format!("::text::{}", FieldType::Range(elem_type).as_str()))
         }
         FieldType::Custom(type_spec) => {
             let cast_prefix = match type_spec.value_repr {
@@ -120,11 +131,19 @@ pub(crate) fn postgres_cast_sql(field_type: FieldType) -> Option<String> {
 pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static str> {
     match field_type {
         FieldType::Uuid => uuid_selection_cast(),
-        FieldType::Timestamp | FieldType::Date => chrono_selection_cast(),
+        FieldType::Timestamp => timestamp_selection_cast(),
+        FieldType::Timestamptz => timestamptz_selection_cast(),
+        FieldType::Date => chrono_selection_cast(),
+        FieldType::Citext | FieldType::Inet | FieldType::Cidr | FieldType::Range(_) => {
+            Some("::text")
+        }
         FieldType::Enum(_) => Some("::text"),
+        FieldType::Array(ElemType::Citext) => Some("::text[]"),
         FieldType::Array(ElemType::Enum(_)) => Some("::text[]"),
         FieldType::Numeric => Some("::text"),
         FieldType::Array(ElemType::Numeric) => Some("::text[]"),
+        FieldType::Array(ElemType::Timestamp) => timestamp_array_selection_cast(),
+        FieldType::Array(ElemType::Timestamptz) => timestamptz_array_selection_cast(),
         FieldType::Custom(type_spec) if type_spec.select_repr == SelectRepr::Text => Some("::text"),
         _ => None,
     }
@@ -150,9 +169,50 @@ fn chrono_selection_cast() -> Option<&'static str> {
     Some("::text")
 }
 
+#[cfg(feature = "with-chrono")]
+fn timestamp_selection_cast() -> Option<&'static str> {
+    None
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn timestamp_selection_cast() -> Option<&'static str> {
+    Some("::text")
+}
+
+#[cfg(feature = "with-chrono")]
+fn timestamptz_selection_cast() -> Option<&'static str> {
+    None
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn timestamptz_selection_cast() -> Option<&'static str> {
+    Some("::text")
+}
+
+#[cfg(feature = "with-chrono")]
+fn timestamp_array_selection_cast() -> Option<&'static str> {
+    None
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn timestamp_array_selection_cast() -> Option<&'static str> {
+    Some("::text[]")
+}
+
+#[cfg(feature = "with-chrono")]
+fn timestamptz_array_selection_cast() -> Option<&'static str> {
+    None
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn timestamptz_array_selection_cast() -> Option<&'static str> {
+    Some("::text[]")
+}
+
 pub(crate) fn array_element_field_type(field_type: FieldType) -> FieldType {
     match field_type {
         FieldType::Array(ElemType::Text) => FieldType::Text,
+        FieldType::Array(ElemType::Citext) => FieldType::Citext,
         FieldType::Array(ElemType::Int) => FieldType::Integer,
         FieldType::Array(ElemType::BigInt) => FieldType::BigInt,
         FieldType::Array(ElemType::Float) => FieldType::Float,
@@ -160,6 +220,7 @@ pub(crate) fn array_element_field_type(field_type: FieldType) -> FieldType {
         FieldType::Array(ElemType::Bool) => FieldType::Bool,
         FieldType::Array(ElemType::Uuid) => FieldType::Uuid,
         FieldType::Array(ElemType::Timestamp) => FieldType::Timestamp,
+        FieldType::Array(ElemType::Timestamptz) => FieldType::Timestamptz,
         FieldType::Array(ElemType::Date) => FieldType::Date,
         FieldType::Array(ElemType::Enum(enum_type)) => FieldType::Enum(enum_type),
         other => other,
@@ -173,6 +234,12 @@ pub(crate) fn value_to_json(value: &Value) -> Value {
         Value::I64(value) => Value::Json(serde_json::json!(value)),
         Value::F64(value) => Value::Json(serde_json::json!(value)),
         Value::String(value) => Value::Json(serde_json::Value::String(value.clone())),
+        Value::Bytes(value) => Value::Json(serde_json::Value::Array(
+            value
+                .iter()
+                .map(|byte| serde_json::Value::Number((*byte).into()))
+                .collect(),
+        )),
         Value::Array(values) => Value::Json(serde_json::Value::Array(
             values
                 .iter()

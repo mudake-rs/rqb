@@ -104,6 +104,12 @@ impl Renderer {
                 }
                 self.sql.push_str(" IS NOT NULL");
             }
+            Contains if field.ty.is_range() || field.ty.is_network() => {
+                self.render_contains(field, value, false)
+            }
+            NotContains if field.ty.is_range() || field.ty.is_network() => {
+                self.render_contains(field, value, true)
+            }
             Contains => self.render_like(field, value, "%", "%", false),
             NotContains => self.render_like(field, value, "%", "%", true),
             StartsWith => self.render_like(field, value, "", "%", false),
@@ -174,6 +180,8 @@ impl Renderer {
                 self.sql.push_str(" ?& ");
                 self.push_typed_param(value, FieldType::Array(ElemType::Text));
             }
+            ContainedBy => self.render_contained_by(field, value),
+            Overlaps => self.render_overlaps(field, value),
             Regex => {
                 self.render_text_target(field);
                 self.sql.push_str(" ~* ");
@@ -224,6 +232,38 @@ impl Renderer {
         let pattern = format!("{prefix}{}{suffix}", escape_like(text));
         self.push_param(&Value::String(pattern));
         self.sql.push_str(" ESCAPE '\\'");
+    }
+
+    fn render_contains(&mut self, field: &ResolvedField, value: &Value, negate: bool) {
+        if negate {
+            self.sql.push_str("NOT (");
+        }
+        self.render_column_name(field);
+        if field.ty.is_network() {
+            self.sql.push_str(" >>= ");
+        } else {
+            self.sql.push_str(" @> ");
+        }
+        self.push_typed_param(value, field.ty);
+        if negate {
+            self.sql.push(')');
+        }
+    }
+
+    fn render_contained_by(&mut self, field: &ResolvedField, value: &Value) {
+        self.render_column_name(field);
+        if field.ty.is_network() {
+            self.sql.push_str(" <<= ");
+        } else {
+            self.sql.push_str(" <@ ");
+        }
+        self.push_typed_param(value, field.ty);
+    }
+
+    fn render_overlaps(&mut self, field: &ResolvedField, value: &Value) {
+        self.render_column_name(field);
+        self.sql.push_str(" && ");
+        self.push_typed_param(value, field.ty);
     }
 
     fn render_binary(&mut self, field: &ResolvedField, op: &str, value: &Value) {

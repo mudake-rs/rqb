@@ -42,7 +42,9 @@ Remaining work before beta:
 - richer per-domain validation rules beyond decimal shape
 - serde-friendly generated Rust newtypes for common exact domains
 - exact aggregate output for `sum` / `avg` when the result is numeric
-- library-owned extension types such as `citext`, `inet`, `ltree`, ranges, and `pgvector`
+- richer range/network operator coverage beyond `contains`, `contained_by`, and `overlaps`
+- library-owned extension types such as `ltree`, `hstore`, `macaddr`, `bit`/`varbit`, and interval
+- `pgvector` and PostGIS through `TypeSpec`/custom operator metadata rather than a large hardcoded surface
 
 The BFM `uint_256` domain is the reference use case for this work.
 

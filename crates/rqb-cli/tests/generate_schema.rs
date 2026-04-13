@@ -40,6 +40,23 @@ fn checked_in_golden_schema_compiles_and_exposes_expected_metadata() {
             .any(|field| field.api_name == "totalCents")
     );
 
+    let pg_types = golden_schema::pg_type_examples::dataset();
+    assert!(pg_types.fields.iter().any(|field| {
+        field.api_name == "displayName" && field.ty == rqb::prelude::FieldType::Citext
+    }));
+    assert!(
+        pg_types
+            .fields
+            .iter()
+            .any(|field| field.api_name == "payload" && field.ty == rqb::prelude::FieldType::Bytea)
+    );
+    assert!(
+        pg_types
+            .fields
+            .iter()
+            .any(|field| field.api_name == "ipAddr" && field.ty == rqb::prelude::FieldType::Inet)
+    );
+
     let user = golden_schema::app_users::table().alias("u");
     assert_eq!(user.email().display_name(), "u.email");
 }

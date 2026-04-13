@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::dataset::Dataset;
 use crate::error::{Error, Result};
-use crate::field::Field;
+use crate::field::{Field, FieldType};
 use crate::value::Value;
 
 pub fn fields_from_serializable<T>(dataset: &Dataset, record: &T) -> Result<Vec<(Field, Value)>>
@@ -28,9 +28,27 @@ where
                     dataset: dataset.api_name.clone(),
                     field: key.clone(),
                 })?;
-            Ok((field, json_to_value(value.clone())))
+            Ok((field, json_to_field_value(field, value.clone())))
         })
         .collect()
+}
+
+fn json_to_field_value(field: Field, value: serde_json::Value) -> Value {
+    if field.ty == FieldType::Bytea
+        && let Some(bytes) = json_array_to_bytes(&value)
+    {
+        return Value::Bytes(bytes);
+    }
+    json_to_value(value)
+}
+
+fn json_array_to_bytes(value: &serde_json::Value) -> Option<Vec<u8>> {
+    value.as_array().and_then(|values| {
+        values
+            .iter()
+            .map(|value| value.as_u64().and_then(|value| u8::try_from(value).ok()))
+            .collect()
+    })
 }
 
 fn json_to_value(value: serde_json::Value) -> Value {
@@ -119,5 +137,24 @@ mod tests {
         let fields = fields_from_serializable(&dataset, &Record { amount: u64::MAX }).unwrap();
 
         assert_eq!(fields[0].1, Value::String(u64::MAX.to_string()));
+    }
+
+    #[test]
+    fn maps_byte_arrays_for_bytea_fields() {
+        #[derive(Serialize)]
+        struct Record {
+            payload: Vec<u8>,
+        }
+
+        let dataset = Dataset::table("events").field(Field::new("payload", FieldType::Bytea));
+        let fields = fields_from_serializable(
+            &dataset,
+            &Record {
+                payload: vec![0xde, 0xad, 0xbe, 0xef],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(fields[0].1, Value::Bytes(vec![0xde, 0xad, 0xbe, 0xef]));
     }
 }

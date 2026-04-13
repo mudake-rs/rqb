@@ -19,9 +19,15 @@ pub fn row_to_json(row: &Row, columns: &[SelectColumn]) -> Result<JsonValue> {
 
 fn field_to_json(row: &Row, alias: &str, field_type: FieldType) -> Result<JsonValue> {
     match field_type {
-        FieldType::Text | FieldType::Enum(_) => read_scalar(row, alias, JsonValue::String),
+        FieldType::Text
+        | FieldType::Citext
+        | FieldType::Inet
+        | FieldType::Cidr
+        | FieldType::Range(_)
+        | FieldType::Enum(_) => read_scalar(row, alias, JsonValue::String),
         FieldType::Uuid => uuid_to_json(row, alias),
         FieldType::Timestamp => timestamp_to_json(row, alias),
+        FieldType::Timestamptz => timestamptz_to_json(row, alias),
         FieldType::Date => date_to_json(row, alias),
         FieldType::Integer => read_scalar(row, alias, |value: i32| {
             JsonValue::Number(Number::from(value))
@@ -33,6 +39,7 @@ fn field_to_json(row: &Row, alias: &str, field_type: FieldType) -> Result<JsonVa
         FieldType::Numeric => read_scalar(row, alias, JsonValue::String),
         FieldType::Bool => read_scalar(row, alias, JsonValue::Bool),
         FieldType::Jsonb => read_scalar(row, alias, |value| value),
+        FieldType::Bytea => read_scalar(row, alias, bytes_to_json),
         FieldType::Custom(type_spec) => custom_field_to_json(row, alias, *type_spec),
         FieldType::Array(elem_type) => array_to_json(row, alias, elem_type),
     }
@@ -48,12 +55,17 @@ fn custom_field_to_json(
     }
 
     match type_spec.family {
-        TypeFamily::Text | TypeFamily::Uuid | TypeFamily::Timestamp | TypeFamily::Date => {
-            read_scalar(row, alias, JsonValue::String)
-        }
+        TypeFamily::Text
+        | TypeFamily::Uuid
+        | TypeFamily::Timestamp
+        | TypeFamily::Timestamptz
+        | TypeFamily::Date
+        | TypeFamily::Network
+        | TypeFamily::Range => read_scalar(row, alias, JsonValue::String),
         TypeFamily::Numeric => read_scalar(row, alias, JsonValue::String),
         TypeFamily::Bool => read_scalar(row, alias, JsonValue::Bool),
         TypeFamily::Jsonb => read_scalar(row, alias, |value| value),
+        TypeFamily::Bytes => read_scalar(row, alias, bytes_to_json),
     }
 }
 
@@ -73,9 +85,12 @@ fn aggregate_to_json(row: &Row, alias: &str, ty: &AggregateType) -> Result<JsonV
 
 fn array_to_json(row: &Row, alias: &str, elem_type: ElemType) -> Result<JsonValue> {
     match elem_type {
-        ElemType::Text | ElemType::Enum(_) => read_array(row, alias, JsonValue::String),
+        ElemType::Text | ElemType::Citext | ElemType::Enum(_) => {
+            read_array(row, alias, JsonValue::String)
+        }
         ElemType::Uuid => uuid_array_to_json(row, alias),
         ElemType::Timestamp => timestamp_array_to_json(row, alias),
+        ElemType::Timestamptz => timestamptz_array_to_json(row, alias),
         ElemType::Date => date_array_to_json(row, alias),
         ElemType::Int => read_array(row, alias, |value: i32| {
             JsonValue::Number(Number::from(value))
@@ -87,6 +102,15 @@ fn array_to_json(row: &Row, alias: &str, elem_type: ElemType) -> Result<JsonValu
         ElemType::Numeric => read_array(row, alias, JsonValue::String),
         ElemType::Bool => read_array(row, alias, JsonValue::Bool),
     }
+}
+
+fn bytes_to_json(value: Vec<u8>) -> JsonValue {
+    JsonValue::Array(
+        value
+            .into_iter()
+            .map(|byte| JsonValue::Number(Number::from(byte)))
+            .collect(),
+    )
 }
 
 fn read_scalar<T, F>(row: &Row, alias: &str, to_json: F) -> Result<JsonValue>
@@ -145,8 +169,8 @@ fn uuid_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
 
 #[cfg(feature = "with-chrono")]
 fn timestamp_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
-    read_scalar(row, alias, |value: chrono::DateTime<chrono::Utc>| {
-        JsonValue::String(value.to_rfc3339())
+    read_scalar(row, alias, |value: chrono::NaiveDateTime| {
+        JsonValue::String(value.to_string())
     })
 }
 
@@ -157,13 +181,37 @@ fn timestamp_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
 
 #[cfg(feature = "with-chrono")]
 fn timestamp_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
+    read_array(row, alias, |value: chrono::NaiveDateTime| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn timestamp_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
+    read_array(row, alias, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn timestamptz_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
+    read_scalar(row, alias, |value: chrono::DateTime<chrono::Utc>| {
+        JsonValue::String(value.to_rfc3339())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn timestamptz_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
+    read_scalar(row, alias, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn timestamptz_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
     read_array(row, alias, |value: chrono::DateTime<chrono::Utc>| {
         JsonValue::String(value.to_rfc3339())
     })
 }
 
 #[cfg(not(feature = "with-chrono"))]
-fn timestamp_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
+fn timestamptz_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
     read_array(row, alias, JsonValue::String)
 }
 

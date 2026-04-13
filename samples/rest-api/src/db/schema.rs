@@ -135,7 +135,7 @@ pub mod app_users {
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
     pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub fn dataset() -> Dataset {
         Dataset::table("app_users").fields([
             ID,
@@ -183,7 +183,7 @@ pub mod events {
     pub const PAYLOAD: Field = Field::new("payload", FieldType::Jsonb)
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub fn dataset() -> Dataset {
         Dataset::table("events").fields([ID, ORDER_ID, EVENT_TYPE, PAYLOAD, CREATED_AT])
     }
@@ -273,7 +273,7 @@ pub mod order_search_view {
     pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub const ITEMS_COUNT: Field = Field::mapped("itemsCount", "items_count", FieldType::BigInt);
     pub const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
     pub fn dataset() -> Dataset {
@@ -347,7 +347,7 @@ pub mod orders {
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
     pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub fn dataset() -> Dataset {
         Dataset::table("orders").fields([
             ID,
@@ -399,7 +399,7 @@ pub mod organizations {
     pub const SETTINGS: Field = Field::new("settings", FieldType::Jsonb)
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub fn dataset() -> Dataset {
         Dataset::table("organizations").fields([ID, SLUG, NAME, SETTINGS, CREATED_AT])
     }
@@ -435,7 +435,7 @@ pub mod products {
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
     pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
-    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub fn dataset() -> Dataset {
         Dataset::table("products").fields([
             ID,

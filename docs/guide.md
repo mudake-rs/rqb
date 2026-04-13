@@ -380,9 +380,10 @@ Aggregate modifiers such as `filter_agg` and `order_within` validate the aggrega
 | `between`, `not_between` | range comparison | numeric, temporal, text, enum, numeric JSON paths |
 | `is_in`, `not_in` | `IN (...)`, `NOT IN (...)` | scalar, enum |
 | `in_subquery`, `not_in_subquery` | `IN (SELECT ...)`, `NOT IN (SELECT ...)` | scalar, enum |
-| `contains`, `not_contains`, `starts_with`, `ends_with` | `ILIKE` | text, uuid, JSON paths |
+| `contains`, `not_contains`, `starts_with`, `ends_with` | `ILIKE`; range/network containment for `contains` | text, uuid, JSON paths, ranges, inet/cidr |
 | `not_starts_with`, `not_ends_with` | negated `ILIKE` | text, uuid, JSON paths |
-| `regex`, `not_regex` | `~*`, `!~*` | text, uuid, JSON paths |
+| `regex`, `not_regex` | `~*`, `!~*` | text, JSON paths |
+| `contained_by`, `overlaps` | `<@` / `&&`; network uses `<<=` / `&&` | ranges, inet/cidr |
 | `has`, `not_has` | element `= ANY(array)` | arrays |
 | `contains_any`, `contains_all` | `&&`, `@>` | arrays |
 | `is_empty`, `is_not_empty` | `cardinality(...)` | arrays |
@@ -405,12 +406,13 @@ JSON path comparisons use `#>` for JSON equality and `#>>` for text/numeric oper
 | integer types | `I64` | bigint, int |
 | `f32`, `f64` | `F64` | double precision, numeric |
 | exact numeric strings | `String` | numeric and numeric-like domains |
+| `Value::bytes(...)`, `&[u8]` | `Bytes` | bytea |
 | `bool` | `Bool` | boolean |
 | `serde_json::Value` | `Json` | jsonb |
 | `Vec<T>`, `[T; N]` | `Array` | array casts from field type |
 | Rust enums implementing `DbEnum` | `String` | Postgres enum casts |
 
-UUID, timestamp, date, and enum inputs can be strings. With `with-uuid` and `with-chrono`, `uuid::Uuid`, `chrono::NaiveDate`, and `chrono::DateTime<Tz>` can be passed directly. The renderer adds Postgres casts from the `FieldType`.
+UUID, timestamp, timestamptz, date, and enum inputs can be strings. With `with-uuid` and `with-chrono`, `uuid::Uuid`, `chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::DateTime<Tz>` can be passed directly. The renderer adds Postgres casts from the `FieldType`.
 
 ### Output
 
@@ -418,13 +420,15 @@ UUID, timestamp, date, and enum inputs can be strings. With `with-uuid` and `wit
 
 | `FieldType` | JSON value | Struct field |
 | --- | --- | --- |
-| `Text`, `Uuid`, `Timestamp`, `Date`, `Enum` | string | `String`, `uuid::Uuid`, chrono types with serde |
+| `Text`, `Citext`, `Uuid`, `Timestamp`, `Timestamptz`, `Date`, `Enum` | string | `String`, `uuid::Uuid`, chrono types with serde |
 | `Integer` | number | `i32` |
 | `BigInt` | number | `i64` |
 | `Float` | number | `f64` |
 | `Numeric` | string | `String` or an exact decimal wrapper |
 | `Bool` | boolean | `bool` |
 | `Jsonb` | JSON value | nested struct or `serde_json::Value` |
+| `Bytea` | byte array | `Vec<u8>` |
+| `Inet`, `Cidr`, `Range(elem)` | string | `String` or a serde-compatible newtype |
 | `Custom(TypeSpec)` with `SelectRepr::Text` | string | `String` or a serde-compatible newtype |
 | `Array(elem)` | JSON array | `Vec<T>` |
 

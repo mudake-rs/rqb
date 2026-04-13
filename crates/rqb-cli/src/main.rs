@@ -588,6 +588,7 @@ fn field_type_tokens(field_type: &ColumnType) -> proc_macro2::TokenStream {
 fn core_field_type_tokens(field_type: FieldType) -> proc_macro2::TokenStream {
     match field_type {
         FieldType::Text => quote! { FieldType::Text },
+        FieldType::Citext => quote! { FieldType::Citext },
         FieldType::Integer => quote! { FieldType::Integer },
         FieldType::BigInt => quote! { FieldType::BigInt },
         FieldType::Float => quote! { FieldType::Float },
@@ -595,9 +596,17 @@ fn core_field_type_tokens(field_type: FieldType) -> proc_macro2::TokenStream {
         FieldType::Bool => quote! { FieldType::Bool },
         FieldType::Uuid => quote! { FieldType::Uuid },
         FieldType::Timestamp => quote! { FieldType::Timestamp },
+        FieldType::Timestamptz => quote! { FieldType::Timestamptz },
         FieldType::Date => quote! { FieldType::Date },
         FieldType::Jsonb => quote! { FieldType::Jsonb },
+        FieldType::Bytea => quote! { FieldType::Bytea },
+        FieldType::Inet => quote! { FieldType::Inet },
+        FieldType::Cidr => quote! { FieldType::Cidr },
         FieldType::Custom(_) => unreachable!("custom types are rendered from ColumnType::Domain"),
+        FieldType::Range(elem_type) => {
+            let elem_type = elem_type_tokens(elem_type);
+            quote! { FieldType::Range(#elem_type) }
+        }
         FieldType::Array(elem_type) => {
             let elem_type = elem_type_tokens(elem_type);
             quote! { FieldType::Array(#elem_type) }
@@ -609,6 +618,7 @@ fn core_field_type_tokens(field_type: FieldType) -> proc_macro2::TokenStream {
 fn elem_type_tokens(elem_type: ElemType) -> proc_macro2::TokenStream {
     match elem_type {
         ElemType::Text => quote! { ElemType::Text },
+        ElemType::Citext => quote! { ElemType::Citext },
         ElemType::Int => quote! { ElemType::Int },
         ElemType::BigInt => quote! { ElemType::BigInt },
         ElemType::Float => quote! { ElemType::Float },
@@ -616,6 +626,7 @@ fn elem_type_tokens(elem_type: ElemType) -> proc_macro2::TokenStream {
         ElemType::Bool => quote! { ElemType::Bool },
         ElemType::Uuid => quote! { ElemType::Uuid },
         ElemType::Timestamp => quote! { ElemType::Timestamp },
+        ElemType::Timestamptz => quote! { ElemType::Timestamptz },
         ElemType::Date => quote! { ElemType::Date },
         ElemType::Enum(_) => {
             unreachable!("enum element types are rendered from ColumnType::ArrayEnum")
@@ -651,23 +662,36 @@ fn map_field_type(
     }
 
     ColumnType::Core(match (data_type, udt_name) {
-        ("ARRAY", "_text" | "_varchar" | "_citext") => FieldType::Array(ElemType::Text),
+        ("ARRAY", "_text" | "_varchar") => FieldType::Array(ElemType::Text),
+        ("ARRAY", "_citext") => FieldType::Array(ElemType::Citext),
         ("ARRAY", "_int2" | "_int4") => FieldType::Array(ElemType::Int),
         ("ARRAY", "_int8") => FieldType::Array(ElemType::BigInt),
         ("ARRAY", "_float4" | "_float8") => FieldType::Array(ElemType::Float),
         ("ARRAY", "_numeric") => FieldType::Array(ElemType::Numeric),
         ("ARRAY", "_bool") => FieldType::Array(ElemType::Bool),
         ("ARRAY", "_uuid") => FieldType::Array(ElemType::Uuid),
-        ("ARRAY", "_timestamp" | "_timestamptz") => FieldType::Array(ElemType::Timestamp),
+        ("ARRAY", "_timestamp") => FieldType::Array(ElemType::Timestamp),
+        ("ARRAY", "_timestamptz") => FieldType::Array(ElemType::Timestamptz),
         ("ARRAY", "_date") => FieldType::Array(ElemType::Date),
+        (_, "int4range") => FieldType::Range(ElemType::Int),
+        (_, "int8range") => FieldType::Range(ElemType::BigInt),
+        (_, "numrange") => FieldType::Range(ElemType::Numeric),
+        (_, "tsrange") => FieldType::Range(ElemType::Timestamp),
+        (_, "tstzrange") => FieldType::Range(ElemType::Timestamptz),
+        (_, "daterange") => FieldType::Range(ElemType::Date),
         (_, "uuid") => FieldType::Uuid,
         (_, "bool") => FieldType::Bool,
+        (_, "bytea") => FieldType::Bytea,
+        (_, "citext") => FieldType::Citext,
+        (_, "inet") => FieldType::Inet,
+        (_, "cidr") => FieldType::Cidr,
         (_, "int2" | "int4") => FieldType::Integer,
         (_, "int8") => FieldType::BigInt,
         (_, "float4" | "float8") => FieldType::Float,
         (_, "numeric") => FieldType::Numeric,
         (_, "date") => FieldType::Date,
-        (_, "timestamp" | "timestamptz") => FieldType::Timestamp,
+        (_, "timestamp") => FieldType::Timestamp,
+        (_, "timestamptz") => FieldType::Timestamptz,
         (_, "json" | "jsonb") => FieldType::Jsonb,
         _ => FieldType::Text,
     })
@@ -679,8 +703,14 @@ fn type_family_for_udt(udt_name: &str) -> TypeFamily {
         "int2" | "int4" | "int8" | "float4" | "float8" | "numeric" => TypeFamily::Numeric,
         "uuid" => TypeFamily::Uuid,
         "date" => TypeFamily::Date,
-        "timestamp" | "timestamptz" => TypeFamily::Timestamp,
+        "timestamp" => TypeFamily::Timestamp,
+        "timestamptz" => TypeFamily::Timestamptz,
         "json" | "jsonb" => TypeFamily::Jsonb,
+        "bytea" => TypeFamily::Bytes,
+        "inet" | "cidr" => TypeFamily::Network,
+        "int4range" | "int8range" | "numrange" | "tsrange" | "tstzrange" | "daterange" => {
+            TypeFamily::Range
+        }
         _ => TypeFamily::Text,
     }
 }
@@ -688,10 +718,14 @@ fn type_family_for_udt(udt_name: &str) -> TypeFamily {
 fn value_repr_for_family(family: TypeFamily) -> ValueRepr {
     match family {
         TypeFamily::Numeric => ValueRepr::DecimalString,
-        TypeFamily::Bool | TypeFamily::Jsonb => ValueRepr::Native,
-        TypeFamily::Text | TypeFamily::Uuid | TypeFamily::Timestamp | TypeFamily::Date => {
-            ValueRepr::String
-        }
+        TypeFamily::Bool | TypeFamily::Jsonb | TypeFamily::Bytes => ValueRepr::Native,
+        TypeFamily::Text
+        | TypeFamily::Uuid
+        | TypeFamily::Timestamp
+        | TypeFamily::Timestamptz
+        | TypeFamily::Date
+        | TypeFamily::Network
+        | TypeFamily::Range => ValueRepr::String,
     }
 }
 
@@ -702,8 +736,12 @@ fn type_family_tokens(family: TypeFamily) -> proc_macro2::TokenStream {
         TypeFamily::Bool => quote! { TypeFamily::Bool },
         TypeFamily::Uuid => quote! { TypeFamily::Uuid },
         TypeFamily::Timestamp => quote! { TypeFamily::Timestamp },
+        TypeFamily::Timestamptz => quote! { TypeFamily::Timestamptz },
         TypeFamily::Date => quote! { TypeFamily::Date },
         TypeFamily::Jsonb => quote! { TypeFamily::Jsonb },
+        TypeFamily::Bytes => quote! { TypeFamily::Bytes },
+        TypeFamily::Network => quote! { TypeFamily::Network },
+        TypeFamily::Range => quote! { TypeFamily::Range },
     }
 }
 
@@ -853,7 +891,7 @@ mod tests {
         for (udt_name, expected) in [
             ("_text", ElemType::Text),
             ("_varchar", ElemType::Text),
-            ("_citext", ElemType::Text),
+            ("_citext", ElemType::Citext),
             ("_int2", ElemType::Int),
             ("_int4", ElemType::Int),
             ("_int8", ElemType::BigInt),
@@ -863,7 +901,7 @@ mod tests {
             ("_bool", ElemType::Bool),
             ("_uuid", ElemType::Uuid),
             ("_timestamp", ElemType::Timestamp),
-            ("_timestamptz", ElemType::Timestamp),
+            ("_timestamptz", ElemType::Timestamptz),
             ("_date", ElemType::Date),
         ] {
             assert!(
@@ -912,8 +950,24 @@ mod tests {
                 &BTreeMap::new(),
                 &BTreeMap::new()
             ),
-            ColumnType::Core(FieldType::Timestamp)
+            ColumnType::Core(FieldType::Timestamptz)
         ));
+        for (udt_name, expected) in [
+            ("bytea", FieldType::Bytea),
+            ("citext", FieldType::Citext),
+            ("inet", FieldType::Inet),
+            ("cidr", FieldType::Cidr),
+            ("int4range", FieldType::Range(ElemType::Int)),
+            ("tstzrange", FieldType::Range(ElemType::Timestamptz)),
+        ] {
+            assert!(
+                matches!(
+                    map_field_type("USER-DEFINED", udt_name, None, None, &BTreeMap::new(), &BTreeMap::new()),
+                    ColumnType::Core(actual) if actual == expected
+                ),
+                "{udt_name} should map to {expected:?}"
+            );
+        }
         assert!(matches!(
             map_field_type(
                 "unknown",

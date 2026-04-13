@@ -40,6 +40,7 @@ fn dataset() -> Dataset {
     Dataset::table("assets").fields([
         Field::new("id", FieldType::Uuid),
         Field::new("name", FieldType::Text).text_search("english"),
+        Field::mapped("displayName", "display_name", FieldType::Citext),
         Field::new("state", FieldType::Enum(<AssetState as DbEnum>::TYPE)),
         Field::mapped(
             "stateHistory",
@@ -54,6 +55,15 @@ fn dataset() -> Dataset {
         Field::mapped("uintAmount", "uint_amount", FieldType::Custom(&UINT_256)),
         Field::new("active", FieldType::Bool),
         Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+        Field::mapped("observedAt", "observed_at", FieldType::Timestamptz),
+        Field::new("payload", FieldType::Bytea),
+        Field::mapped("ipAddr", "ip_addr", FieldType::Inet),
+        Field::new("network", FieldType::Cidr),
+        Field::mapped(
+            "activeWindow",
+            "active_window",
+            FieldType::Range(ElemType::Timestamptz),
+        ),
         Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false),
         Field::new("strictProperties", FieldType::Jsonb).sortable(false),
         Field::new("properties", FieldType::Jsonb)
@@ -143,10 +153,26 @@ fn accepts_between_on_numeric_and_temporal_fields() {
     for expr in [
         field("score").between(1, 10),
         field("createdAt").between("2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"),
+        field("observedAt").between("2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"),
     ] {
         let query = crate::select(dataset()).filter(expr).build();
         ValidatedSelect::new(query).unwrap();
     }
+}
+
+#[test]
+fn accepts_native_postgres_type_values_and_operators() {
+    let query = crate::select(dataset())
+        .filter(crate::all([
+            field("displayName").eq("Ada"),
+            field("payload").eq(Value::bytes([0xde, 0xad])),
+            field("ipAddr").contained_by("10.0.0.0/8"),
+            field("network").contains("10.1.2.0/24"),
+            field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
+        ]))
+        .build();
+
+    ValidatedSelect::new(query).unwrap();
 }
 
 #[test]
@@ -235,6 +261,19 @@ fn rejects_not_contains_on_non_text_fields() {
     assert!(matches!(
         err,
         Error::UnsupportedOperator { operator, .. } if operator == "notContains"
+    ));
+}
+
+#[test]
+fn rejects_range_and_network_operators_on_other_fields() {
+    let query = crate::select(dataset())
+        .filter(field("name").overlaps("x"))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::UnsupportedOperator { field, operator, .. }
+            if field == "name" && operator == "overlaps"
     ));
 }
 
@@ -553,6 +592,26 @@ fn rejects_scalar_values_that_do_not_match_field_types() {
             field("createdAt").eq(42),
             "createdAt",
             "expected timestamp string, got i64",
+        ),
+        (
+            field("observedAt").eq(42),
+            "observedAt",
+            "expected timestamptz string, got i64",
+        ),
+        (
+            field("payload").eq("deadbeef"),
+            "payload",
+            "expected bytes, got string",
+        ),
+        (
+            field("ipAddr").eq(42),
+            "ipAddr",
+            "expected network string, got i64",
+        ),
+        (
+            field("activeWindow").eq(42),
+            "activeWindow",
+            "expected range literal string, got i64",
         ),
     ] {
         let query = crate::select(dataset()).filter(expr).build();

@@ -9,6 +9,7 @@ pub enum Value {
     I64(i64),
     F64(f64),
     String(String),
+    Bytes(Vec<u8>),
     Array(Vec<Value>),
     Json(serde_json::Value),
 }
@@ -67,7 +68,7 @@ impl Value {
     pub fn is_scalar(&self) -> bool {
         matches!(
             self,
-            Self::Bool(_) | Self::I64(_) | Self::F64(_) | Self::String(_)
+            Self::Bool(_) | Self::I64(_) | Self::F64(_) | Self::String(_) | Self::Bytes(_)
         )
     }
 
@@ -79,6 +80,10 @@ impl Value {
         matches!(self, Self::Array(_))
     }
 
+    pub fn bytes(value: impl Into<Vec<u8>>) -> Self {
+        Self::Bytes(value.into())
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self {
             Self::Null => "null",
@@ -86,6 +91,7 @@ impl Value {
             Self::I64(_) => "i64",
             Self::F64(_) => "f64",
             Self::String(_) => "string",
+            Self::Bytes(_) => "bytes",
             Self::Array(_) => "array",
             Self::Json(_) => "json",
         }
@@ -119,6 +125,18 @@ impl From<String> for Value {
     }
 }
 
+impl From<&[u8]> for Value {
+    fn from(value: &[u8]) -> Self {
+        Self::Bytes(value.to_vec())
+    }
+}
+
+impl<const N: usize> From<&[u8; N]> for Value {
+    fn from(value: &[u8; N]) -> Self {
+        Self::Bytes(value.to_vec())
+    }
+}
+
 #[cfg(feature = "with-uuid")]
 impl From<uuid::Uuid> for Value {
     fn from(value: uuid::Uuid) -> Self {
@@ -143,6 +161,20 @@ impl From<chrono::NaiveDate> for Value {
 #[cfg(feature = "with-chrono")]
 impl From<&chrono::NaiveDate> for Value {
     fn from(value: &chrono::NaiveDate) -> Self {
+        Self::String(value.to_string())
+    }
+}
+
+#[cfg(feature = "with-chrono")]
+impl From<chrono::NaiveDateTime> for Value {
+    fn from(value: chrono::NaiveDateTime) -> Self {
+        Self::String(value.to_string())
+    }
+}
+
+#[cfg(feature = "with-chrono")]
+impl From<&chrono::NaiveDateTime> for Value {
+    fn from(value: &chrono::NaiveDateTime) -> Self {
         Self::String(value.to_string())
     }
 }
@@ -233,8 +265,10 @@ mod tests {
     fn value_type_helpers_describe_runtime_shape() {
         assert!(Value::Null.is_null());
         assert!(Value::Bool(true).is_scalar());
+        assert!(Value::Bytes(vec![1, 2, 3]).is_scalar());
         assert!(Value::I64(1).is_number());
         assert!(Value::Array(vec![]).is_array());
+        assert_eq!(Value::bytes([1, 2, 3]), Value::Bytes(vec![1, 2, 3]));
         assert_eq!(Value::Json(serde_json::json!({})).type_name(), "json");
     }
 
@@ -251,9 +285,14 @@ mod tests {
     #[test]
     fn chrono_values_convert_to_wire_strings() {
         let date = chrono::NaiveDate::from_ymd_opt(2026, 4, 12).unwrap();
+        let local_timestamp = date.and_hms_opt(10, 30, 0).unwrap();
         let timestamp = chrono::DateTime::parse_from_rfc3339("2026-04-12T10:30:00Z").unwrap();
 
         assert_eq!(Value::from(date), Value::String("2026-04-12".to_owned()));
+        assert_eq!(
+            Value::from(local_timestamp),
+            Value::String("2026-04-12 10:30:00".to_owned())
+        );
         assert_eq!(
             Value::from(timestamp),
             Value::String("2026-04-12T10:30:00+00:00".to_owned())

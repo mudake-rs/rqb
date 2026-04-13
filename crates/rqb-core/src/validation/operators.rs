@@ -108,9 +108,21 @@ pub(super) fn validate_operator(
         }
         Contains | NotContains | StartsWith | EndsWith | NotStartsWith | NotEndsWith => {
             require_string(field, operator, value)?;
+            if matches!(operator, Contains | NotContains)
+                && (field.ty.is_range() || field.ty.is_network())
+            {
+                return validate_value_for_field_type(field, operator.as_str(), value);
+            }
             if !(field.ty.is_text() || field.ty == FieldType::Uuid || field.is_json_path()) {
                 return unsupported(field, operator);
             }
+        }
+        ContainedBy | Overlaps => {
+            require_string(field, operator, value)?;
+            if !(field.ty.is_range() || field.ty.is_network()) {
+                return unsupported(field, operator);
+            }
+            validate_value_for_field_type(field, operator.as_str(), value)?;
         }
         Regex | NotRegex => {
             require_string(field, operator, value)?;
@@ -286,6 +298,9 @@ fn require_value_for_field_type(
         FieldType::Text => require_value_shape(field, operator, value, "string", |value| {
             matches!(value, Value::String(_))
         }),
+        FieldType::Citext => require_value_shape(field, operator, value, "string", |value| {
+            matches!(value, Value::String(_))
+        }),
         FieldType::Integer | FieldType::BigInt => {
             require_value_shape(field, operator, value, "integer", |value| {
                 matches!(value, Value::I64(_))
@@ -310,6 +325,11 @@ fn require_value_for_field_type(
                 matches!(value, Value::String(_))
             })
         }
+        FieldType::Timestamptz => {
+            require_value_shape(field, operator, value, "timestamptz string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
         FieldType::Date => require_value_shape(field, operator, value, "date string", |value| {
             matches!(value, Value::String(_))
         }),
@@ -325,12 +345,21 @@ fn require_value_for_field_type(
                 })
             }
         }
+        FieldType::Bytea => require_value_shape(field, operator, value, "bytes", |value| {
+            matches!(value, Value::Bytes(_))
+        }),
+        FieldType::Inet | FieldType::Cidr => {
+            require_value_shape(field, operator, value, "network string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
         FieldType::Enum(enum_type) => {
             require_enum_scalar_by_name(field, operator, enum_type, value)
         }
         FieldType::Custom(type_spec) => {
             require_value_for_type_spec(field, operator, *type_spec, value)
         }
+        FieldType::Range(elem_type) => require_range_value(field, operator, elem_type, value),
         FieldType::Array(elem_type) => {
             let Value::Array(values) = value else {
                 return Err(Error::InvalidValue {
@@ -392,6 +421,11 @@ fn require_value_for_type_spec(
                     matches!(value, Value::String(_))
                 })
             }
+            TypeFamily::Timestamptz => {
+                require_value_shape(field, operator, value, "timestamptz string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
             TypeFamily::Date => {
                 require_value_shape(field, operator, value, "date string", |value| {
                     matches!(value, Value::String(_))
@@ -412,8 +446,46 @@ fn require_value_for_type_spec(
                     })
                 }
             }
+            TypeFamily::Bytes => require_value_shape(field, operator, value, "bytes", |value| {
+                matches!(value, Value::Bytes(_))
+            }),
+            TypeFamily::Network | TypeFamily::Range => {
+                require_value_shape(field, operator, value, "string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
         },
     }
+}
+
+fn require_range_value(
+    field: &ResolvedField,
+    operator: &str,
+    elem_type: ElemType,
+    value: &Value,
+) -> Result<()> {
+    if !is_supported_range_elem(elem_type) {
+        return Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.to_owned(),
+            message: format!("unsupported range element type {}", elem_type.as_str()),
+        });
+    }
+    require_value_shape(field, operator, value, "range literal string", |value| {
+        matches!(value, Value::String(_))
+    })
+}
+
+fn is_supported_range_elem(elem_type: ElemType) -> bool {
+    matches!(
+        elem_type,
+        ElemType::Int
+            | ElemType::BigInt
+            | ElemType::Numeric
+            | ElemType::Timestamp
+            | ElemType::Timestamptz
+            | ElemType::Date
+    )
 }
 
 fn looks_like_decimal(value: &str) -> bool {
@@ -467,6 +539,9 @@ fn require_value_for_elem_type(
         ElemType::Text => require_value_shape(field, operator, value, "string", |value| {
             matches!(value, Value::String(_))
         }),
+        ElemType::Citext => require_value_shape(field, operator, value, "string", |value| {
+            matches!(value, Value::String(_))
+        }),
         ElemType::Int | ElemType::BigInt => {
             require_value_shape(field, operator, value, "integer", |value| {
                 matches!(value, Value::I64(_))
@@ -488,6 +563,11 @@ fn require_value_for_elem_type(
         }),
         ElemType::Timestamp => {
             require_value_shape(field, operator, value, "timestamp string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
+        ElemType::Timestamptz => {
+            require_value_shape(field, operator, value, "timestamptz string", |value| {
                 matches!(value, Value::String(_))
             })
         }

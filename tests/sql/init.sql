@@ -1,7 +1,9 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS citext;
 
 DROP VIEW IF EXISTS order_search_view;
 DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS pg_type_examples;
 DROP TABLE IF EXISTS withdrawals;
 DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
@@ -82,6 +84,19 @@ CREATE TABLE withdrawals (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE pg_type_examples (
+    id UUID PRIMARY KEY,
+    display_name CITEXT NOT NULL,
+    payload BYTEA NOT NULL,
+    ip_addr INET NOT NULL,
+    network CIDR NOT NULL,
+    active_window TSTZRANGE NOT NULL,
+    local_window TSRANGE NOT NULL,
+    billing_dates DATERANGE NOT NULL,
+    created_local TIMESTAMP NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX idx_users_profile_gin ON app_users USING GIN (profile);
 CREATE INDEX idx_users_tags ON app_users USING GIN (tags);
 CREATE INDEX idx_products_attributes_gin ON products USING GIN (attributes);
@@ -125,6 +140,30 @@ INSERT INTO events (id, order_id, event_type, payload, created_at) VALUES
 INSERT INTO withdrawals (id, user_id, amount, wallet_address, created_at) VALUES
 ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '900719925474099312345678901234567890'::uint_256, '0xabc', '2026-02-04T10:00:00Z'),
 ('60000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '42'::uint_256, '0xdef', '2026-02-05T10:00:00Z');
+
+INSERT INTO pg_type_examples (
+    id,
+    display_name,
+    payload,
+    ip_addr,
+    network,
+    active_window,
+    local_window,
+    billing_dates,
+    created_local,
+    created_at
+) VALUES (
+    '70000000-0000-0000-0000-000000000001',
+    'Ada',
+    decode('DEADBEEF', 'hex'),
+    '10.1.2.3'::inet,
+    '10.1.0.0/16'::cidr,
+    '[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)'::tstzrange,
+    '[2026-02-01 00:00:00,2026-03-01 00:00:00)'::tsrange,
+    '[2026-02-01,2026-03-01)'::daterange,
+    '2026-02-01 12:30:00',
+    '2026-02-01T12:30:00Z'
+);
 
 CREATE VIEW order_search_view AS
 SELECT

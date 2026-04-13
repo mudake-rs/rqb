@@ -15,7 +15,7 @@ fn orders() -> Dataset {
             Field::new("email", FieldType::Text),
             Field::new("status", FieldType::Text),
             Field::new("name", FieldType::Text).text_search("english"),
-            Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+            Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
             Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false),
             Field::mapped("totalCents", "total_cents", FieldType::BigInt),
             Field::new("metadata", FieldType::Jsonb)
@@ -30,7 +30,7 @@ fn orders_table() -> Dataset {
         Field::new("id", FieldType::Uuid),
         Field::mapped("userId", "user_id", FieldType::Uuid),
         Field::new("status", FieldType::Text),
-        Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+        Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
     ])
 }
 
@@ -48,7 +48,7 @@ fn writable_orders() -> Dataset {
         Field::mapped("userId", "user_id", FieldType::Uuid),
         Field::new("status", FieldType::Enum(ORDER_STATUS)),
         Field::mapped("totalCents", "total_cents", FieldType::BigInt),
-        Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+        Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
     ])
 }
 
@@ -62,16 +62,36 @@ fn typed_values() -> Dataset {
         Field::new("ratio", FieldType::Float),
         Field::new("active", FieldType::Bool),
         Field::mapped("happenedOn", "happened_on", FieldType::Date),
-        Field::mapped("createdAt", "created_at", FieldType::Timestamp),
+        Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
         Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false),
         Field::new("scores", FieldType::Array(ElemType::Int)).sortable(false),
         Field::new("ids", FieldType::Array(ElemType::Uuid)).sortable(false),
         Field::mapped(
             "createdAtList",
             "created_at_list",
-            FieldType::Array(ElemType::Timestamp),
+            FieldType::Array(ElemType::Timestamptz),
         )
         .sortable(false),
+    ])
+}
+
+fn pg_type_examples() -> Dataset {
+    Dataset::table("pg_type_examples").fields([
+        Field::mapped("displayName", "display_name", FieldType::Citext),
+        Field::new("payload", FieldType::Bytea),
+        Field::mapped("ipAddr", "ip_addr", FieldType::Inet),
+        Field::new("network", FieldType::Cidr),
+        Field::mapped(
+            "activeWindow",
+            "active_window",
+            FieldType::Range(ElemType::Timestamptz),
+        ),
+        Field::mapped(
+            "localWindow",
+            "local_window",
+            FieldType::Range(ElemType::Timestamp),
+        ),
+        Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
     ])
 }
 
@@ -468,6 +488,56 @@ fn renders_postgres_type_cast_matrix() {
     assert!(built.sql.contains("$9::bigint[]::int[]"));
     assert!(built.sql.contains("$10::text[]::uuid[]"));
     assert!(built.sql.contains("$11::text[]::timestamptz[]"));
+}
+
+#[test]
+fn renders_native_postgres_type_casts_and_operators() {
+    let built = select(pg_type_examples())
+        .fields([
+            "displayName",
+            "payload",
+            "ipAddr",
+            "network",
+            "activeWindow",
+            "localWindow",
+            "createdAt",
+        ])
+        .filter(all([
+            field("displayName").eq("ada"),
+            field("payload").eq(Value::bytes([0xde, 0xad])),
+            field("ipAddr").contained_by("10.0.0.0/8"),
+            field("network").contains("10.1.2.0/24"),
+            field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
+            field("localWindow").contained_by("[2026-01-01 00:00:00,2026-04-01 00:00:00)"),
+            field("createdAt").eq("2026-02-01T00:00:00Z"),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .contains("\"display_name\"::text AS \"displayName\"")
+    );
+    assert!(built.sql.contains("\"ip_addr\"::text AS \"ipAddr\""));
+    assert!(built.sql.contains("\"network\"::text AS \"network\""));
+    assert!(
+        built
+            .sql
+            .contains("\"active_window\"::text AS \"activeWindow\"")
+    );
+    assert!(built.sql.contains("$1::text::citext"));
+    assert!(built.sql.contains("$2::bytea"));
+    assert!(built.sql.contains("\"ip_addr\" <<= $3::text::inet"));
+    assert!(built.sql.contains("\"network\" >>= $4::text::cidr"));
+    assert!(
+        built
+            .sql
+            .contains("\"active_window\" && $5::text::tstzrange")
+    );
+    assert!(built.sql.contains("\"local_window\" <@ $6::text::tsrange"));
+    assert!(built.sql.contains("$7::text::timestamptz"));
+    assert_eq!(built.params[1], Value::bytes([0xde, 0xad]));
 }
 
 #[test]

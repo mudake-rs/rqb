@@ -176,6 +176,9 @@ rqb-postgres
   executor::driver: PgExecutor implementations and Page
   executor::query: shared low-level query/fetch helpers
   executor::{select, write, raw}: user-facing execution traits
+  pool::db: pooled connection construction and transaction entry points
+  pool::transaction: BeginBuilder, Tx, Savepoint, rollback-on-drop
+  pool::executor: PgExecutor impls for Db, Tx, and Savepoint
 
 rqb-cli
   introspect: read Postgres catalog

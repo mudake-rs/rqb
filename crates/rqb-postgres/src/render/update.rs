@@ -7,6 +7,7 @@ use super::Renderer;
 
 impl Renderer {
     pub(crate) fn render_update(mut self, validated: &ValidatedUpdate) -> Result<BuiltQuery> {
+        self.cacheable = false;
         self.sql.push_str("UPDATE ");
         self.render_write_target(&validated.query.dataset.source);
         self.sql.push_str(" SET ");

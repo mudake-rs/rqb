@@ -365,8 +365,16 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
         ])
         .filter(all([
             pg_type_examples::DISPLAY_NAME.eq("ada"),
-            pg_type_examples::PAYLOAD.eq(Value::bytes([0xde, 0xad, 0xbe, 0xef])),
+            pg_type_examples::PAYLOAD.is_in(vec![
+                Value::bytes([0xde, 0xad, 0xbe, 0xef]),
+                Value::bytes([0xca, 0xfe]),
+            ]),
+            pg_type_examples::IP_ADDR.is_in(["10.1.2.3", "10.1.2.4"]),
             pg_type_examples::NETWORK.contains("10.1.2.0/24"),
+            pg_type_examples::ACTIVE_WINDOW.is_in([
+                "[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)",
+                "[2026-04-01T00:00:00Z,2026-05-01T00:00:00Z)",
+            ]),
             pg_type_examples::ACTIVE_WINDOW.overlaps("[2026-02-15T00:00:00Z,2026-02-20T00:00:00Z)"),
             pg_type_examples::BILLING_DATES.contains("[2026-02-10,2026-02-11)"),
         ]))
@@ -797,6 +805,42 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
     let savepoint_rolled_back_id = "50000000-0000-0000-0000-000000009906";
     let savepoint_released_id = "50000000-0000-0000-0000-000000009907";
     let order_id = "30000000-0000-0000-0000-000000000001";
+
+    let cache_client = db.get().await?;
+    assert_eq!(cache_client.statement_cache.size(), 0);
+    select(events_table::dataset())
+        .fields([events_table::ID])
+        .filter(events_table::EVENT_TYPE.eq("rqb-cache-probe"))
+        .fetch_all(&cache_client)
+        .await?;
+    assert_eq!(cache_client.statement_cache.size(), 1);
+
+    select(events_table::dataset())
+        .fields([events_table::ID])
+        .filter(events_table::EVENT_TYPE.is_in(["paid", "created"]))
+        .fetch_all(&cache_client)
+        .await?;
+    let cached_after_in = cache_client.statement_cache.size();
+    assert_eq!(cached_after_in, 2);
+
+    select(events_table::dataset())
+        .fields([events_table::ID])
+        .filter(events_table::EVENT_TYPE.is_in(["paid", "created", "rqb-cache-probe"]))
+        .fetch_all(&cache_client)
+        .await?;
+    assert_eq!(cache_client.statement_cache.size(), cached_after_in);
+
+    let dynamic_request = SearchRequest {
+        query: Some(events_table::PAYLOAD.path("cacheProbe").eq(true)),
+        ..SearchRequest::new()
+    };
+    select(events_table::dataset())
+        .fields([events_table::ID])
+        .request(dynamic_request)
+        .fetch_all(&cache_client)
+        .await?;
+    assert_eq!(cache_client.statement_cache.size(), cached_after_in);
+    drop(cache_client);
 
     let _ = delete(events_table::dataset())
         .filter(events_table::ID.is_in([

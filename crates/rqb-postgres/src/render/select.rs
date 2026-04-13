@@ -7,6 +7,7 @@ use super::{LimitPolicy, Renderer, SelectProjection};
 
 impl Renderer {
     pub(crate) fn render_rows(mut self, validated: &ValidatedSelect) -> Result<BuiltQuery> {
+        self.cacheable &= validated.query.cacheable;
         self.render_ctes(validated)?;
         self.sql.push_str("SELECT ");
         self.render_distinct(validated);
@@ -23,6 +24,7 @@ impl Renderer {
     }
 
     pub(crate) fn render_count(mut self, validated: &ValidatedSelect) -> Result<BuiltQuery> {
+        self.cacheable &= validated.query.cacheable;
         self.render_ctes(validated)?;
         if needs_count_subquery(validated) {
             self.sql.push_str("SELECT count(*) FROM (SELECT ");
@@ -67,6 +69,7 @@ impl Renderer {
         let mut outer_datasets = self.outer_datasets.clone();
         outer_datasets.extend(outer.query.scope_datasets());
         let validated = ValidatedSelect::new_with_outer_datasets(query.clone(), &outer_datasets)?;
+        self.cacheable &= validated.query.cacheable;
 
         let previous = std::mem::replace(&mut self.outer_datasets, outer_datasets);
         let result = self.render_subquery_select(&validated, projection);

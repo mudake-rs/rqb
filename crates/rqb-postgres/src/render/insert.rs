@@ -10,6 +10,9 @@ use super::Renderer;
 
 impl Renderer {
     pub(crate) fn render_insert(mut self, validated: &ValidatedInsert) -> Result<BuiltQuery> {
+        if validated.rows.len() > 1 {
+            self.cacheable = false;
+        }
         self.sql.push_str("INSERT INTO ");
         self.render_write_target(&validated.query.dataset.source);
 
@@ -31,7 +34,7 @@ impl Renderer {
         if let Some(select) = &validated.from_select {
             self.sql.push(' ');
             let built = Postgres::build_rows(select.query.clone())?;
-            self.append_sql_with_params(&built.sql, built.params);
+            self.append_built_query(built);
         } else {
             self.sql.push_str(" VALUES ");
             for (row_idx, row) in validated.rows.iter().enumerate() {

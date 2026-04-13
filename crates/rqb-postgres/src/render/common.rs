@@ -3,8 +3,9 @@ use rqb_core::{
 };
 
 use crate::helpers::{
-    postgres_cast_sql, postgres_selection_cast, renumber_postgres_placeholders, value_to_json,
-    write_quoted_ident, write_quoted_qualified,
+    array_field_type_for_scalar, postgres_selection_cast, renumber_postgres_placeholders,
+    value_to_json, write_postgres_array_cast_for_scalar, write_postgres_cast, write_quoted_ident,
+    write_quoted_qualified,
 };
 use crate::{Error, Result};
 
@@ -57,6 +58,7 @@ impl Renderer {
                 }
             }
             Source::Raw { sql, alias } => {
+                self.cacheable = false;
                 self.sql.push('(');
                 self.sql.push_str(sql);
                 self.sql.push_str(") AS ");
@@ -75,7 +77,10 @@ impl Renderer {
                 write_quoted_ident(&mut self.sql, name);
             }
             Source::Cte { name, .. } => write_quoted_ident(&mut self.sql, name),
-            Source::Raw { alias, .. } => write_quoted_ident(&mut self.sql, alias),
+            Source::Raw { alias, .. } => {
+                self.cacheable = false;
+                write_quoted_ident(&mut self.sql, alias);
+            }
         }
     }
 
@@ -141,6 +146,7 @@ impl Renderer {
     }
 
     pub(super) fn render_raw(&mut self, raw: &RawSql) -> Result<()> {
+        self.cacheable = false;
         let mut bind_index = 0usize;
         let mut chars = raw.sql.chars().peekable();
         while let Some(ch) = chars.next() {
@@ -172,6 +178,11 @@ impl Renderer {
         self.params.extend(params);
     }
 
+    pub(super) fn append_built_query(&mut self, built: crate::BuiltQuery) {
+        self.cacheable &= built.cacheable;
+        self.append_sql_with_params(&built.sql, built.params);
+    }
+
     pub(super) fn push_param(&mut self, value: &Value) {
         self.params.push(value.clone());
         self.sql.push('$');
@@ -184,9 +195,7 @@ impl Renderer {
             && field_type.is_array()
         {
             self.sql.push_str("ARRAY[]");
-            if let Some(cast) = postgres_cast_sql(field_type) {
-                self.sql.push_str(&cast);
-            }
+            write_postgres_cast(&mut self.sql, field_type);
             return;
         }
 
@@ -213,8 +222,27 @@ impl Renderer {
         }
 
         self.push_param(value);
-        if let Some(cast) = postgres_cast_sql(field_type) {
-            self.sql.push_str(&cast);
+        write_postgres_cast(&mut self.sql, field_type);
+    }
+
+    pub(super) fn push_jsonb_array_param(&mut self, value: &Value) {
+        let Value::Array(values) = value else {
+            unreachable!("validated by rqb-core");
+        };
+        let value = Value::Array(values.iter().map(value_to_json).collect());
+        self.push_param(&value);
+        write_postgres_array_cast_for_scalar(&mut self.sql, FieldType::Jsonb);
+    }
+
+    pub(super) fn push_scalar_array_param(&mut self, value: &Value, field_type: FieldType) {
+        if let Some(array_type) = array_field_type_for_scalar(field_type) {
+            self.push_typed_param(value, array_type);
+            return;
+        }
+
+        self.push_param(value);
+        if !write_postgres_array_cast_for_scalar(&mut self.sql, field_type) {
+            self.cacheable = false;
         }
     }
 
@@ -227,9 +255,7 @@ impl Renderer {
     fn push_decimal_string_param(&mut self, value: &Value, field_type: FieldType) {
         let value = numeric_text_value(value);
         self.push_param(&value);
-        if let Some(cast) = postgres_cast_sql(field_type) {
-            self.sql.push_str(&cast);
-        }
+        write_postgres_cast(&mut self.sql, field_type);
     }
 
     fn push_numeric_array_param(&mut self, value: &Value) {
@@ -247,9 +273,7 @@ impl Renderer {
             other => numeric_text_value(other),
         };
         self.push_param(&value);
-        if let Some(cast) = postgres_cast_sql(field_type) {
-            self.sql.push_str(&cast);
-        }
+        write_postgres_cast(&mut self.sql, field_type);
     }
 }
 

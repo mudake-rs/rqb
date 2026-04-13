@@ -254,6 +254,7 @@ pub struct BuiltQuery {
     pub sql: String,
     pub params: Vec<Value>,
     pub columns: Vec<SelectColumn>,
+    pub cacheable: bool,
 }
 
 impl BuiltQuery {

@@ -3,6 +3,7 @@ use rqb_core::{
     ValueRepr,
 };
 
+#[cfg(feature = "pool")]
 pub(crate) fn quote_ident(ident: &str) -> String {
     let mut output = String::with_capacity(ident.len() + 2);
     write_quoted_ident(&mut output, ident);
@@ -24,18 +25,20 @@ pub(crate) fn quote_literal(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-fn quote_enum_type(enum_type: EnumType) -> String {
-    match enum_type.schema {
-        Some(schema) => format!("{}.{}", quote_ident(schema), quote_ident(enum_type.name)),
-        None => quote_ident(enum_type.name),
+fn write_enum_type(output: &mut String, enum_type: EnumType) {
+    if let Some(schema) = enum_type.schema {
+        write_quoted_ident(output, schema);
+        output.push('.');
     }
+    write_quoted_ident(output, enum_type.name);
 }
 
-pub(crate) fn quote_type_spec(type_spec: TypeSpec) -> String {
-    match type_spec.schema {
-        Some(schema) => format!("{}.{}", quote_ident(schema), quote_ident(type_spec.name)),
-        None => quote_ident(type_spec.name),
+fn write_type_spec(output: &mut String, type_spec: TypeSpec) {
+    if let Some(schema) = type_spec.schema {
+        write_quoted_ident(output, schema);
+        output.push('.');
     }
+    write_quoted_ident(output, type_spec.name);
 }
 
 pub(crate) fn needs_count_subquery(validated: &ValidatedSelect) -> bool {
@@ -108,24 +111,98 @@ pub(crate) fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn postgres_cast_sql(field_type: FieldType) -> Option<String> {
+pub(crate) fn write_postgres_cast(output: &mut String, field_type: FieldType) -> bool {
     match field_type {
-        FieldType::Enum(enum_type) => Some(format!("::text::{}", quote_enum_type(enum_type))),
-        FieldType::Array(ElemType::Enum(enum_type)) => {
-            Some(format!("::text[]::{}[]", quote_enum_type(enum_type)))
+        FieldType::Enum(enum_type) => {
+            output.push_str("::text::");
+            write_enum_type(output, enum_type);
         }
-        FieldType::Array(ElemType::Custom(type_spec)) => Some(type_spec_array_cast_sql(*type_spec)),
+        FieldType::Array(ElemType::Enum(enum_type)) => {
+            output.push_str("::text[]::");
+            write_enum_type(output, enum_type);
+            output.push_str("[]");
+        }
+        FieldType::Array(ElemType::Custom(type_spec)) => {
+            write_type_spec_array_cast(output, *type_spec);
+        }
         FieldType::Range(elem_type) => {
-            Some(format!("::text::{}", FieldType::Range(elem_type).as_str()))
+            output.push_str("::text::");
+            output.push_str(FieldType::Range(elem_type).as_str());
         }
         FieldType::Custom(type_spec) => {
-            let cast_prefix = match type_spec.value_repr {
+            output.push_str(match type_spec.value_repr {
                 ValueRepr::String | ValueRepr::DecimalString => "::text::",
                 ValueRepr::Native => "::",
-            };
-            Some(format!("{cast_prefix}{}", quote_type_spec(*type_spec)))
+            });
+            write_type_spec(output, *type_spec);
         }
-        other => postgres_cast(other).map(ToOwned::to_owned),
+        other => {
+            let Some(cast) = postgres_cast(other) else {
+                return false;
+            };
+            output.push_str(cast);
+        }
+    }
+    true
+}
+
+pub(crate) fn write_postgres_array_cast_for_scalar(
+    output: &mut String,
+    field_type: FieldType,
+) -> bool {
+    match field_type {
+        FieldType::Text => output.push_str("::text[]"),
+        FieldType::Citext => output.push_str("::text[]::citext[]"),
+        FieldType::Integer => output.push_str("::bigint[]::int[]"),
+        FieldType::BigInt => output.push_str("::bigint[]"),
+        FieldType::Float => output.push_str("::double precision[]"),
+        FieldType::Numeric => output.push_str("::text[]::numeric[]"),
+        FieldType::Bool => output.push_str("::boolean[]"),
+        FieldType::Uuid => output.push_str("::text[]::uuid[]"),
+        FieldType::Timestamp => output.push_str("::text[]::timestamp[]"),
+        FieldType::Timestamptz => output.push_str("::text[]::timestamptz[]"),
+        FieldType::Date => output.push_str("::text[]::date[]"),
+        FieldType::Jsonb => output.push_str("::jsonb[]"),
+        FieldType::Bytea => output.push_str("::bytea[]"),
+        FieldType::Inet => output.push_str("::text[]::inet[]"),
+        FieldType::Cidr => output.push_str("::text[]::cidr[]"),
+        FieldType::Enum(enum_type) => {
+            output.push_str("::text[]::");
+            write_enum_type(output, enum_type);
+            output.push_str("[]");
+        }
+        FieldType::Custom(type_spec) => write_type_spec_array_cast(output, *type_spec),
+        FieldType::Range(elem_type) => {
+            output.push_str("::text[]::");
+            output.push_str(FieldType::Range(elem_type).as_str());
+            output.push_str("[]");
+        }
+        FieldType::Array(_) => return false,
+    }
+    true
+}
+
+pub(crate) fn array_field_type_for_scalar(field_type: FieldType) -> Option<FieldType> {
+    match field_type {
+        FieldType::Text => Some(FieldType::Array(ElemType::Text)),
+        FieldType::Citext => Some(FieldType::Array(ElemType::Citext)),
+        FieldType::Integer => Some(FieldType::Array(ElemType::Int)),
+        FieldType::BigInt => Some(FieldType::Array(ElemType::BigInt)),
+        FieldType::Float => Some(FieldType::Array(ElemType::Float)),
+        FieldType::Numeric => Some(FieldType::Array(ElemType::Numeric)),
+        FieldType::Bool => Some(FieldType::Array(ElemType::Bool)),
+        FieldType::Uuid => Some(FieldType::Array(ElemType::Uuid)),
+        FieldType::Timestamp => Some(FieldType::Array(ElemType::Timestamp)),
+        FieldType::Timestamptz => Some(FieldType::Array(ElemType::Timestamptz)),
+        FieldType::Date => Some(FieldType::Array(ElemType::Date)),
+        FieldType::Enum(enum_type) => Some(FieldType::Array(ElemType::Enum(enum_type))),
+        FieldType::Custom(type_spec) => Some(FieldType::Array(ElemType::Custom(type_spec))),
+        FieldType::Jsonb
+        | FieldType::Bytea
+        | FieldType::Inet
+        | FieldType::Cidr
+        | FieldType::Range(_)
+        | FieldType::Array(_) => None,
     }
 }
 
@@ -234,12 +311,13 @@ pub(crate) fn array_element_field_type(field_type: FieldType) -> FieldType {
     }
 }
 
-fn type_spec_array_cast_sql(type_spec: TypeSpec) -> String {
-    let cast_prefix = match type_spec.value_repr {
+fn write_type_spec_array_cast(output: &mut String, type_spec: TypeSpec) {
+    output.push_str(match type_spec.value_repr {
         ValueRepr::String | ValueRepr::DecimalString => "::text[]::",
         ValueRepr::Native => "::",
-    };
-    format!("{cast_prefix}{}[]", quote_type_spec(type_spec))
+    });
+    write_type_spec(output, type_spec);
+    output.push_str("[]");
 }
 
 pub(crate) fn value_to_json(value: &Value) -> Value {

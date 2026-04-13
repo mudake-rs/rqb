@@ -17,6 +17,7 @@ pub(crate) struct Renderer {
     params: Vec<Value>,
     columns: Vec<SelectColumn>,
     outer_datasets: Vec<Dataset>,
+    cacheable: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -38,6 +39,7 @@ impl Renderer {
             params: Vec::with_capacity(8),
             columns: Vec::new(),
             outer_datasets: Vec::new(),
+            cacheable: true,
         }
     }
 
@@ -46,6 +48,7 @@ impl Renderer {
             sql: self.sql,
             params: self.params,
             columns: self.columns,
+            cacheable: self.cacheable,
         }
     }
 }

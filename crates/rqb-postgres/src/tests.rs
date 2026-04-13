@@ -1231,6 +1231,7 @@ fn request_merges_with_existing_filter() {
         built.sql
     );
     assert_eq!(built.params, vec![1_000.into(), "paid".into()]);
+    assert!(!built.cacheable);
 }
 
 #[test]
@@ -1249,6 +1250,7 @@ fn filter_chains_with_and() {
         built.sql
     );
     assert_eq!(built.params, vec!["paid".into(), 1_000.into()]);
+    assert!(built.cacheable);
 }
 
 #[test]
@@ -1335,6 +1337,65 @@ fn replace_request_keeps_explicit_replace_semantics() {
     );
     assert!(built.sql.contains("WHERE \"status\" = $1"), "{}", built.sql);
     assert_eq!(built.params, vec!["paid".into()]);
+    assert!(!built.cacheable);
+}
+
+#[test]
+fn cache_policy_rejects_unbounded_or_raw_statement_shapes() {
+    let raw_source = select(
+        Dataset::raw("SELECT id, status FROM orders", "order_rows").fields([
+            Field::new("id", FieldType::Uuid),
+            Field::new("status", FieldType::Text),
+        ]),
+    )
+    .filter(field("status").eq("paid"))
+    .build_rows_pg()
+    .unwrap();
+    assert!(!raw_source.cacheable);
+
+    let raw_filter = select(orders())
+        .filter(raw("\"status\" = ?").bind("paid"))
+        .build_rows_pg()
+        .unwrap();
+    assert!(!raw_filter.cacheable);
+
+    let single_insert = insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .set("userId", "10000000-0000-0000-0000-000000000001")
+        .set("status", "paid")
+        .build_pg()
+        .unwrap();
+    assert!(single_insert.cacheable);
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NewOrder<'a> {
+        id: &'a str,
+        user_id: &'a str,
+        status: &'a str,
+    }
+
+    let rows = [
+        NewOrder {
+            id: "30000000-0000-0000-0000-000000009998",
+            user_id: "10000000-0000-0000-0000-000000000001",
+            status: "paid",
+        },
+        NewOrder {
+            id: "30000000-0000-0000-0000-000000009997",
+            user_id: "10000000-0000-0000-0000-000000000001",
+            status: "draft",
+        },
+    ];
+    let batch_insert = insert(writable_orders()).values(&rows).build_pg().unwrap();
+    assert!(!batch_insert.cacheable);
+
+    let update = update(writable_orders())
+        .set("status", "paid")
+        .filter(field("id").eq("30000000-0000-0000-0000-000000009999"))
+        .build_pg()
+        .unwrap();
+    assert!(!update.cacheable);
 }
 
 #[test]
@@ -1737,8 +1798,16 @@ fn renders_not_in() {
         .build_rows_pg()
         .unwrap();
 
-    assert!(built.sql.contains("WHERE NOT (\"status\" IN ($1, $2))"));
-    assert_eq!(built.params.len(), 2);
+    assert!(
+        built
+            .sql
+            .contains("WHERE NOT (\"status\" = ANY($1::text[]))")
+    );
+    assert_eq!(
+        built.params,
+        vec![Value::Array(vec!["draft".into(), "cancelled".into()])]
+    );
+    assert!(built.cacheable);
 
     let empty = select(orders())
         .filter(field("status").not_in(Vec::<String>::new()))
@@ -1746,6 +1815,110 @@ fn renders_not_in() {
         .unwrap();
     assert!(empty.sql.contains("WHERE TRUE "));
     assert!(empty.params.is_empty());
+}
+
+#[test]
+fn renders_in_as_any_with_one_typed_array_param() {
+    let built = select(typed_values())
+        .fields(["id"])
+        .filter(all([
+            field("id").is_in([
+                "70000000-0000-0000-0000-000000000001",
+                "70000000-0000-0000-0000-000000000002",
+            ]),
+            field("a").is_in([1, 2, 3]),
+            field("amount").is_in(["9007199254740993", "42"]),
+            field("uintAmount").is_in(["900719925474099312345678901234567890", "42"]),
+            field("active").is_in([true, false]),
+            field("happenedOn").is_in(["2026-02-01", "2026-02-02"]),
+            field("createdAt").is_in(["2026-02-01T00:00:00Z", "2026-02-02T00:00:00Z"]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"id\" = ANY($1::text[]::uuid[])"));
+    assert!(built.sql.contains("\"a\" = ANY($2::bigint[]::int[])"));
+    assert!(
+        built
+            .sql
+            .contains("\"amount\" = ANY($3::text[]::numeric[])")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"uint_amount\" = ANY($4::text[]::\"public\".\"uint_256\"[])")
+    );
+    assert!(built.sql.contains("\"active\" = ANY($5::boolean[])"));
+    assert!(
+        built
+            .sql
+            .contains("\"happened_on\" = ANY($6::text[]::date[])")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"created_at\" = ANY($7::text[]::timestamptz[])")
+    );
+    assert_eq!(built.params.len(), 7);
+    assert_eq!(
+        built.params[2],
+        Value::Array(vec![
+            Value::String("9007199254740993".to_owned()),
+            Value::String("42".to_owned()),
+        ])
+    );
+    assert!(built.cacheable);
+}
+
+#[test]
+fn renders_in_as_any_for_jsonb_and_native_postgres_types() {
+    let built = select(pg_type_examples())
+        .fields(["displayName"])
+        .filter(all([
+            field("payload").is_in(vec![
+                Value::bytes([0xde, 0xad, 0xbe, 0xef]),
+                Value::bytes([0xca, 0xfe]),
+            ]),
+            field("ipAddr").is_in(["10.1.2.3", "10.1.2.4"]),
+            field("network").is_in(["10.1.0.0/16", "10.2.0.0/16"]),
+            field("activeWindow").is_in([
+                "[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)",
+                "[2026-04-01T00:00:00Z,2026-05-01T00:00:00Z)",
+            ]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"payload\" = ANY($1::bytea[])"));
+    assert!(built.sql.contains("\"ip_addr\" = ANY($2::text[]::inet[])"));
+    assert!(built.sql.contains("\"network\" = ANY($3::text[]::cidr[])"));
+    assert!(
+        built
+            .sql
+            .contains("\"active_window\" = ANY($4::text[]::tstzrange[])")
+    );
+    assert!(built.cacheable);
+
+    let json = select(orders())
+        .filter(all([
+            field("metadata").is_in([
+                serde_json::json!({ "gift": true }),
+                serde_json::json!({ "gift": false }),
+            ]),
+            field("metadata.score").is_in([70, 80]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(json.sql.contains("\"metadata\" = ANY($1::jsonb[])"));
+    assert!(
+        json.sql
+            .contains("\"metadata\" #> ARRAY[$2]::text[] = ANY($3::jsonb[])"),
+        "{}",
+        json.sql
+    );
+    assert_eq!(json.params.len(), 3);
+    assert!(json.cacheable);
 }
 
 #[test]
@@ -1769,20 +1942,22 @@ fn renders_enum_casts() {
             .sql
             .contains("\"status\" = $1::text::\"public\".\"order_status\"")
     );
-    assert!(built.sql.contains(
-            "NOT (\"status\" IN ($2::text::\"public\".\"order_status\", $3::text::\"public\".\"order_status\"))"
-        ));
     assert!(
         built
             .sql
-            .contains("$4::text::\"public\".\"order_status\" = ANY(\"status_history\")")
+            .contains("NOT (\"status\" = ANY($2::text[]::\"public\".\"order_status\"[]))")
     );
     assert!(
         built
             .sql
-            .contains("\"status_history\" && $5::text[]::\"public\".\"order_status\"[]")
+            .contains("$3::text::\"public\".\"order_status\" = ANY(\"status_history\")")
     );
-    assert_eq!(built.params.len(), 5);
+    assert!(
+        built
+            .sql
+            .contains("\"status_history\" && $4::text[]::\"public\".\"order_status\"[]")
+    );
+    assert_eq!(built.params.len(), 4);
 }
 
 #[test]

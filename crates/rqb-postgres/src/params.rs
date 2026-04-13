@@ -25,6 +25,7 @@ enum PgParam {
     String(String),
     Bytes(Vec<u8>),
     Json(serde_json::Value),
+    BytesVec(Vec<Vec<u8>>),
     BoolVec(Vec<bool>),
     I64Vec(Vec<i64>),
     F64Vec(Vec<f64>),
@@ -42,6 +43,7 @@ impl PgParam {
             Self::String(value) => value,
             Self::Bytes(value) => value,
             Self::Json(value) => value,
+            Self::BytesVec(value) => value,
             Self::BoolVec(value) => value,
             Self::I64Vec(value) => value,
             Self::F64Vec(value) => value,
@@ -88,6 +90,12 @@ fn convert_array_param(values: &[Value]) -> PgParam {
         _ => None,
     }) {
         return PgParam::BoolVec(values);
+    }
+    if let Some(values) = try_extract(values, |value| match value {
+        Value::Bytes(value) => Some(value.clone()),
+        _ => None,
+    }) {
+        return PgParam::BytesVec(values);
     }
     PgParam::JsonVec(
         values

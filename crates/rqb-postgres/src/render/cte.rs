@@ -38,7 +38,7 @@ impl Renderer {
                 CteBody::Raw(raw) => self.render_raw(raw)?,
                 CteBody::Select(query) => {
                     let built = Postgres::build_rows((**query).clone())?;
-                    self.append_sql_with_params(&built.sql, built.params);
+                    self.append_built_query(built);
                 }
             }
             self.sql.push(')');

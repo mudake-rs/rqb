@@ -174,6 +174,30 @@ impl PgExecutor for Db {
             .await
             .map_err(Error::from)
     }
+
+    async fn query_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        let client = self.get().await?;
+        query_cached(&client, sql, params).await
+    }
+
+    async fn query_one_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+        let client = self.get().await?;
+        query_one_cached(&client, sql, params).await
+    }
+
+    async fn query_opt_cached(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<Option<Row>> {
+        let client = self.get().await?;
+        query_opt_cached(&client, sql, params).await
+    }
+
+    async fn execute_sql_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+        let client = self.get().await?;
+        execute_cached(&client, sql, params).await
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -329,6 +353,63 @@ impl PgExecutor for Tx {
             .await
             .map_err(Error::from)
     }
+
+    async fn query_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        query_cached(self.client()?, sql, params).await
+    }
+
+    async fn query_one_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+        query_one_cached(self.client()?, sql, params).await
+    }
+
+    async fn query_opt_cached(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<Option<Row>> {
+        query_opt_cached(self.client()?, sql, params).await
+    }
+
+    async fn execute_sql_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+        execute_cached(self.client()?, sql, params).await
+    }
+}
+
+async fn query_cached(
+    client: &(impl GenericClient + ?Sized),
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Vec<Row>> {
+    let stmt = client.prepare_cached(sql).await.map_err(Error::from)?;
+    client.query(&stmt, params).await.map_err(Error::from)
+}
+
+async fn query_one_cached(
+    client: &(impl GenericClient + ?Sized),
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Row> {
+    query_opt_cached(client, sql, params)
+        .await?
+        .ok_or(Error::NotFound)
+}
+
+async fn query_opt_cached(
+    client: &(impl GenericClient + ?Sized),
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Option<Row>> {
+    let stmt = client.prepare_cached(sql).await.map_err(Error::from)?;
+    client.query_opt(&stmt, params).await.map_err(Error::from)
+}
+
+async fn execute_cached(
+    client: &(impl GenericClient + ?Sized),
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<u64> {
+    let stmt = client.prepare_cached(sql).await.map_err(Error::from)?;
+    client.execute(&stmt, params).await.map_err(Error::from)
 }
 
 impl Drop for Tx {
@@ -395,6 +476,26 @@ impl PgExecutor for Savepoint<'_> {
 
     async fn execute_sql(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
         self.tx.execute_sql(sql, params).await
+    }
+
+    async fn query_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        self.tx.query_cached(sql, params).await
+    }
+
+    async fn query_one_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+        self.tx.query_one_cached(sql, params).await
+    }
+
+    async fn query_opt_cached(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<Option<Row>> {
+        self.tx.query_opt_cached(sql, params).await
+    }
+
+    async fn execute_sql_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+        self.tx.execute_sql_cached(sql, params).await
     }
 }
 

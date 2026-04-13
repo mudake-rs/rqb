@@ -340,19 +340,18 @@ impl Renderer {
 
         if field.is_json_path() {
             self.render_json_target(field);
-        } else {
-            self.render_column_name(field);
+            self.sql.push_str(" = ANY(");
+            self.push_jsonb_array_param(value);
+            self.sql.push(')');
+            return;
         }
-        self.sql.push_str(" IN (");
-        for (idx, value) in values.iter().enumerate() {
-            if idx > 0 {
-                self.sql.push_str(", ");
-            }
-            if field.is_json_path() {
-                self.push_typed_param(&value_to_json(value), FieldType::Jsonb);
-            } else {
-                self.push_typed_param(value, field.ty);
-            }
+
+        self.render_column_name(field);
+        self.sql.push_str(" = ANY(");
+        if field.ty.is_jsonb() {
+            self.push_jsonb_array_param(value);
+        } else {
+            self.push_scalar_array_param(value, field.ty);
         }
         self.sql.push(')');
     }

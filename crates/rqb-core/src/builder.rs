@@ -95,11 +95,18 @@ impl SelectBuilder {
 
     pub fn request(mut self, request: SearchRequest) -> Self {
         self.query.request.merge_in(request);
+        self.query.cacheable = false;
         self
     }
 
     pub fn replace_request(mut self, request: SearchRequest) -> Self {
         self.query.request = request;
+        self.query.cacheable = false;
+        self
+    }
+
+    pub fn cacheable(mut self, cacheable: bool) -> Self {
+        self.query.cacheable = cacheable;
         self
     }
 

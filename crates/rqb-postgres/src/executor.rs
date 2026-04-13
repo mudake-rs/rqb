@@ -6,7 +6,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{Client, Row, Transaction, types::ToSql};
 
-use crate::{BuildPostgres, BuiltQuery, BuiltSelect, Error, Postgres, Result, row_to_json};
+use crate::{
+    BuildPostgres, BuiltQuery, BuiltSelect, Error, PgParams, Postgres, Result, row_to_json,
+};
 
 #[allow(async_fn_in_trait)]
 pub trait PgExecutor {
@@ -17,6 +19,26 @@ pub trait PgExecutor {
     async fn query_opt(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Option<Row>>;
 
     async fn execute_sql(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64>;
+
+    async fn query_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        self.query(sql, params).await
+    }
+
+    async fn query_one_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+        self.query_one(sql, params).await
+    }
+
+    async fn query_opt_cached(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<Option<Row>> {
+        self.query_opt(sql, params).await
+    }
+
+    async fn execute_sql_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+        self.execute_sql(sql, params).await
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -119,6 +141,79 @@ impl PgExecutor for deadpool_postgres::Client {
             .await
             .map_err(Error::from)
     }
+
+    async fn query_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        deadpool_query_cached(self, sql, params).await
+    }
+
+    async fn query_one_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+        deadpool_query_one_cached(self, sql, params).await
+    }
+
+    async fn query_opt_cached(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<Option<Row>> {
+        deadpool_query_opt_cached(self, sql, params).await
+    }
+
+    async fn execute_sql_cached(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+        deadpool_execute_cached(self, sql, params).await
+    }
+}
+
+#[cfg(feature = "runtime-deadpool")]
+async fn deadpool_query_cached(
+    client: &deadpool_postgres::Client,
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Vec<Row>> {
+    let stmt = deadpool_postgres::GenericClient::prepare_cached(client, sql)
+        .await
+        .map_err(Error::from)?;
+    deadpool_postgres::GenericClient::query(client, &stmt, params)
+        .await
+        .map_err(Error::from)
+}
+
+#[cfg(feature = "runtime-deadpool")]
+async fn deadpool_query_one_cached(
+    client: &deadpool_postgres::Client,
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Row> {
+    deadpool_query_opt_cached(client, sql, params)
+        .await?
+        .ok_or(Error::NotFound)
+}
+
+#[cfg(feature = "runtime-deadpool")]
+async fn deadpool_query_opt_cached(
+    client: &deadpool_postgres::Client,
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Option<Row>> {
+    let stmt = deadpool_postgres::GenericClient::prepare_cached(client, sql)
+        .await
+        .map_err(Error::from)?;
+    deadpool_postgres::GenericClient::query_opt(client, &stmt, params)
+        .await
+        .map_err(Error::from)
+}
+
+#[cfg(feature = "runtime-deadpool")]
+async fn deadpool_execute_cached(
+    client: &deadpool_postgres::Client,
+    sql: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<u64> {
+    let stmt = deadpool_postgres::GenericClient::prepare_cached(client, sql)
+        .await
+        .map_err(Error::from)?;
+    deadpool_postgres::GenericClient::execute(client, &stmt, params)
+        .await
+        .map_err(Error::from)
 }
 
 #[allow(async_fn_in_trait)]
@@ -312,8 +407,7 @@ impl_execute_write!(DeleteBuilder);
 impl_execute_write!(DeleteQuery);
 
 async fn query_all(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Vec<Row>> {
-    let pg = built.params();
-    exec.query(&built.sql, &pg.as_refs()).await
+    query_all_parts(exec, &built.sql, &built.params, built.cacheable).await
 }
 
 async fn query_one(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Row> {
@@ -321,13 +415,53 @@ async fn query_one(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Row> {
 }
 
 async fn query_optional(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Option<Row>> {
-    let pg = built.params();
-    exec.query_opt(&built.sql, &pg.as_refs()).await
+    query_optional_parts(exec, &built.sql, &built.params, built.cacheable).await
 }
 
 async fn execute_query(exec: &impl PgExecutor, built: BuiltQuery) -> Result<u64> {
-    let pg = built.params();
-    exec.execute_sql(&built.sql, &pg.as_refs()).await
+    execute_parts(exec, &built.sql, &built.params, built.cacheable).await
+}
+
+async fn query_all_parts(
+    exec: &impl PgExecutor,
+    sql: &str,
+    params: &[rqb_core::Value],
+    cacheable: bool,
+) -> Result<Vec<Row>> {
+    let pg = PgParams::from_values(params);
+    if cacheable {
+        exec.query_cached(sql, &pg.as_refs()).await
+    } else {
+        exec.query(sql, &pg.as_refs()).await
+    }
+}
+
+async fn query_optional_parts(
+    exec: &impl PgExecutor,
+    sql: &str,
+    params: &[rqb_core::Value],
+    cacheable: bool,
+) -> Result<Option<Row>> {
+    let pg = PgParams::from_values(params);
+    if cacheable {
+        exec.query_opt_cached(sql, &pg.as_refs()).await
+    } else {
+        exec.query_opt(sql, &pg.as_refs()).await
+    }
+}
+
+async fn execute_parts(
+    exec: &impl PgExecutor,
+    sql: &str,
+    params: &[rqb_core::Value],
+    cacheable: bool,
+) -> Result<u64> {
+    let pg = PgParams::from_values(params);
+    if cacheable {
+        exec.execute_sql_cached(sql, &pg.as_refs()).await
+    } else {
+        exec.execute_sql(sql, &pg.as_refs()).await
+    }
 }
 
 async fn query_count(exec: &impl PgExecutor, built: BuiltQuery) -> Result<i64> {
@@ -359,8 +493,13 @@ async fn query_all_as<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Ve
 where
     T: DeserializeOwned,
 {
-    let columns = built.columns.clone();
-    let rows = query_all(exec, built).await?;
+    let BuiltQuery {
+        sql,
+        params,
+        columns,
+        cacheable,
+    } = built;
+    let rows = query_all_parts(exec, &sql, &params, cacheable).await?;
     rows.iter()
         .map(|row| {
             let json = row_to_json(row, &columns)?;
@@ -380,8 +519,13 @@ async fn query_optional_as<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Resu
 where
     T: DeserializeOwned,
 {
-    let columns = built.columns.clone();
-    let row = query_optional(exec, built).await?;
+    let BuiltQuery {
+        sql,
+        params,
+        columns,
+        cacheable,
+    } = built;
+    let row = query_optional_parts(exec, &sql, &params, cacheable).await?;
     row.as_ref()
         .map(|row| {
             let json = row_to_json(row, &columns)?;

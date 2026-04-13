@@ -53,6 +53,12 @@ fn dataset() -> Dataset {
         Field::new("score", FieldType::Integer),
         Field::new("amount", FieldType::Numeric),
         Field::mapped("uintAmount", "uint_amount", FieldType::Custom(&UINT_256)),
+        Field::mapped(
+            "uintAmounts",
+            "uint_amounts",
+            FieldType::Array(ElemType::Custom(&UINT_256)),
+        )
+        .sortable(false),
         Field::new("active", FieldType::Bool),
         Field::mapped("createdAt", "created_at", FieldType::Timestamp),
         Field::mapped("observedAt", "observed_at", FieldType::Timestamptz),
@@ -649,6 +655,18 @@ fn accepts_exact_decimal_strings_for_custom_numeric_domains() {
 }
 
 #[test]
+fn accepts_exact_decimal_strings_for_custom_numeric_domain_arrays() {
+    let query = crate::select(dataset())
+        .filter(crate::all([
+            field("uintAmounts").contains_all(["900719925474099312345678901234567890"]),
+            field("uintAmounts").has(42_i64),
+        ]))
+        .build();
+
+    ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
 fn validates_custom_numeric_domains_from_json_requests() {
     let request: crate::SearchRequest = serde_json::from_value(serde_json::json!({
         "query": {
@@ -679,6 +697,27 @@ fn rejects_inexact_values_for_decimal_string_domains() {
         let err = ValidatedSelect::new(query).unwrap_err();
         assert!(
             matches!(err, Error::InvalidValue { ref field, ref message, .. } if field == "uintAmount" && message == expected),
+            "unexpected error: {err}"
+        );
+    }
+}
+
+#[test]
+fn rejects_inexact_values_for_decimal_string_domain_arrays() {
+    for (expr, expected) in [
+        (
+            field("uintAmounts").contains_all([1.25]),
+            "expected integer or decimal string, got f64",
+        ),
+        (
+            field("uintAmounts").has("not-a-number"),
+            "expected integer or decimal string, got string",
+        ),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidValue { ref field, ref message, .. } if field == "uintAmounts" && message == expected),
             "unexpected error: {err}"
         );
     }
@@ -956,6 +995,21 @@ fn rejects_array_contains_on_non_array_field() {
         .build();
     let err = ValidatedSelect::new(query).unwrap_err();
     assert!(matches!(err, Error::UnsupportedOperator { .. }));
+}
+
+#[test]
+fn reports_specific_custom_array_type_names_in_errors() {
+    let query = crate::select(dataset())
+        .filter(field("uintAmounts").starts_with("1"))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::UnsupportedOperator { field, field_type, operator }
+            if field == "uintAmounts"
+                && field_type == "public.uint_256[]"
+                && operator == "startsWith"
+    ));
 }
 
 #[test]

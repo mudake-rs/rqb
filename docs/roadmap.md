@@ -34,11 +34,10 @@ This belongs in sample/application code rather than core rqb.
 
 `PHILOSOPHY.md` describes the target type model: rqb owns broad Postgres and common extension type support, while project-specific domains and scalars are declared through metadata.
 
-The first scalar-domain vertical slice is implemented: `TypeSpec` metadata, `FieldType::Custom`, CLI domain introspection, exact decimal-string binding, text selection for exact numeric fields, and runtime tests against a `uint_256` domain.
+The first domain vertical slice is implemented: `TypeSpec` metadata, `FieldType::Custom`, `ElemType::Custom`, CLI domain introspection, exact decimal-string binding for scalar and array domains, text selection for exact numeric fields, and runtime tests against a `uint_256` domain.
 
 Remaining work before beta:
 
-- custom domain arrays
 - richer per-domain validation rules beyond decimal shape
 - serde-friendly generated Rust newtypes for common exact domains
 - exact aggregate output for `sum` / `avg` when the result is numeric

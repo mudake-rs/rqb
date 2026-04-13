@@ -75,7 +75,7 @@ pub const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldT
 pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
     .sortable(false)
     .json_paths(JsonPathPolicy::Dynamic);
-pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
 pub fn orders() -> Dataset {
     Dataset::table("orders")

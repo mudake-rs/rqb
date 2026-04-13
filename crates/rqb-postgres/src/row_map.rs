@@ -101,6 +101,31 @@ fn array_to_json(row: &Row, alias: &str, elem_type: ElemType) -> Result<JsonValu
         ElemType::Float => read_array(row, alias, f64_to_json),
         ElemType::Numeric => read_array(row, alias, JsonValue::String),
         ElemType::Bool => read_array(row, alias, JsonValue::Bool),
+        ElemType::Custom(type_spec) => custom_array_to_json(row, alias, *type_spec),
+    }
+}
+
+fn custom_array_to_json(
+    row: &Row,
+    alias: &str,
+    type_spec: rqb_core::TypeSpec,
+) -> Result<JsonValue> {
+    if type_spec.select_repr == SelectRepr::Text {
+        return read_array(row, alias, JsonValue::String);
+    }
+
+    match type_spec.family {
+        TypeFamily::Text
+        | TypeFamily::Uuid
+        | TypeFamily::Timestamp
+        | TypeFamily::Timestamptz
+        | TypeFamily::Date
+        | TypeFamily::Network
+        | TypeFamily::Range => read_array(row, alias, JsonValue::String),
+        TypeFamily::Numeric => read_array(row, alias, JsonValue::String),
+        TypeFamily::Bool => read_array(row, alias, JsonValue::Bool),
+        TypeFamily::Jsonb => read_array(row, alias, |value| value),
+        TypeFamily::Bytes => read_array(row, alias, bytes_to_json),
     }
 }
 

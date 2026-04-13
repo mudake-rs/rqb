@@ -364,7 +364,7 @@ fn validate_numeric_aggregate_field(aggregate: &str, field: &ResolvedField) -> R
     Err(Error::UnsupportedAggregateField {
         aggregate: aggregate.to_owned(),
         field: field.display_name(),
-        field_type: field.ty.as_str().to_owned(),
+        field_type: field.ty.display_name().into_owned(),
     })
 }
 
@@ -384,7 +384,7 @@ fn validate_string_aggregate_field(field: &ResolvedField) -> Result<()> {
     Err(Error::UnsupportedAggregateField {
         aggregate: "string_agg".to_owned(),
         field: field.display_name(),
-        field_type: field.ty.as_str().to_owned(),
+        field_type: field.ty.display_name().into_owned(),
     })
 }
 

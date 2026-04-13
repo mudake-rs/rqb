@@ -199,6 +199,12 @@ impl Renderer {
                 self.push_numeric_array_param(value);
                 return;
             }
+            FieldType::Array(ElemType::Custom(type_spec))
+                if type_spec.value_repr == ValueRepr::DecimalString =>
+            {
+                self.push_decimal_string_array_param(value, field_type);
+                return;
+            }
             FieldType::Custom(type_spec) if type_spec.value_repr == ValueRepr::DecimalString => {
                 self.push_decimal_string_param(value, field_type);
                 return;
@@ -233,6 +239,17 @@ impl Renderer {
         };
         self.push_param(&value);
         self.sql.push_str("::text[]::numeric[]");
+    }
+
+    fn push_decimal_string_array_param(&mut self, value: &Value, field_type: FieldType) {
+        let value = match value {
+            Value::Array(values) => Value::Array(values.iter().map(numeric_text_value).collect()),
+            other => numeric_text_value(other),
+        };
+        self.push_param(&value);
+        if let Some(cast) = postgres_cast_sql(field_type) {
+            self.sql.push_str(&cast);
+        }
     }
 }
 

@@ -59,6 +59,12 @@ fn typed_values() -> Dataset {
         Field::new("b", FieldType::BigInt),
         Field::new("amount", FieldType::Numeric),
         Field::mapped("uintAmount", "uint_amount", FieldType::Custom(&UINT_256)),
+        Field::mapped(
+            "uintAmounts",
+            "uint_amounts",
+            FieldType::Array(ElemType::Custom(&UINT_256)),
+        )
+        .sortable(false),
         Field::new("ratio", FieldType::Float),
         Field::new("active", FieldType::Bool),
         Field::mapped("happenedOn", "happened_on", FieldType::Date),
@@ -248,6 +254,34 @@ fn renders_custom_numeric_domain_losslessly() {
         built.params,
         vec![
             Value::String("900719925474099312345678901234567890".to_owned()),
+            Value::String("42".to_owned())
+        ]
+    );
+}
+
+#[test]
+fn renders_custom_numeric_domain_arrays_losslessly() {
+    let built = select(typed_values())
+        .fields(["uintAmounts"])
+        .filter(all([
+            field("uintAmounts").contains_all(["900719925474099312345678901234567890"]),
+            field("uintAmounts").has(42_i64),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"uint_amounts\"::text[] AS \"uintAmounts\" FROM \"typed_values\" \
+         WHERE (\"uint_amounts\" @> $1::text[]::\"public\".\"uint_256\"[] AND $2::text::\"public\".\"uint_256\" = ANY(\"uint_amounts\")) \
+         LIMIT 100 OFFSET 0"
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::Array(vec![Value::String(
+                "900719925474099312345678901234567890".to_owned()
+            )]),
             Value::String("42".to_owned())
         ]
     );

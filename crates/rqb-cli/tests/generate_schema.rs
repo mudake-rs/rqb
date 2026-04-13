@@ -26,6 +26,11 @@ fn checked_in_golden_schema_compiles_and_exposes_expected_metadata() {
     );
     assert_eq!(golden_schema::types::UINT_256.name, "uint_256");
     assert_eq!(golden_schema::withdrawals::AMOUNT.ty.as_str(), "uint_256");
+    assert!(matches!(
+        golden_schema::withdrawals::AMOUNT_HISTORY.ty,
+        rqb::prelude::FieldType::Array(rqb::prelude::ElemType::Custom(type_spec))
+            if type_spec.name == "uint_256"
+    ));
 
     let orders = golden_schema::orders::dataset();
     assert_eq!(orders.source_name(), "orders");

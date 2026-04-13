@@ -104,7 +104,7 @@ pub(crate) fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
         | FieldType::Custom(_)
         | FieldType::Enum(_)
         | FieldType::Range(_)
-        | FieldType::Array(ElemType::Enum(_)) => None,
+        | FieldType::Array(ElemType::Enum(_) | ElemType::Custom(_)) => None,
     }
 }
 
@@ -114,6 +114,7 @@ pub(crate) fn postgres_cast_sql(field_type: FieldType) -> Option<String> {
         FieldType::Array(ElemType::Enum(enum_type)) => {
             Some(format!("::text[]::{}[]", quote_enum_type(enum_type)))
         }
+        FieldType::Array(ElemType::Custom(type_spec)) => Some(type_spec_array_cast_sql(*type_spec)),
         FieldType::Range(elem_type) => {
             Some(format!("::text::{}", FieldType::Range(elem_type).as_str()))
         }
@@ -140,6 +141,11 @@ pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static 
         FieldType::Enum(_) => Some("::text"),
         FieldType::Array(ElemType::Citext) => Some("::text[]"),
         FieldType::Array(ElemType::Enum(_)) => Some("::text[]"),
+        FieldType::Array(ElemType::Custom(type_spec))
+            if type_spec.select_repr == SelectRepr::Text =>
+        {
+            Some("::text[]")
+        }
         FieldType::Numeric => Some("::text"),
         FieldType::Array(ElemType::Numeric) => Some("::text[]"),
         FieldType::Array(ElemType::Timestamp) => timestamp_array_selection_cast(),
@@ -223,8 +229,17 @@ pub(crate) fn array_element_field_type(field_type: FieldType) -> FieldType {
         FieldType::Array(ElemType::Timestamptz) => FieldType::Timestamptz,
         FieldType::Array(ElemType::Date) => FieldType::Date,
         FieldType::Array(ElemType::Enum(enum_type)) => FieldType::Enum(enum_type),
+        FieldType::Array(ElemType::Custom(type_spec)) => FieldType::Custom(type_spec),
         other => other,
     }
+}
+
+fn type_spec_array_cast_sql(type_spec: TypeSpec) -> String {
+    let cast_prefix = match type_spec.value_repr {
+        ValueRepr::String | ValueRepr::DecimalString => "::text[]::",
+        ValueRepr::Native => "::",
+    };
+    format!("{cast_prefix}{}[]", quote_type_spec(type_spec))
 }
 
 pub(crate) fn value_to_json(value: &Value) -> Value {

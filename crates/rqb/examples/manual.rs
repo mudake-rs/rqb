@@ -7,7 +7,7 @@ const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortabl
 const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
     .sortable(false)
     .json_paths(JsonPathPolicy::Dynamic);
-const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let orders = Dataset::view("order_search_view")

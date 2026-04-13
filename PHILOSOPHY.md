@@ -110,6 +110,10 @@ pub const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
     .operators(OperatorSet::numeric());
 
 pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&UINT_256));
+pub const AMOUNT_HISTORY: Field = Field::new(
+    "amount_history",
+    FieldType::Array(ElemType::Custom(&UINT_256)),
+);
 ```
 
 Application code should then stay ordinary:

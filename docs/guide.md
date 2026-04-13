@@ -23,7 +23,7 @@ pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
     .sortable(false)
     .json_paths(JsonPathPolicy::Dynamic);
 pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
-pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
 pub fn orders() -> Dataset {
     Dataset::table("orders")
@@ -548,6 +548,12 @@ pub mod types {
 }
 
 pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&types::UINT_256));
+pub const AMOUNT_HISTORY: Field = Field::mapped(
+    "amountHistory",
+    "amount_history",
+    FieldType::Array(ElemType::Custom(&types::UINT_256)),
+)
+.sortable(false);
 ```
 
 That keeps values such as `uint_256` and large `numeric` amounts out of `f64`.

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -61,6 +62,7 @@ pub enum ElemType {
     Timestamptz,
     Date,
     Enum(EnumType),
+    Custom(&'static TypeSpec),
 }
 
 impl ElemType {
@@ -78,6 +80,15 @@ impl ElemType {
             Self::Timestamptz => "timestamptz",
             Self::Date => "date",
             Self::Enum(enum_type) => enum_type.name,
+            Self::Custom(type_spec) => type_spec.name,
+        }
+    }
+
+    pub fn display_name(self) -> Cow<'static, str> {
+        match self {
+            Self::Enum(enum_type) => Cow::Owned(format!("{}[]", enum_type.display_name())),
+            Self::Custom(type_spec) => Cow::Owned(format!("{}[]", type_spec.display_name())),
+            other => Cow::Borrowed(other.as_str()),
         }
     }
 }
@@ -310,7 +321,17 @@ impl FieldType {
                 ElemType::Timestamptz => "timestamptz[]",
                 ElemType::Date => "date[]",
                 ElemType::Enum(_) => "enum[]",
+                ElemType::Custom(_) => "custom[]",
             },
+        }
+    }
+
+    pub fn display_name(self) -> Cow<'static, str> {
+        match self {
+            Self::Enum(enum_type) => Cow::Owned(enum_type.display_name()),
+            Self::Custom(type_spec) => Cow::Owned(type_spec.display_name()),
+            Self::Array(elem_type) => elem_type.display_name(),
+            other => Cow::Borrowed(other.as_str()),
         }
     }
 

@@ -252,9 +252,9 @@ pub(super) fn validate_column_operator(
 
     Err(Error::IncompatibleColumnTypes {
         left: left.display_name(),
-        left_type: left.ty.as_str().to_owned(),
+        left_type: left.ty.display_name().into_owned(),
         right: right.display_name(),
-        right_type: right.ty.as_str().to_owned(),
+        right_type: right.ty.display_name().into_owned(),
         operator: operator.as_str().to_owned(),
     })
 }
@@ -575,6 +575,9 @@ fn require_value_for_elem_type(
             matches!(value, Value::String(_))
         }),
         ElemType::Enum(enum_type) => require_enum_scalar_by_name(field, operator, enum_type, value),
+        ElemType::Custom(type_spec) => {
+            require_value_for_type_spec(field, operator, *type_spec, value)
+        }
     }
 }
 
@@ -645,7 +648,7 @@ fn array_elem_type(field: &ResolvedField) -> ElemType {
 fn unsupported<T>(field: &ResolvedField, operator: Operator) -> Result<T> {
     Err(Error::UnsupportedOperator {
         field: field.display_name(),
-        field_type: field.ty.as_str().to_owned(),
+        field_type: field.ty.display_name().into_owned(),
         operator: operator.as_str().to_owned(),
     })
 }

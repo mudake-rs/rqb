@@ -7,7 +7,7 @@ const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType:
 const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
     .sortable(false)
     .json_paths(JsonPathPolicy::Dynamic);
-const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
 fn order_search() -> Dataset {
     Dataset::view("order_search_view")

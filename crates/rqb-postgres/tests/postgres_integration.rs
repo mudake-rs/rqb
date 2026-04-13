@@ -162,12 +162,24 @@ mod withdrawals_table {
     pub const ID: Field = Field::new("id", FieldType::Uuid);
     pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
     pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&UINT_256));
+    pub const AMOUNT_HISTORY: Field = Field::mapped(
+        "amountHistory",
+        "amount_history",
+        FieldType::Array(ElemType::Custom(&UINT_256)),
+    );
     pub const WALLET_ADDRESS: Field =
         Field::mapped("walletAddress", "wallet_address", FieldType::Text);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
     pub fn dataset() -> Dataset {
-        Dataset::table("withdrawals").fields([ID, USER_ID, AMOUNT, WALLET_ADDRESS, CREATED_AT])
+        Dataset::table("withdrawals").fields([
+            ID,
+            USER_ID,
+            AMOUNT,
+            AMOUNT_HISTORY,
+            WALLET_ADDRESS,
+            CREATED_AT,
+        ])
     }
 }
 
@@ -253,21 +265,31 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
     };
 
     #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct Withdrawal {
         id: String,
         amount: String,
+        amount_history: Vec<String>,
     }
 
     let high_value = "900719925474099312345678901234567890";
     let rows: Vec<Withdrawal> = select(withdrawals_table::dataset())
-        .fields([withdrawals_table::ID, withdrawals_table::AMOUNT])
-        .filter(withdrawals_table::AMOUNT.gte(high_value))
+        .fields([
+            withdrawals_table::ID,
+            withdrawals_table::AMOUNT,
+            withdrawals_table::AMOUNT_HISTORY,
+        ])
+        .filter(all([
+            withdrawals_table::AMOUNT.gte(high_value),
+            withdrawals_table::AMOUNT_HISTORY.has(high_value),
+        ]))
         .fetch_as(&client)
         .await?;
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, "60000000-0000-0000-0000-000000000001");
     assert_eq!(rows[0].amount, high_value);
+    assert_eq!(rows[0].amount_history, vec!["1", high_value]);
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -275,6 +297,7 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
         id: &'a str,
         user_id: &'a str,
         amount: &'a str,
+        amount_history: Vec<&'a str>,
         wallet_address: &'a str,
     }
 
@@ -284,17 +307,26 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
             id: "60000000-0000-0000-0000-000000000003",
             user_id: "10000000-0000-0000-0000-000000000001",
             amount: inserted,
+            amount_history: vec!["42", inserted],
             wallet_address: "0xfeed",
         })
         .execute(&client)
         .await?;
 
     let row: Withdrawal = select(withdrawals_table::dataset())
-        .fields([withdrawals_table::ID, withdrawals_table::AMOUNT])
-        .filter(withdrawals_table::ID.eq("60000000-0000-0000-0000-000000000003"))
+        .fields([
+            withdrawals_table::ID,
+            withdrawals_table::AMOUNT,
+            withdrawals_table::AMOUNT_HISTORY,
+        ])
+        .filter(all([
+            withdrawals_table::ID.eq("60000000-0000-0000-0000-000000000003"),
+            withdrawals_table::AMOUNT_HISTORY.contains_all(["42", inserted]),
+        ]))
         .fetch_one_as(&client)
         .await?;
     assert_eq!(row.amount, inserted);
+    assert_eq!(row.amount_history, vec!["42", inserted]);
 
     Ok(())
 }

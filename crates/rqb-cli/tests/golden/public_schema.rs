@@ -563,11 +563,24 @@ pub mod withdrawals {
     pub const ID: Field = Field::new("id", FieldType::Uuid);
     pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
     pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&super::types::UINT_256));
+    pub const AMOUNT_HISTORY: Field = Field::mapped(
+        "amountHistory",
+        "amount_history",
+        FieldType::Array(ElemType::Custom(&super::types::UINT_256)),
+    )
+    .sortable(false);
     pub const WALLET_ADDRESS: Field =
         Field::mapped("walletAddress", "wallet_address", FieldType::Text);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub fn dataset() -> Dataset {
-        Dataset::table("withdrawals").fields([ID, USER_ID, AMOUNT, WALLET_ADDRESS, CREATED_AT])
+        Dataset::table("withdrawals").fields([
+            ID,
+            USER_ID,
+            AMOUNT,
+            AMOUNT_HISTORY,
+            WALLET_ADDRESS,
+            CREATED_AT,
+        ])
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -582,6 +595,9 @@ pub mod withdrawals {
         }
         pub fn amount(&self) -> FieldRef {
             self.inner.field(AMOUNT)
+        }
+        pub fn amount_history(&self) -> FieldRef {
+            self.inner.field(AMOUNT_HISTORY)
         }
         pub fn wallet_address(&self) -> FieldRef {
             self.inner.field(WALLET_ADDRESS)

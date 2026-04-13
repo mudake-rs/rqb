@@ -60,6 +60,7 @@ enum ColumnType {
     Enum(PgEnum),
     ArrayEnum(PgEnum),
     Domain(PgDomain),
+    ArrayDomain(PgDomain),
 }
 
 impl ColumnType {
@@ -70,7 +71,7 @@ impl ColumnType {
 
     fn is_array(&self) -> bool {
         matches!(self, Self::Core(field_type) if field_type.is_array())
-            || matches!(self, Self::ArrayEnum(_))
+            || matches!(self, Self::ArrayEnum(_) | Self::ArrayDomain(_))
     }
 }
 
@@ -582,6 +583,10 @@ fn field_type_tokens(field_type: &ColumnType) -> proc_macro2::TokenStream {
             let const_name = Ident::new(&domain.const_name, Span::call_site());
             quote! { FieldType::Custom(&super::types::#const_name) }
         }
+        ColumnType::ArrayDomain(domain) => {
+            let const_name = Ident::new(&domain.const_name, Span::call_site());
+            quote! { FieldType::Array(ElemType::Custom(&super::types::#const_name)) }
+        }
     }
 }
 
@@ -631,6 +636,9 @@ fn elem_type_tokens(elem_type: ElemType) -> proc_macro2::TokenStream {
         ElemType::Enum(_) => {
             unreachable!("enum element types are rendered from ColumnType::ArrayEnum")
         }
+        ElemType::Custom(_) => {
+            unreachable!("custom element types are rendered from ColumnType::ArrayDomain")
+        }
     }
 }
 
@@ -659,6 +667,12 @@ fn map_field_type(
         && let Some(pg_enum) = enums.get(enum_name)
     {
         return ColumnType::ArrayEnum(pg_enum.clone());
+    }
+    if data_type == "ARRAY"
+        && let Some(domain_name) = udt_name.strip_prefix('_')
+        && let Some(domain) = domains.get(domain_name)
+    {
+        return ColumnType::ArrayDomain(domain.clone());
     }
 
     ColumnType::Core(match (data_type, udt_name) {
@@ -993,6 +1007,20 @@ mod tests {
                     && domain.family == TypeFamily::Numeric
                     && domain.value_repr == ValueRepr::DecimalString
         ));
+        assert!(matches!(
+            map_field_type(
+                "ARRAY",
+                "_uint_256",
+                None,
+                None,
+                &BTreeMap::new(),
+                &domains
+            ),
+            ColumnType::ArrayDomain(domain)
+                if domain.name == "uint_256"
+                    && domain.family == TypeFamily::Numeric
+                    && domain.value_repr == ValueRepr::DecimalString
+        ));
     }
 
     #[test]
@@ -1063,13 +1091,22 @@ mod tests {
             &[Relation {
                 name: "withdrawals".to_owned(),
                 kind: RelationKind::Table,
-                columns: vec![Column {
-                    name: "amount".to_owned(),
-                    api_name: "amount".to_owned(),
-                    rust_name: "amount".to_owned(),
-                    const_name: "AMOUNT".to_owned(),
-                    field_type: ColumnType::Domain(domain),
-                }],
+                columns: vec![
+                    Column {
+                        name: "amount".to_owned(),
+                        api_name: "amount".to_owned(),
+                        rust_name: "amount".to_owned(),
+                        const_name: "AMOUNT".to_owned(),
+                        field_type: ColumnType::Domain(domain.clone()),
+                    },
+                    Column {
+                        name: "amount_history".to_owned(),
+                        api_name: "amountHistory".to_owned(),
+                        rust_name: "amount_history".to_owned(),
+                        const_name: "AMOUNT_HISTORY".to_owned(),
+                        field_type: ColumnType::ArrayDomain(domain),
+                    },
+                ],
             }],
             &BTreeMap::new(),
             &domains,
@@ -1083,6 +1120,8 @@ mod tests {
         assert!(code.contains(".value_repr(ValueRepr::DecimalString)"));
         assert!(code.contains(".select_repr(SelectRepr::Text)"));
         assert!(code.contains("FieldType::Custom(&super::types::UINT_256)"));
+        assert!(code.contains("FieldType::Array(ElemType::Custom(&super::types::UINT_256))"));
+        assert!(code.contains(".sortable(false)"));
     }
 
     #[test]

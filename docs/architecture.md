@@ -163,8 +163,9 @@ rqb-core
   validate: AST -> validated models
   validation::aggregate: aggregate fields, filters, aliases, and grouping rules
   validation::expr: validated expression tree construction
-  validation::value_check: reusable value and type compatibility checks
-  validation::value_shape: reusable runtime Value shape guards
+  validation::sort: validated sort field construction
+  validation::value_type: reusable value/type compatibility checks
+  validation::value_guard: reusable runtime Value guards
   validated: render-ready resolved structs
 
 rqb-postgres
@@ -175,12 +176,12 @@ rqb-postgres
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
   row_map: typed and raw Row -> serde bridge
-  executor::driver: PgExecutor implementations and Page
+  executor::driver: PgExecutor implementations for driver/client types and Page
   executor::query: shared low-level query/fetch helpers
   executor::{select, write, raw}: user-facing execution traits
   pool::db: pooled connection construction and transaction entry points
   pool::transaction: BeginBuilder, Tx, Savepoint, rollback-on-drop
-  pool::executor: PgExecutor impls for Db, Tx, and Savepoint
+  pool::executor: PgExecutor impls for pooled Db, Tx, and Savepoint
 
 rqb-cli
   introspect: read Postgres catalog

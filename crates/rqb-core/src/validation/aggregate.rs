@@ -9,7 +9,7 @@ use crate::types::FieldType;
 use super::expr::validate_expr;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
-use super::select::validate_sort;
+use super::sort::validate_sort;
 use super::{ValidatedAggregate, ValidatedExpr};
 
 pub(super) fn validate_aggregate(

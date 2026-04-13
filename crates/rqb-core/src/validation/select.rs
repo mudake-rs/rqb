@@ -1,7 +1,6 @@
 use crate::aggregate::SelectColumn;
 use crate::dataset::{CteBody, Dataset};
 use crate::error::{Error, Result};
-use crate::expr::Sort;
 use crate::field::{FieldRef, ResolvedField};
 use crate::request::SelectQuery;
 
@@ -12,10 +11,8 @@ use super::expr::validate_expr;
 use super::operators::count_raw_placeholders;
 use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
 use super::scope::{ExprContext, QueryScope};
-use super::{
-    ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedJoin, ValidatedSelect,
-    ValidatedSort,
-};
+use super::sort::validate_sort;
+use super::{ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedJoin, ValidatedSelect};
 
 impl ValidatedSelect {
     pub fn new(query: SelectQuery) -> Result<Self> {
@@ -210,20 +207,6 @@ fn resolve_selection(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<Reso
         resolved.push(field);
     }
     Ok(resolved)
-}
-
-pub(super) fn validate_sort(scope: &QueryScope, sort: &Sort) -> Result<ValidatedSort> {
-    let field = resolve_field_in_scope(scope, &sort.field)?;
-    if !field.json_path.is_empty() || !field.caps.sortable {
-        return Err(Error::NotSortable {
-            field: field.display_name(),
-        });
-    }
-    Ok(ValidatedSort {
-        field,
-        dir: sort.dir,
-        nulls: sort.nulls,
-    })
 }
 
 fn resolve_group_by(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<ResolvedField>> {

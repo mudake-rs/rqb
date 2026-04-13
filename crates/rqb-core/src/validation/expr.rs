@@ -5,7 +5,7 @@ use crate::request::SelectQuery;
 use super::operators::{count_raw_placeholders, validate_operator};
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
-use super::value_check::validate_column_operator;
+use super::value_type::validate_column_operator;
 use super::{ValidatedExpr, ValidatedSelect};
 
 pub(super) fn validate_expr(

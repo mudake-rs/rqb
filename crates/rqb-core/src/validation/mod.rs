@@ -4,8 +4,9 @@ mod operators;
 mod resolve;
 mod scope;
 mod select;
-mod value_check;
-mod value_shape;
+mod sort;
+mod value_guard;
+mod value_type;
 mod write;
 
 #[cfg(test)]

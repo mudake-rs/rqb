@@ -4,7 +4,7 @@ use crate::field::ResolvedField;
 use crate::types::{ElemType, EnumType, FieldType, TypeFamily, TypeSpec, ValueRepr};
 use crate::value::Value;
 
-use super::value_shape::reject_non_finite_numbers;
+use super::value_guard::reject_non_finite_numbers;
 
 pub(super) fn enum_type_for_field(field: &ResolvedField) -> Option<EnumType> {
     match field.ty {

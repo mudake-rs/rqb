@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::expr::Operator;
+use crate::expr::{Operator, OperatorCategory};
 use crate::field::{ResolvedField, TextSearchConfig};
 use crate::types::FieldType;
 use crate::value::Value;
@@ -21,33 +21,30 @@ pub(super) fn validate_operator(
     operator: Operator,
     value: &Value,
 ) -> Result<()> {
-    use Operator::*;
-
-    match operator {
-        IsNull | IsNotNull => Ok(()),
-        In | NotIn => validate_in_operator(field, operator, value),
-        Between | NotBetween => validate_between_operator(field, operator, value),
-        ArrayContainsAny | ArrayContainsAll => validate_array_set_operator(field, operator, value),
-        ArrayContains | ArrayNotContains => {
+    match operator.category() {
+        OperatorCategory::NullCheck => Ok(()),
+        OperatorCategory::Inclusion => validate_in_operator(field, operator, value),
+        OperatorCategory::Between => validate_between_operator(field, operator, value),
+        OperatorCategory::ArraySet => validate_array_set_operator(field, operator, value),
+        OperatorCategory::ArrayMembership => {
             validate_array_membership_operator(field, operator, value)
         }
-        ArrayIsEmpty | ArrayIsNotEmpty => validate_array_state_operator(field, operator),
-        ArrayElemMatch => validate_array_elem_match_operator(field, operator, value),
-        JsonKeyExists => validate_json_key_operator(field, operator, value),
-        JsonKeysExistAny | JsonKeysExistAll => {
-            validate_json_key_set_operator(field, operator, value)
+        OperatorCategory::ArrayState => validate_array_state_operator(field, operator),
+        OperatorCategory::ArrayElementMatch => {
+            validate_array_elem_match_operator(field, operator, value)
         }
-        Contains | NotContains | StartsWith | EndsWith | NotStartsWith | NotEndsWith => {
-            validate_text_match_operator(field, operator, value)
-        }
-        ContainedBy | Overlaps => validate_containment_operator(field, operator, value),
-        Regex | NotRegex => validate_regex_operator(field, operator, value),
-        Gt | Gte | Lt | Lte => validate_ordering_operator(field, operator, value),
-        Equals | NotEquals => validate_equality_operator(field, operator, value),
-        IsDistinctFrom | IsNotDistinctFrom => {
+        OperatorCategory::JsonKey => validate_json_key_operator(field, operator, value),
+        OperatorCategory::JsonKeySet => validate_json_key_set_operator(field, operator, value),
+        OperatorCategory::Contains => validate_contains_operator(field, operator, value),
+        OperatorCategory::TextAffix => validate_text_affix_operator(field, operator, value),
+        OperatorCategory::Containment => validate_containment_operator(field, operator, value),
+        OperatorCategory::Regex => validate_regex_operator(field, operator, value),
+        OperatorCategory::Ordering => validate_ordering_operator(field, operator, value),
+        OperatorCategory::Equality => validate_equality_operator(field, operator, value),
+        OperatorCategory::NullSafeEquality => {
             validate_null_safe_equality_operator(field, operator, value)
         }
-        TextSearch => validate_text_search_operator(field, operator, value),
+        OperatorCategory::TextSearch => validate_text_search_operator(field, operator, value),
     }
 }
 
@@ -173,17 +170,27 @@ fn validate_json_key_set_operator(
     Ok(())
 }
 
-fn validate_text_match_operator(
+fn validate_contains_operator(
     field: &ResolvedField,
     operator: Operator,
     value: &Value,
 ) -> Result<()> {
     require_string(field, operator, value)?;
-    if matches!(operator, Operator::Contains | Operator::NotContains)
-        && (field.ty.is_range() || field.ty.is_network())
-    {
+    if field.ty.is_range() || field.ty.is_network() {
         return validate_value_for_field_type(field, operator.as_str(), value);
     }
+    if !(field.ty.is_text() || field.ty == FieldType::Uuid || field.is_json_path()) {
+        return unsupported(field, operator);
+    }
+    Ok(())
+}
+
+fn validate_text_affix_operator(
+    field: &ResolvedField,
+    operator: Operator,
+    value: &Value,
+) -> Result<()> {
+    require_string(field, operator, value)?;
     if !(field.ty.is_text() || field.ty == FieldType::Uuid || field.is_json_path()) {
         return unsupported(field, operator);
     }

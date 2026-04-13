@@ -30,8 +30,8 @@ pub use dataset::{Cte, CteBody, Dataset, Join, JoinKind, Relation, Source, cte};
 pub use error::{Error, Result};
 pub use expr::{
     ColumnOperator, ColumnPredicate, ExistsPredicate, Expr, LogicalExpr, LogicalOp, NullsOrder,
-    Operator, Predicate, Sort, SortDir, SubqueryOperator, SubqueryPredicate, all, any, exists,
-    field, not, not_exists,
+    Operator, OperatorCategory, Predicate, Sort, SortDir, SubqueryOperator, SubqueryPredicate, all,
+    any, exists, field, not, not_exists,
 };
 pub use field::{Capabilities, Field, FieldRef, JsonPathPolicy, ResolvedField, TextSearchConfig};
 pub use raw::{RawQuery, RawSql, raw, raw_query};

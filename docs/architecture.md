@@ -160,7 +160,7 @@ rqb-core
   metadata: Dataset, Source, Field, FieldType, TypeSpec, capabilities
   field::{capabilities, reference, resolved}: field metadata, FieldRef API, resolved fields
   types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
-  ast: SelectQuery, SearchRequest, Expr, Aggregate, write ASTs, RawSql
+  ast: SelectQuery, SearchRequest, Expr, OperatorCategory, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> validated models
   validation::aggregate: aggregate fields, filters, aliases, and grouping rules
@@ -177,7 +177,7 @@ rqb-postgres
   type_sql::{casts, selection, names}: bind casts, selection repr, type identifiers
   render: validated models -> BuiltQuery
   render::expr: validated expression tree dispatch
-  render::predicate: predicate and column-predicate SQL
+  render::predicate::{comparison, text, collection, target}: categorized predicate SQL
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
   row_map::{typed, raw}: metadata-driven and OID-driven Row -> serde bridge
@@ -217,8 +217,7 @@ every layer.
 4. Categorize operators.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
    rendering through explicit operator categories to reduce parallel branching.
-   Started in rendering by splitting expression dispatch from predicate SQL, and
-   in validation by routing operator groups through focused helper functions.
+   Started with `OperatorCategory`, validation dispatch, and rendering dispatch.
 
 5. Revisit execution traits.
    Only after rendering and validation are cleaner, decide whether select/write

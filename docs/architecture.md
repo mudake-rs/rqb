@@ -130,8 +130,11 @@ Normal rqb queries map rows using validated `SelectColumn` metadata. Raw queries
 map rows from Postgres column type OIDs. Both currently go through a JSON bridge
 before serde deserialization.
 
-That is acceptable for current API endpoints. Direct row deserialization is a
-later performance project, not the first architecture slice.
+The implementation keeps those paths separate: typed row mapping is metadata
+driven, raw row mapping is OID driven, and shared primitive readers live in the
+module root. Both currently go through a JSON bridge before serde
+deserialization. Direct row deserialization is a later performance project, not
+the first architecture slice.
 
 ### CLI Is Product-Critical
 
@@ -158,7 +161,7 @@ rqb-postgres
   render: validated models -> BuiltQuery
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
-  rows: Row -> serde bridge
+  row_map: typed and raw Row -> serde bridge
   exec: PgExecutor and high-level fetch helpers
 
 rqb-cli

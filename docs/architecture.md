@@ -162,7 +162,9 @@ rqb-postgres
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
   row_map: typed and raw Row -> serde bridge
-  exec: PgExecutor and high-level fetch helpers
+  executor::driver: PgExecutor implementations and Page
+  executor::query: shared low-level query/fetch helpers
+  executor::{select, write, raw}: user-facing execution traits
 
 rqb-cli
   introspect: read Postgres catalog

@@ -2,39 +2,12 @@ use rqb_core::{LogicalOp, ValidatedExpr};
 
 use crate::Result;
 
-use super::{Renderer, SelectProjection};
+use super::Renderer;
 
 impl Renderer {
     pub(super) fn render_expr(&mut self, expr: &ValidatedExpr) -> Result<()> {
         match expr {
             ValidatedExpr::Predicate(predicate) => self.render_predicate(predicate),
-            ValidatedExpr::ColumnPredicate {
-                left,
-                operator,
-                right,
-            } => self.render_column_predicate(left, *operator, right),
-            ValidatedExpr::Subquery {
-                field,
-                operator,
-                query,
-            } => {
-                self.render_column_name(field);
-                self.sql.push(' ');
-                self.sql.push_str(operator.as_sql());
-                self.sql.push_str(" (");
-                self.render_subquery(query, SelectProjection::Value)?;
-                self.sql.push(')');
-                Ok(())
-            }
-            ValidatedExpr::Exists { query, negated } => {
-                if *negated {
-                    self.sql.push_str("NOT ");
-                }
-                self.sql.push_str("EXISTS (");
-                self.render_subquery(query, SelectProjection::Exists)?;
-                self.sql.push(')');
-                Ok(())
-            }
             ValidatedExpr::Logical {
                 logical,
                 predicates,
@@ -62,10 +35,6 @@ impl Renderer {
                     Ok(())
                 }
             },
-            ValidatedExpr::Raw(raw) => {
-                self.render_raw(raw);
-                Ok(())
-            }
         }
     }
 }

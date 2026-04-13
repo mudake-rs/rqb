@@ -219,7 +219,8 @@ every layer.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
    rendering through explicit operator categories to reduce parallel branching.
    Started with `OperatorCategory`, validation dispatch, rendering dispatch, and
-   `ValidatedPredicate` lowering for user predicates.
+   `ValidatedPredicate` lowering for value, column, subquery, exists, and raw
+   predicates.
 
 5. Revisit execution traits.
    Only after rendering and validation are cleaner, decide whether select/write

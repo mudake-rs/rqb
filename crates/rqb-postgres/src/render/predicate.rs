@@ -7,11 +7,39 @@ use rqb_core::ValidatedPredicate;
 
 use crate::Result;
 
-use super::Renderer;
+use super::{Renderer, SelectProjection};
 
 impl Renderer {
     pub(super) fn render_predicate(&mut self, predicate: &ValidatedPredicate) -> Result<()> {
         match predicate {
+            ValidatedPredicate::Raw(raw) => {
+                self.render_raw(raw);
+            }
+            ValidatedPredicate::ColumnBinary {
+                left,
+                operator,
+                right,
+            } => self.render_column_predicate(left, *operator, right)?,
+            ValidatedPredicate::Subquery {
+                field,
+                operator,
+                query,
+            } => {
+                self.render_column_name(field);
+                self.sql.push(' ');
+                self.sql.push_str(operator.as_sql());
+                self.sql.push_str(" (");
+                self.render_subquery(query, SelectProjection::Value)?;
+                self.sql.push(')');
+            }
+            ValidatedPredicate::Exists { query, negated } => {
+                if *negated {
+                    self.sql.push_str("NOT ");
+                }
+                self.sql.push_str("EXISTS (");
+                self.render_subquery(query, SelectProjection::Exists)?;
+                self.sql.push(')');
+            }
             ValidatedPredicate::NullCheck { field, negated } => {
                 self.render_null_check(field, *negated)
             }

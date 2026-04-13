@@ -63,10 +63,20 @@ pub struct ValidatedJoin {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+// Keep predicates inline to avoid one allocation per expression leaf.
 #[allow(clippy::large_enum_variant)]
 pub enum ValidatedExpr {
     Predicate(ValidatedPredicate),
-    ColumnPredicate {
+    Logical {
+        logical: LogicalOp,
+        predicates: Vec<ValidatedExpr>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedPredicate {
+    Raw(crate::RawSql),
+    ColumnBinary {
         left: ResolvedField,
         operator: ColumnOperator,
         right: ResolvedField,
@@ -80,15 +90,6 @@ pub enum ValidatedExpr {
         query: Box<ValidatedSelect>,
         negated: bool,
     },
-    Logical {
-        logical: LogicalOp,
-        predicates: Vec<ValidatedExpr>,
-    },
-    Raw(crate::RawSql),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ValidatedPredicate {
     NullCheck {
         field: ResolvedField,
         negated: bool,

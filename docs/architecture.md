@@ -106,8 +106,10 @@ JSONB key, range/network containment, regex, text search, and subquery.
 
 Rendering has started moving in that direction: `render::expr` dispatches the
 validated expression tree, while `render::predicate` owns concrete SQL for
-field predicates and column predicates. Validation still needs the same kind of
-category split before this pressure point is fully closed.
+field predicates and column predicates. Validation also routes the top-level
+operator switch through category helpers, so scalar ordering, equality,
+array membership, JSON keys, text matching, containment, regex, and text search
+stay readable without inventing a trait hierarchy.
 
 ### Write Validation Still Reuses Select Machinery
 
@@ -202,7 +204,8 @@ every layer.
 4. Categorize operators.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
    rendering through explicit operator categories to reduce parallel branching.
-   Started in rendering by splitting expression dispatch from predicate SQL.
+   Started in rendering by splitting expression dispatch from predicate SQL, and
+   in validation by routing operator groups through focused helper functions.
 
 5. Revisit execution traits.
    Only after rendering and validation are cleaner, decide whether select/write

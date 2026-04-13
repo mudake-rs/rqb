@@ -8,9 +8,10 @@ use crate::field::{FieldRef, ResolvedField};
 use crate::request::SelectQuery;
 use crate::types::FieldType;
 
-use super::operators::{count_raw_placeholders, validate_column_operator, validate_operator};
+use super::operators::{count_raw_placeholders, validate_operator};
 use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
 use super::scope::{ExprContext, QueryScope};
+use super::value_check::validate_column_operator;
 use super::{
     ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedExpr, ValidatedJoin,
     ValidatedSelect, ValidatedSort,

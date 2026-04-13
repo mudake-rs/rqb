@@ -2,6 +2,7 @@ mod operators;
 mod resolve;
 mod scope;
 mod select;
+mod value_check;
 mod write;
 
 #[cfg(test)]

@@ -8,13 +8,14 @@ use crate::write::{
     UpdateQuery, WriteAssignment, WriteValue,
 };
 
-use super::operators::{
-    count_raw_placeholders, enum_type_for_array, enum_type_for_field, require_enum_array,
-    require_enum_scalar, validate_column_operator, validate_value_for_field_type,
-};
+use super::operators::count_raw_placeholders;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
 use super::select::validate_expr;
+use super::value_check::{
+    enum_type_for_array, enum_type_for_field, require_enum_array, require_enum_scalar,
+    validate_column_operator, validate_value_for_field_type,
+};
 use super::{
     ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedSelect, ValidatedUpdate,

@@ -154,6 +154,7 @@ rqb-core
   ast: SelectQuery, SearchRequest, Expr, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> validated models
+  validation::value_check: reusable value and type compatibility checks
   validated: render-ready resolved structs
 
 rqb-postgres

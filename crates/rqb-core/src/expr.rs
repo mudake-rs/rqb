@@ -8,6 +8,10 @@ use crate::raw::RawSql;
 use crate::request::SelectQuery;
 use crate::value::Value;
 
+mod operator;
+
+pub use operator::{ColumnOperator, Operator, OperatorCategory};
+
 macro_rules! impl_as_str {
     ($ty:ident { $($variant:ident => $value:expr),* $(,)? }) => {
         impl $ty {
@@ -57,104 +61,6 @@ pub fn exists(query: impl Into<SelectQuery>) -> Expr {
 pub fn not_exists(query: impl Into<SelectQuery>) -> Expr {
     Expr::not_exists(query)
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Operator {
-    StartsWith,
-    Contains,
-    NotContains,
-    EndsWith,
-    Equals,
-    NotEquals,
-    In,
-    NotIn,
-    Lt,
-    Lte,
-    Gt,
-    Gte,
-    Between,
-    NotBetween,
-    IsNull,
-    IsNotNull,
-    NotStartsWith,
-    NotEndsWith,
-    IsDistinctFrom,
-    IsNotDistinctFrom,
-    ArrayContainsAny,
-    ArrayContainsAll,
-    ArrayElemMatch,
-    ArrayContains,
-    ArrayNotContains,
-    ArrayIsEmpty,
-    ArrayIsNotEmpty,
-    JsonKeyExists,
-    JsonKeysExistAny,
-    JsonKeysExistAll,
-    ContainedBy,
-    Overlaps,
-    Regex,
-    NotRegex,
-    TextSearch,
-}
-
-impl_as_str!(Operator {
-    StartsWith => "startsWith",
-    Contains => "contains",
-    NotContains => "notContains",
-    EndsWith => "endsWith",
-    Equals => "equals",
-    NotEquals => "notEquals",
-    In => "in",
-    NotIn => "notIn",
-    Lt => "lt",
-    Lte => "lte",
-    Gt => "gt",
-    Gte => "gte",
-    Between => "between",
-    NotBetween => "notBetween",
-    IsNull => "isNull",
-    IsNotNull => "isNotNull",
-    NotStartsWith => "notStartsWith",
-    NotEndsWith => "notEndsWith",
-    IsDistinctFrom => "isDistinctFrom",
-    IsNotDistinctFrom => "isNotDistinctFrom",
-    ArrayContainsAny => "arrayContainsAny",
-    ArrayContainsAll => "arrayContainsAll",
-    ArrayElemMatch => "arrayElemMatch",
-    ArrayContains => "arrayContains",
-    ArrayNotContains => "arrayNotContains",
-    ArrayIsEmpty => "arrayIsEmpty",
-    ArrayIsNotEmpty => "arrayIsNotEmpty",
-    JsonKeyExists => "jsonKeyExists",
-    JsonKeysExistAny => "jsonKeysExistAny",
-    JsonKeysExistAll => "jsonKeysExistAll",
-    ContainedBy => "containedBy",
-    Overlaps => "overlaps",
-    Regex => "regex",
-    NotRegex => "notRegex",
-    TextSearch => "textSearch",
-});
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ColumnOperator {
-    Equals,
-    NotEquals,
-    Lt,
-    Lte,
-    Gt,
-    Gte,
-}
-
-impl_as_str!(ColumnOperator {
-    Equals => "equals",
-    NotEquals => "notEquals",
-    Lt => "lt",
-    Lte => "lte",
-    Gt => "gt",
-    Gte => "gte",
-});
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

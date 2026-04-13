@@ -1,8 +1,9 @@
 use super::*;
 use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType, Join,
-    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr, Sort, TypeFamily,
-    TypeSpec, Value, ValueRepr, avg, count, count_field, field, insert, max, min, string_agg, sum,
+    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr, Sort, SubqueryOperator,
+    TypeFamily, TypeSpec, Value, ValueRepr, avg, count, count_field, field, insert, max, min,
+    string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -152,6 +153,114 @@ fn accepts_json_path_filtering() {
         .filter(field("properties.score").gt(10))
         .build();
     ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn lowers_user_predicates_to_concrete_validated_shapes() {
+    let query = crate::select(dataset())
+        .filter(crate::all([
+            field("name").contains("ada"),
+            field("network").contains("10.1.2.0/24"),
+            field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
+            field("score").between(1, 10),
+            field("state").is_in(["active", "archived"]),
+        ]))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+    let ValidatedExpr::Logical { predicates, .. } = validated.filter.unwrap() else {
+        panic!("expected top-level logical expression");
+    };
+
+    assert!(matches!(
+        &predicates[0],
+        ValidatedExpr::Predicate(ValidatedPredicate::Like {
+            pattern: ValidatedLikePattern::Contains,
+            value,
+            negated: false,
+            ..
+        }) if value == "ada"
+    ));
+    assert!(matches!(
+        &predicates[1],
+        ValidatedExpr::Predicate(ValidatedPredicate::Containment {
+            op: ValidatedContainmentOperator::Contains,
+            target: ValidatedContainmentTarget::Network,
+            negated: false,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[2],
+        ValidatedExpr::Predicate(ValidatedPredicate::Containment {
+            op: ValidatedContainmentOperator::Overlaps,
+            target: ValidatedContainmentTarget::Range,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[3],
+        ValidatedExpr::Predicate(ValidatedPredicate::Between {
+            lower: Value::I64(1),
+            upper: Value::I64(10),
+            negated: false,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[4],
+        ValidatedExpr::Predicate(ValidatedPredicate::In {
+            values,
+            negated: false,
+            ..
+        }) if values.len() == 2
+    ));
+}
+
+#[test]
+fn lowers_non_value_predicates_to_concrete_validated_shapes() {
+    let subquery = crate::select(dataset().alias("b"))
+        .fields([field("b.id")])
+        .filter(field("b.state").eq("active"));
+    let exists_query = crate::select(dataset().alias("c")).filter(field("c.state").eq("archived"));
+
+    let query = crate::select(dataset().alias("a"))
+        .filter(crate::all([
+            field("a.score").gt_col(field("a.score")),
+            field("a.id").in_subquery(subquery),
+            crate::exists(exists_query),
+            Expr::raw(crate::raw("score > ?").bind(10)),
+        ]))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+    let ValidatedExpr::Logical { predicates, .. } = validated.filter.unwrap() else {
+        panic!("expected top-level logical expression");
+    };
+
+    assert!(matches!(
+        &predicates[0],
+        ValidatedExpr::Predicate(ValidatedPredicate::ColumnBinary {
+            operator: ColumnOperator::Gt,
+            ..
+        })
+    ));
+    assert!(matches!(
+        &predicates[1],
+        ValidatedExpr::Predicate(ValidatedPredicate::Subquery {
+            operator: SubqueryOperator::In,
+            query,
+            ..
+        }) if query.columns.len() == 1
+    ));
+    assert!(matches!(
+        &predicates[2],
+        ValidatedExpr::Predicate(ValidatedPredicate::Exists { negated: false, .. })
+    ));
+    assert!(matches!(
+        &predicates[3],
+        ValidatedExpr::Predicate(ValidatedPredicate::Raw(raw)) if raw.binds.len() == 1
+    ));
 }
 
 #[test]

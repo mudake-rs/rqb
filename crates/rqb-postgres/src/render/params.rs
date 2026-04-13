@@ -9,7 +9,11 @@ use super::Renderer;
 
 impl Renderer {
     pub(super) fn push_param(&mut self, value: &Value) {
-        self.params.push(value.clone());
+        self.push_owned_param(value.clone());
+    }
+
+    pub(super) fn push_owned_param(&mut self, value: Value) {
+        self.params.push(value);
         self.sql.push('$');
         self.sql.push_str(&self.params.len().to_string());
     }
@@ -50,36 +54,72 @@ impl Renderer {
         write_postgres_cast(&mut self.sql, field_type);
     }
 
-    pub(super) fn push_jsonb_array_param(&mut self, value: &Value) {
-        let Value::Array(values) = value else {
-            unreachable!("validated by rqb-core");
-        };
-        let value = Value::Array(values.iter().map(value_to_json).collect());
-        self.push_param(&value);
+    pub(super) fn push_jsonb_array_values_param(&mut self, values: &[Value]) {
+        self.push_owned_param(Value::Array(values.iter().map(value_to_json).collect()));
         write_postgres_array_cast_for_scalar(&mut self.sql, FieldType::Jsonb);
     }
 
-    pub(super) fn push_scalar_array_param(&mut self, value: &Value, field_type: FieldType) {
+    pub(super) fn push_scalar_array_values_param(
+        &mut self,
+        values: &[Value],
+        field_type: FieldType,
+    ) {
         if let Some(array_type) = array_field_type_for_scalar(field_type) {
-            self.push_typed_param(value, array_type);
+            self.push_typed_array_values_param(values, array_type);
             return;
         }
 
-        self.push_param(value);
+        self.push_owned_param(Value::Array(values.to_vec()));
         if !write_postgres_array_cast_for_scalar(&mut self.sql, field_type) {
             self.cacheable = false;
         }
     }
 
+    pub(super) fn push_string_array_param(&mut self, values: &[String]) {
+        self.push_owned_param(Value::Array(
+            values.iter().cloned().map(Value::String).collect(),
+        ));
+        write_postgres_cast(&mut self.sql, FieldType::Array(ElemType::Text));
+    }
+
+    fn push_typed_array_values_param(&mut self, values: &[Value], field_type: FieldType) {
+        if values.is_empty() && field_type.is_array() {
+            self.sql.push_str("ARRAY[]");
+            write_postgres_cast(&mut self.sql, field_type);
+            return;
+        }
+
+        match field_type {
+            FieldType::Array(ElemType::Numeric) => {
+                self.push_owned_param(Value::Array(
+                    values.iter().map(numeric_text_value).collect(),
+                ));
+                self.sql.push_str("::text[]::numeric[]");
+            }
+            FieldType::Array(ElemType::Custom(type_spec))
+                if type_spec.value_repr == ValueRepr::DecimalString =>
+            {
+                self.push_owned_param(Value::Array(
+                    values.iter().map(numeric_text_value).collect(),
+                ));
+                write_postgres_cast(&mut self.sql, field_type);
+            }
+            _ => {
+                self.push_owned_param(Value::Array(values.to_vec()));
+                write_postgres_cast(&mut self.sql, field_type);
+            }
+        }
+    }
+
     fn push_numeric_param(&mut self, value: &Value) {
         let value = numeric_text_value(value);
-        self.push_param(&value);
+        self.push_owned_param(value);
         self.sql.push_str("::text::numeric");
     }
 
     fn push_decimal_string_param(&mut self, value: &Value, field_type: FieldType) {
         let value = numeric_text_value(value);
-        self.push_param(&value);
+        self.push_owned_param(value);
         write_postgres_cast(&mut self.sql, field_type);
     }
 
@@ -88,7 +128,7 @@ impl Renderer {
             Value::Array(values) => Value::Array(values.iter().map(numeric_text_value).collect()),
             other => numeric_text_value(other),
         };
-        self.push_param(&value);
+        self.push_owned_param(value);
         self.sql.push_str("::text[]::numeric[]");
     }
 
@@ -97,7 +137,7 @@ impl Renderer {
             Value::Array(values) => Value::Array(values.iter().map(numeric_text_value).collect()),
             other => numeric_text_value(other),
         };
-        self.push_param(&value);
+        self.push_owned_param(value);
         write_postgres_cast(&mut self.sql, field_type);
     }
 }

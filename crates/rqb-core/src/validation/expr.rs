@@ -2,11 +2,11 @@ use crate::error::{Error, Result};
 use crate::expr::{Expr, LogicalOp};
 use crate::request::SelectQuery;
 
-use super::operators::{count_raw_placeholders, validate_operator};
+use super::operators::{count_raw_placeholders, validate_predicate};
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
 use super::value_type::validate_column_operator;
-use super::{ValidatedExpr, ValidatedSelect};
+use super::{ValidatedExpr, ValidatedPredicate, ValidatedSelect};
 
 pub(super) fn validate_expr(
     scope: &QueryScope,
@@ -21,22 +21,21 @@ pub(super) fn validate_expr(
                     field: field.display_name(),
                 });
             }
-            validate_operator(&field, predicate.operator, &predicate.value)?;
-            ValidatedExpr::Predicate {
-                field,
-                operator: predicate.operator,
-                value: predicate.value.clone(),
-            }
+            ValidatedExpr::Predicate(validate_predicate(
+                &field,
+                predicate.operator,
+                &predicate.value,
+            )?)
         }
         Expr::ColumnPredicate(predicate) => {
             let left = resolve_field_in_scope(scope, &predicate.left)?;
             let right = resolve_field_in_scope(scope, &predicate.right)?;
             validate_column_operator(&left, predicate.operator, &right)?;
-            ValidatedExpr::ColumnPredicate {
+            ValidatedExpr::Predicate(ValidatedPredicate::ColumnBinary {
                 left,
                 operator: predicate.operator,
                 right,
-            }
+            })
         }
         Expr::Subquery(predicate) => {
             let field = resolve_field_in_scope(scope, &predicate.field)?;
@@ -53,16 +52,16 @@ pub(super) fn validate_expr(
                     actual: selected,
                 });
             }
-            ValidatedExpr::Subquery {
+            ValidatedExpr::Predicate(ValidatedPredicate::Subquery {
                 field,
                 operator: predicate.operator,
                 query: Box::new(validated),
-            }
+            })
         }
-        Expr::Exists(predicate) => ValidatedExpr::Exists {
+        Expr::Exists(predicate) => ValidatedExpr::Predicate(ValidatedPredicate::Exists {
             query: Box::new(validate_subquery(scope, &predicate.query)?),
             negated: predicate.negated,
-        },
+        }),
         Expr::Logical(logical) => {
             if logical.predicates.is_empty() {
                 return Err(Error::EmptyLogical {
@@ -89,7 +88,7 @@ pub(super) fn validate_expr(
                     binds: raw.binds.len(),
                 });
             }
-            ValidatedExpr::Raw(raw.clone())
+            ValidatedExpr::Predicate(ValidatedPredicate::Raw(raw.clone()))
         }
     })
 }

@@ -5,9 +5,9 @@ use rqb_core::{
 
 use crate::Result;
 use crate::helpers::{
-    array_element_field_type, column_operator_sql, escape_like, quote_literal, value_to_json,
-    value_to_json_array,
+    column_operator_sql, escape_like, quote_literal, value_to_json, value_to_json_array,
 };
+use crate::type_sql::array_element_field_type;
 
 use super::{Renderer, SelectProjection};
 

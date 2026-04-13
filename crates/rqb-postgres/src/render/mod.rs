@@ -4,6 +4,7 @@ mod cte;
 mod delete;
 mod expr;
 mod insert;
+mod params;
 mod select;
 mod update;
 

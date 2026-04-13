@@ -30,6 +30,7 @@ mod result_ext;
 mod row_map;
 #[cfg(test)]
 mod tests;
+mod type_sql;
 
 use render::Renderer;
 

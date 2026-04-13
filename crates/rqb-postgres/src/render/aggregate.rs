@@ -1,7 +1,8 @@
 use rqb_core::{ValidatedAggregate, ValidatedExpr};
 
 use crate::Result;
-use crate::helpers::{postgres_selection_cast, quote_literal, write_quoted_ident};
+use crate::helpers::{quote_literal, write_quoted_ident};
+use crate::type_sql::postgres_selection_cast;
 
 use super::Renderer;
 

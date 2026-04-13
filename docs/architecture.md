@@ -83,15 +83,16 @@ Type behavior currently lives in several places:
 
 - `FieldType` / `ElemType` methods in `rqb-core`
 - value validation in `validation/operators.rs`
-- Postgres cast helpers in `rqb-postgres/src/helpers.rs`
+- Postgres cast helpers in `rqb-postgres/src/type_sql.rs`
 - parameter conversion in `params.rs`
 - row mapping in `row_map.rs`
 - CLI type introspection and code generation in `rqb-cli/src/main.rs`
 
-This is correct behaviorally, but adding a new type still requires touching too
-many unrelated files. The target is not a dynamic registry yet. The next step is
-to centralize type classification and Postgres cast/selection behavior so each
-new type follows one visible checklist.
+This is correct behaviorally, but adding a new type still requires touching
+several files. The target is not a dynamic registry yet. Type classification and
+Postgres cast/selection behavior now have dedicated modules; future type work
+should keep tightening that checklist instead of scattering new switch arms into
+generic helpers.
 
 ### Operator Semantics Are Parallel Switches
 
@@ -154,6 +155,7 @@ rqb-core
 rqb-postgres
   type_sql: Postgres casts, selection repr, array casts
   render: validated models -> BuiltQuery
+  render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
   rows: Row -> serde bridge
   exec: PgExecutor and high-level fetch helpers
@@ -170,15 +172,15 @@ every layer.
 
 ## Migration Plan
 
-1. Clean validated write models.
+1. Clean validated write models. Done.
    Store the writable dataset and validated fields directly; do not store the
    original write AST in render inputs.
 
-2. Add a write-specific scope.
+2. Add a write-specific scope. Started.
    Replace throwaway `SelectQuery` construction in write validation with a small
    `WriteScope` or single-dataset resolver.
 
-3. Centralize type behavior.
+3. Centralize type behavior. Started.
    Introduce small helper APIs that answer type-family, value shape, element
    type, Postgres cast, selection representation, and array cast questions from
    one place per layer.

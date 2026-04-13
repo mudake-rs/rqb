@@ -158,6 +158,8 @@ coupled:
 ```text
 rqb-core
   metadata: Dataset, Source, Field, FieldType, TypeSpec, capabilities
+  field::{capabilities, reference, resolved}: field metadata, FieldRef API, resolved fields
+  types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
   ast: SelectQuery, SearchRequest, Expr, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> validated models

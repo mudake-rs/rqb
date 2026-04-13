@@ -11,6 +11,19 @@ mod golden_schema;
 fn checked_in_golden_schema_compiles_and_exposes_expected_metadata() {
     assert!(golden_schema::enums::ORDER_STATUS.contains("paid"));
     assert!(golden_schema::enums::USER_STATUS.contains("active"));
+    assert_eq!(
+        serde_json::to_value(golden_schema::enums::OrderStatus::Paid).unwrap(),
+        serde_json::json!("paid")
+    );
+    assert_eq!(
+        serde_json::from_value::<golden_schema::enums::OrderStatus>(serde_json::json!("cancelled"))
+            .unwrap(),
+        golden_schema::enums::OrderStatus::Cancelled
+    );
+    assert!(
+        serde_json::from_value::<golden_schema::enums::OrderStatus>(serde_json::json!("missing"))
+            .is_err()
+    );
 
     let orders = golden_schema::orders::dataset();
     assert_eq!(orders.source_name(), "orders");

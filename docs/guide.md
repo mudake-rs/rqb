@@ -526,4 +526,4 @@ cargo run -p rqb-cli -- generate \
   --out target/generated/rqb_schema.rs
 ```
 
-The CLI introspects tables, views, arrays, JSONB columns, and Postgres enums. Generated modules contain `Field` constants and `dataset()` functions; you can still hand-edit wrappers around them for app-specific policy.
+The CLI introspects tables, views, arrays, JSONB columns, and Postgres enums. Generated modules contain `Field` constants, `dataset()` functions, relation helpers, and serde-compatible Rust enum wrappers. Generated enums serialize and deserialize as the exact Postgres labels, so fixed-shape DTOs can use them directly instead of validating status strings by hand.

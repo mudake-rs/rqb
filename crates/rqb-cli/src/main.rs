@@ -364,6 +364,16 @@ fn render_enum_def(pg_enum: &PgEnum) -> proc_macro2::TokenStream {
     let variants = &pg_enum.variants;
     let variant_idents = unique_enum_variant_idents(&pg_enum.variants);
 
+    let variant_defs = variants
+        .iter()
+        .zip(variant_idents.iter())
+        .map(|(variant, ident)| {
+            quote! {
+                #[serde(rename = #variant)]
+                #ident
+            }
+        });
+
     quote! {
         pub const #const_name: EnumType = EnumType::new(
             Some(#schema),
@@ -371,9 +381,10 @@ fn render_enum_def(pg_enum: &PgEnum) -> proc_macro2::TokenStream {
             &[#(#variants),*],
         );
 
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, rqb::serde::Serialize, rqb::serde::Deserialize)]
+        #[serde(crate = "rqb::serde")]
         pub enum #rust_name {
-            #(#variant_idents),*
+            #(#variant_defs),*
         }
 
         impl #rust_name {
@@ -746,6 +757,10 @@ mod tests {
         assert!(code.contains("pub mod enums"));
         assert!(code.contains("pub const ORDER_STATUS: EnumType"));
         assert!(code.contains("pub enum OrderStatus"));
+        assert!(code.contains("rqb::serde::Serialize"));
+        assert!(code.contains("rqb::serde::Deserialize"));
+        assert!(code.contains("#[serde(crate = \"rqb::serde\")]"));
+        assert!(code.contains("#[serde(rename = \"draft\")]"));
         assert!(code.contains("impl DbEnum for OrderStatus"));
         assert!(code.contains("impl std::str::FromStr for OrderStatus"));
         assert!(code.contains("FieldType::Enum(super::enums::ORDER_STATUS)"));

@@ -14,9 +14,9 @@ A cleaner API would let the aggregate builder accept the filter directly, or inf
 
 ## Generated Validators
 
-The CLI now emits Postgres enum metadata and Rust enum wrappers. Request DTO validation still lives in the application through small `validator` custom functions.
+The CLI emits Postgres enum metadata and serde-compatible Rust enum wrappers. Fixed-shape DTOs can use those generated enums directly.
 
-A future generator pass could emit reusable validation helpers for enum-backed request strings, or make it easier to use generated Rust enums directly in API payloads.
+Request DTOs that deliberately keep enum fields as strings still need application validation. A future generator pass could emit reusable validation helpers for those string-backed inputs.
 
 ## Dynamic Response Shapes
 

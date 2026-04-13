@@ -18,6 +18,7 @@ pub use rqb_core::*;
 pub use rqb_postgres as postgres;
 #[cfg(feature = "pool")]
 pub use rqb_postgres::{connect, connect_with_tls};
+pub use serde;
 
 pub mod prelude {
     pub use rqb_core::prelude::*;

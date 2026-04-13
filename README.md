@@ -395,8 +395,10 @@ The generated modules contain:
 - `Field` constants
 - `dataset()` functions
 - `table().alias("x")` relation helpers for ergonomic joins
-- Postgres enum metadata and Rust enum wrappers
+- Postgres enum metadata and serde-compatible Rust enum wrappers
 - JSONB path policy and array sorting defaults from introspection
+
+Generated enum wrappers serialize and deserialize as the exact Postgres labels, so they can be used directly in fixed-shape request, response, and DB DTOs.
 
 The REST sample uses generated schema metadata directly:
 

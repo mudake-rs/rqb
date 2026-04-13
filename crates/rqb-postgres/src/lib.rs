@@ -10,9 +10,9 @@
 use std::fmt;
 
 use rqb_core::{
-    DeleteBuilder, DeleteQuery, Error as CoreError, InsertBuilder, InsertQuery, SelectBuilder,
-    SelectColumn, SelectQuery, UpdateBuilder, UpdateQuery, ValidatedDelete, ValidatedInsert,
-    ValidatedSelect, ValidatedUpdate, Value,
+    DeleteBuilder, DeleteQuery, Error as CoreError, InsertBuilder, InsertQuery, RawQuery,
+    SelectBuilder, SelectColumn, SelectQuery, UpdateBuilder, UpdateQuery, ValidatedDelete,
+    ValidatedInsert, ValidatedSelect, ValidatedUpdate, Value,
 };
 use thiserror::Error;
 
@@ -34,7 +34,7 @@ mod tests;
 use render::Renderer;
 
 #[cfg(feature = "runtime-tokio-postgres")]
-pub use executor::{ExecutePostgres, ExecuteWritePostgres, Page, PgExecutor};
+pub use executor::{ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor};
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use params::PgParams;
 #[cfg(feature = "pool")]
@@ -44,7 +44,7 @@ pub use pool::{
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use result_ext::ResultExt;
 #[cfg(feature = "runtime-tokio-postgres")]
-pub use row_map::row_to_json;
+pub use row_map::{raw_row_to_json, row_to_json};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -353,6 +353,18 @@ impl Postgres {
         let validated = ValidatedDelete::new(query)?;
         Renderer::new().render_delete(&validated)
     }
+
+    pub fn build_raw_query(query: RawQuery) -> Result<BuiltQuery> {
+        let raw = query.as_raw_sql();
+        let placeholders = raw.placeholder_count();
+        if placeholders != raw.binds.len() {
+            return Err(Error::Core(CoreError::RawBindMismatch {
+                placeholders,
+                binds: raw.binds.len(),
+            }));
+        }
+        Ok(Renderer::new().render_raw_query(raw))
+    }
 }
 
 pub trait BuildPostgres {
@@ -438,5 +450,13 @@ impl BuildPostgres for DeleteBuilder {
 
     fn build_pg(self) -> Result<Self::Output> {
         self.build().build_pg()
+    }
+}
+
+impl BuildPostgres for RawQuery {
+    type Output = BuiltQuery;
+
+    fn build_pg(self) -> Result<Self::Output> {
+        Postgres::build_raw_query(self)
     }
 }

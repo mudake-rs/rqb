@@ -12,6 +12,11 @@ use crate::helpers::{
 use super::Renderer;
 
 impl Renderer {
+    pub(crate) fn render_raw_query(mut self, raw: &RawSql) -> crate::BuiltQuery {
+        self.render_raw(raw);
+        self.finish()
+    }
+
     pub(super) fn render_selected_field(&mut self, field: &ResolvedField) {
         self.render_column_name(field);
         let selection_cast = postgres_selection_cast(field.ty);

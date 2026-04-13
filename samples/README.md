@@ -27,6 +27,7 @@ cargo run --manifest-path samples/cte-and-subqueries/Cargo.toml
 cargo run --manifest-path samples/generated-schema/Cargo.toml
 cargo run --manifest-path samples/error-handling/Cargo.toml
 cargo run --manifest-path samples/custom-types/Cargo.toml
+cargo run --manifest-path samples/raw-query/Cargo.toml
 ```
 
 `samples/rest-api` is the larger application sample. The other directories each focus on one rqb use case.

@@ -252,6 +252,48 @@ insert(Dataset::table("orders_archive").fields([ID, USER_ID, STATUS, CREATED_AT]
 
 Use raw CTEs for SQL shapes that are outside the current builder surface.
 
+## Top-Level Raw SQL
+
+Use `raw_query` when a whole statement should stay hand-written SQL, such as a
+stored procedure call or a database-specific report.
+
+```rust
+raw_query("CALL refresh_order_search(?)")
+    .bind(order_id)
+    .execute(&tx)
+    .await?;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawOrderStats {
+    status: String,
+    orders: i64,
+    avg_total_cents: f64,
+}
+
+let rows = raw_query(
+    "SELECT status::text AS status, \
+            COUNT(*)::bigint AS orders, \
+            AVG(total_cents)::float8 AS \"avgTotalCents\" \
+     FROM order_search_view \
+     WHERE status = ?::text::order_status \
+     GROUP BY status",
+)
+.bind("paid")
+.fetch_as::<RawOrderStats>(&db)
+.await?;
+
+let version: String = raw_query("SELECT version()")
+    .fetch_one_scalar(&db)
+    .await?;
+```
+
+`raw_query` validates bind counts and converts `?` placeholders to Postgres
+placeholders. Use `??` for a literal question mark. `fetch_as` maps by returned
+column names, not rqb field metadata, so cast and alias raw expressions in SQL.
+For exact numeric or custom domain values, cast to `text` unless lossy floating
+point output is intentionally acceptable.
+
 ## Latest Row Per Group
 
 Postgres `DISTINCT ON` is useful for one row per grouping key.

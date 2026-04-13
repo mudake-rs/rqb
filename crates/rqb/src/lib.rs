@@ -29,7 +29,8 @@ pub mod prelude {
 
     #[cfg(feature = "runtime-tokio-postgres")]
     pub use rqb_postgres::{
-        ExecutePostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams, ResultExt,
+        ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams,
+        ResultExt,
     };
 
     #[cfg(feature = "pool")]

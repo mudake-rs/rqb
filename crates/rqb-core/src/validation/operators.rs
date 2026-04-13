@@ -819,16 +819,5 @@ fn require_number(field: &ResolvedField, operator: Operator, value: &Value) -> R
 }
 
 pub(super) fn count_raw_placeholders(sql: &str) -> usize {
-    let mut count = 0;
-    let mut chars = sql.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '?' {
-            if chars.peek() == Some(&'?') {
-                chars.next();
-            } else {
-                count += 1;
-            }
-        }
-    }
-    count
+    crate::raw::count_placeholders(sql)
 }

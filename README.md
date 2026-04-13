@@ -215,7 +215,7 @@ let source = Dataset::raw(
 select(source).request(request);
 ```
 
-`Dataset::raw` is for static server-owned source SQL with declared fields. For bind values, use `raw("... ? ...").bind(value)` in filters, assignments, or CTE bodies. Use `??` for a literal question mark in `raw(...)` fragments.
+`Dataset::raw` is for static server-owned source SQL with declared fields. For bind values, use `raw("... ? ...").bind(value)` in filters, assignments, or CTE bodies. Use `raw_query("... ? ...").bind(value)` when the whole statement is hand-written SQL and should execute through `&Db`, `&Tx`, or another `&impl PgExecutor`. Use `??` for a literal question mark in raw SQL.
 
 ### Subqueries
 
@@ -425,6 +425,7 @@ This starts a dedicated Docker Compose project, puts Postgres data on tmpfs, run
 - [docs/roadmap.md](docs/roadmap.md): follow-up ergonomics ideas from the sample
 - [PHILOSOPHY.md](PHILOSOPHY.md): project philosophy and API design principles
 - [crates/rqb/examples](crates/rqb/examples): small compile-checked builder examples
+- [samples](samples): standalone generated-schema samples for CRUD, JSON search, joins, transactions, CTEs, errors, raw SQL, and custom types
 - [samples/rest-api](samples/rest-api): actix-web sample with generated schema, services, transactions, validation, and JSON search
 
 ## License

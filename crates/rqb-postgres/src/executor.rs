@@ -1,13 +1,17 @@
 use rqb_core::{
-    DeleteBuilder, DeleteQuery, InsertBuilder, InsertQuery, SelectBuilder, SelectQuery,
+    DeleteBuilder, DeleteQuery, InsertBuilder, InsertQuery, RawQuery, SelectBuilder, SelectQuery,
     UpdateBuilder, UpdateQuery,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tokio_postgres::{Client, Row, Transaction, types::ToSql};
+use tokio_postgres::{
+    Client, Row, Transaction,
+    types::{FromSqlOwned, ToSql},
+};
 
 use crate::{
-    BuildPostgres, BuiltQuery, BuiltSelect, Error, PgParams, Postgres, Result, row_to_json,
+    BuildPostgres, BuiltQuery, BuiltSelect, Error, PgParams, Postgres, Result, raw_row_to_json,
+    row_to_json,
 };
 
 #[allow(async_fn_in_trait)]
@@ -406,6 +410,92 @@ impl_execute_write!(UpdateQuery);
 impl_execute_write!(DeleteBuilder);
 impl_execute_write!(DeleteQuery);
 
+#[allow(async_fn_in_trait)]
+pub trait ExecuteRawPostgres {
+    async fn execute(self, exec: &impl PgExecutor) -> Result<u64>;
+    async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>>;
+    async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row>;
+    async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>>;
+    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned;
+    async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
+    where
+        T: DeserializeOwned;
+    async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
+    where
+        T: DeserializeOwned;
+    async fn fetch_scalar<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    where
+        T: FromSqlOwned;
+    async fn fetch_one_scalar<T>(self, exec: &impl PgExecutor) -> Result<T>
+    where
+        T: FromSqlOwned;
+    async fn fetch_optional_scalar<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
+    where
+        T: FromSqlOwned;
+}
+
+impl ExecuteRawPostgres for RawQuery {
+    async fn execute(self, exec: &impl PgExecutor) -> Result<u64> {
+        execute_query(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>> {
+        query_all(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row> {
+        query_one(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>> {
+        query_optional(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned,
+    {
+        raw_query_all_as(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        raw_query_one_as(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        raw_query_optional_as(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_scalar<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    where
+        T: FromSqlOwned,
+    {
+        query_scalar(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_one_scalar<T>(self, exec: &impl PgExecutor) -> Result<T>
+    where
+        T: FromSqlOwned,
+    {
+        query_one_scalar(exec, self.build_pg()?).await
+    }
+
+    async fn fetch_optional_scalar<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
+    where
+        T: FromSqlOwned,
+    {
+        query_optional_scalar(exec, self.build_pg()?).await
+    }
+}
+
 async fn query_all(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Vec<Row>> {
     query_all_parts(exec, &built.sql, &built.params, built.cacheable).await
 }
@@ -531,5 +621,69 @@ where
             let json = row_to_json(row, &columns)?;
             serde_json::from_value(json).map_err(Error::from)
         })
+        .transpose()
+}
+
+async fn raw_query_all_as<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Vec<T>>
+where
+    T: DeserializeOwned,
+{
+    let rows = query_all(exec, built).await?;
+    rows.iter()
+        .map(|row| {
+            let json = raw_row_to_json(row)?;
+            serde_json::from_value(json).map_err(Error::from)
+        })
+        .collect()
+}
+
+async fn raw_query_one_as<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<T>
+where
+    T: DeserializeOwned,
+{
+    raw_query_optional_as(exec, built)
+        .await?
+        .ok_or(Error::NotFound)
+}
+
+async fn raw_query_optional_as<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Option<T>>
+where
+    T: DeserializeOwned,
+{
+    let row = query_optional(exec, built).await?;
+    row.as_ref()
+        .map(|row| {
+            let json = raw_row_to_json(row)?;
+            serde_json::from_value(json).map_err(Error::from)
+        })
+        .transpose()
+}
+
+async fn query_scalar<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Vec<T>>
+where
+    T: FromSqlOwned,
+{
+    let rows = query_all(exec, built).await?;
+    rows.iter()
+        .map(|row| row.try_get(0).map_err(Error::from))
+        .collect()
+}
+
+async fn query_one_scalar<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<T>
+where
+    T: FromSqlOwned,
+{
+    query_optional_scalar(exec, built)
+        .await?
+        .ok_or(Error::NotFound)
+}
+
+async fn query_optional_scalar<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Option<T>>
+where
+    T: FromSqlOwned,
+{
+    query_optional(exec, built)
+        .await?
+        .map(|row| row.try_get(0).map_err(Error::from))
         .transpose()
 }

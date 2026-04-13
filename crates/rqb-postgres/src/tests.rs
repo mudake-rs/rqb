@@ -3,8 +3,8 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
     SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, count,
-    count_distinct, delete, exists, field, insert, max, min, not_exists, raw, select, string_agg,
-    sum, update,
+    count_distinct, delete, exists, field, insert, max, min, not_exists, raw, raw_query, select,
+    string_agg, sum, update,
 };
 use serde::Serialize;
 
@@ -748,6 +748,51 @@ fn renders_raw_sql_escaped_question_marks_and_bind_errors() {
         .cte(rqb_core::cte("bad", raw("SELECT 1 AS n").bind(1)))
         .build_rows_pg()
         .unwrap_err();
+    assert!(matches!(
+        unused,
+        Error::Core(rqb_core::Error::RawBindMismatch {
+            placeholders: 0,
+            binds: 1
+        })
+    ));
+}
+
+#[test]
+fn renders_top_level_raw_query_placeholders_and_bind_errors() {
+    let built = raw_query("SELECT * FROM app_users WHERE id = ? AND status = ?")
+        .bind("10000000-0000-0000-0000-000000000001")
+        .bind("active")
+        .build_pg()
+        .unwrap();
+    assert_eq!(
+        built.sql,
+        "SELECT * FROM app_users WHERE id = $1 AND status = $2"
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("10000000-0000-0000-0000-000000000001".to_owned()),
+            Value::String("active".to_owned())
+        ]
+    );
+    assert!(!built.cacheable);
+
+    let escaped = raw_query("SELECT '??' AS literal, ? AS value")
+        .bind("x")
+        .build_pg()
+        .unwrap();
+    assert_eq!(escaped.sql, "SELECT '?' AS literal, $1 AS value");
+
+    let too_few = raw_query("SELECT ?").build_pg().unwrap_err();
+    assert!(matches!(
+        too_few,
+        Error::Core(rqb_core::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        })
+    ));
+
+    let unused = raw_query("SELECT 1").bind("unused").build_pg().unwrap_err();
     assert!(matches!(
         unused,
         Error::Core(rqb_core::Error::RawBindMismatch {

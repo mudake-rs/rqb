@@ -1,6 +1,9 @@
 use rqb_core::{AggregateType, ElemType, FieldType, SelectColumn, SelectRepr, TypeFamily};
 use serde_json::{Map, Number, Value as JsonValue};
-use tokio_postgres::{Row, types::FromSql};
+use tokio_postgres::{
+    Row,
+    types::{FromSql, Type},
+};
 
 use crate::{Error, Result};
 
@@ -15,6 +18,69 @@ pub fn row_to_json(row: &Row, columns: &[SelectColumn]) -> Result<JsonValue> {
         object.insert(alias, value);
     }
     Ok(JsonValue::Object(object))
+}
+
+pub fn raw_row_to_json(row: &Row) -> Result<JsonValue> {
+    let mut object = Map::new();
+    for (idx, column) in row.columns().iter().enumerate() {
+        object.insert(
+            column.name().to_owned(),
+            raw_column_to_json(row, idx, column.type_())?,
+        );
+    }
+    Ok(JsonValue::Object(object))
+}
+
+fn raw_column_to_json(row: &Row, idx: usize, ty: &Type) -> Result<JsonValue> {
+    match *ty {
+        Type::BOOL => read_scalar_idx(row, idx, JsonValue::Bool),
+        Type::INT2 => read_scalar_idx(row, idx, |value: i16| {
+            JsonValue::Number(Number::from(value))
+        }),
+        Type::INT4 => read_scalar_idx(row, idx, |value: i32| {
+            JsonValue::Number(Number::from(value))
+        }),
+        Type::INT8 => read_scalar_idx(row, idx, |value: i64| {
+            JsonValue::Number(Number::from(value))
+        }),
+        Type::FLOAT4 => read_scalar_idx(row, idx, |value: f32| f64_to_json(value.into())),
+        Type::FLOAT8 => read_scalar_idx(row, idx, f64_to_json),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME => {
+            read_scalar_idx(row, idx, JsonValue::String)
+        }
+        Type::JSON | Type::JSONB => read_scalar_idx(row, idx, |value| value),
+        Type::BYTEA => read_scalar_idx(row, idx, bytes_to_json),
+        Type::BOOL_ARRAY => read_array_idx(row, idx, JsonValue::Bool),
+        Type::INT2_ARRAY => read_array_idx(row, idx, |value: i16| {
+            JsonValue::Number(Number::from(value))
+        }),
+        Type::INT4_ARRAY => read_array_idx(row, idx, |value: i32| {
+            JsonValue::Number(Number::from(value))
+        }),
+        Type::INT8_ARRAY => read_array_idx(row, idx, |value: i64| {
+            JsonValue::Number(Number::from(value))
+        }),
+        Type::FLOAT4_ARRAY => read_array_idx(row, idx, |value: f32| f64_to_json(value.into())),
+        Type::FLOAT8_ARRAY => read_array_idx(row, idx, f64_to_json),
+        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY | Type::NAME_ARRAY => {
+            read_array_idx(row, idx, JsonValue::String)
+        }
+        Type::JSON_ARRAY | Type::JSONB_ARRAY => read_array_idx(row, idx, |value| value),
+        Type::BYTEA_ARRAY => read_array_idx(row, idx, bytes_to_json),
+        Type::UUID => raw_uuid_to_json(row, idx),
+        Type::UUID_ARRAY => raw_uuid_array_to_json(row, idx),
+        Type::TIMESTAMP => raw_timestamp_to_json(row, idx),
+        Type::TIMESTAMP_ARRAY => raw_timestamp_array_to_json(row, idx),
+        Type::TIMESTAMPTZ => raw_timestamptz_to_json(row, idx),
+        Type::TIMESTAMPTZ_ARRAY => raw_timestamptz_array_to_json(row, idx),
+        Type::DATE => raw_date_to_json(row, idx),
+        Type::DATE_ARRAY => raw_date_array_to_json(row, idx),
+        _ => Err(Error::Deserialize(format!(
+            "raw query column `{}` has unsupported Postgres type `{}`; cast it to a supported type",
+            row.columns()[idx].name(),
+            ty.name()
+        ))),
+    }
 }
 
 fn field_to_json(row: &Row, alias: &str, field_type: FieldType) -> Result<JsonValue> {
@@ -162,6 +228,30 @@ where
         .map_err(Error::from)
 }
 
+fn read_scalar_idx<T, F>(row: &Row, idx: usize, to_json: F) -> Result<JsonValue>
+where
+    T: for<'a> FromSql<'a>,
+    F: Fn(T) -> JsonValue,
+{
+    row.try_get::<_, Option<T>>(idx)
+        .map(|value| value.map_or(JsonValue::Null, to_json))
+        .map_err(Error::from)
+}
+
+fn read_array_idx<T, F>(row: &Row, idx: usize, to_json: F) -> Result<JsonValue>
+where
+    T: for<'a> FromSql<'a>,
+    F: Fn(T) -> JsonValue,
+{
+    row.try_get::<_, Option<Vec<T>>>(idx)
+        .map(|value| {
+            value.map_or(JsonValue::Null, |values| {
+                JsonValue::Array(values.into_iter().map(to_json).collect())
+            })
+        })
+        .map_err(Error::from)
+}
+
 fn f64_to_json(value: f64) -> JsonValue {
     Number::from_f64(value)
         .map(JsonValue::Number)
@@ -262,4 +352,100 @@ fn date_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
 #[cfg(not(feature = "with-chrono"))]
 fn date_array_to_json(row: &Row, alias: &str) -> Result<JsonValue> {
     read_array(row, alias, JsonValue::String)
+}
+
+#[cfg(feature = "with-uuid")]
+fn raw_uuid_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, |value: uuid::Uuid| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-uuid"))]
+fn raw_uuid_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-uuid")]
+fn raw_uuid_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, |value: uuid::Uuid| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-uuid"))]
+fn raw_uuid_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn raw_timestamp_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, |value: chrono::NaiveDateTime| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn raw_timestamp_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn raw_timestamp_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, |value: chrono::NaiveDateTime| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn raw_timestamp_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn raw_timestamptz_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, |value: chrono::DateTime<chrono::Utc>| {
+        JsonValue::String(value.to_rfc3339())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn raw_timestamptz_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn raw_timestamptz_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, |value: chrono::DateTime<chrono::Utc>| {
+        JsonValue::String(value.to_rfc3339())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn raw_timestamptz_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn raw_date_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, |value: chrono::NaiveDate| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn raw_date_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_scalar_idx(row, idx, JsonValue::String)
+}
+
+#[cfg(feature = "with-chrono")]
+fn raw_date_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, |value: chrono::NaiveDate| {
+        JsonValue::String(value.to_string())
+    })
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn raw_date_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
+    read_array_idx(row, idx, JsonValue::String)
 }

@@ -2,11 +2,11 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
     SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, count, cte, delete, exists, field,
-    insert, not_exists, raw, select, sum, update,
+    insert, not_exists, raw, raw_query, select, sum, update,
 };
 use rqb_postgres::{
-    BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteWritePostgres, PgExecutor,
-    ResultExt,
+    BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
+    ExecuteWritePostgres, PgExecutor, ResultExt,
 };
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{Client, Row, types::ToSql};
@@ -638,6 +638,100 @@ async fn executor_api_runs_rows_optional_and_count() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RawOrder {
+        id: String,
+        email: String,
+        total_cents: i64,
+        created_at: String,
+    }
+
+    let rows = raw_query(
+        "SELECT id, email, total_cents AS \"totalCents\", created_at AS \"createdAt\" \
+         FROM order_search_view \
+         WHERE status = ?::text::order_status AND total_cents > ?::bigint \
+         ORDER BY total_cents DESC",
+    )
+    .bind("paid")
+    .bind(10_000)
+    .fetch_as::<RawOrder>(&client)
+    .await?;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].email, "ada@example.com");
+    assert_eq!(rows[0].total_cents, 15_900);
+    assert!(rows[0].created_at.starts_with("2026-02-01T10:00:00"));
+    assert_eq!(rows[1].id, "30000000-0000-0000-0000-000000000004");
+
+    let version: String = raw_query("SELECT 'rqb'::text")
+        .fetch_one_scalar(&client)
+        .await?;
+    assert_eq!(version, "rqb");
+
+    let missing: Option<RawOrder> = raw_query(
+        "SELECT id, email, total_cents AS \"totalCents\", created_at AS \"createdAt\" \
+         FROM order_search_view WHERE email = ?",
+    )
+    .bind("nobody@example.com")
+    .fetch_optional_as(&client)
+    .await?;
+    assert!(missing.is_none());
+
+    #[derive(Debug, Deserialize)]
+    struct Escaped {
+        literal: String,
+        value: String,
+    }
+
+    let escaped: Escaped = raw_query("SELECT '??' AS literal, ?::text AS value")
+        .bind("bound")
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(escaped.literal, "?");
+    assert_eq!(escaped.value, "bound");
+
+    let updated = raw_query("UPDATE app_users SET profile = profile || ?::jsonb WHERE email = ?")
+        .bind(serde_json::json!({ "rawQuery": true }))
+        .bind("ada@example.com")
+        .execute(&client)
+        .await?;
+    assert_eq!(updated, 1);
+
+    let raw_flag: bool =
+        raw_query("SELECT (profile->>'rawQuery')::bool FROM app_users WHERE email = ?")
+            .bind("ada@example.com")
+            .fetch_one_scalar(&client)
+            .await?;
+    assert!(raw_flag);
+
+    let err = raw_query("SELECT ?").build_pg().unwrap_err();
+    assert!(matches!(
+        err,
+        PgError::Core(rqb_core::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        })
+    ));
+
+    let unsupported = raw_query("SELECT 1.23::numeric AS amount")
+        .fetch_one_as::<serde_json::Value>(&client)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        unsupported,
+        PgError::Deserialize(message)
+            if message.contains("unsupported Postgres type `numeric`")
+    ));
+
+    Ok(())
+}
+
 #[cfg(all(feature = "with-uuid", feature = "with-chrono"))]
 #[tokio::test]
 async fn uuid_chrono_and_page_helpers_are_ergonomic() -> TestResult {
@@ -828,6 +922,13 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
         .filter(events_table::EVENT_TYPE.is_in(["paid", "created", "rqb-cache-probe"]))
         .fetch_all(&cache_client)
         .await?;
+    assert_eq!(cache_client.statement_cache.size(), cached_after_in);
+
+    let raw_version: String = raw_query("SELECT ?::text")
+        .bind("raw")
+        .fetch_one_scalar(&cache_client)
+        .await?;
+    assert_eq!(raw_version, "raw");
     assert_eq!(cache_client.statement_cache.size(), cached_after_in);
 
     let dynamic_request = SearchRequest {

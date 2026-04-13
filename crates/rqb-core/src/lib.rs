@@ -36,7 +36,7 @@ pub use field::{
     Capabilities, DbEnum, ElemType, EnumType, Field, FieldRef, FieldType, JsonPathPolicy,
     ResolvedField, SelectRepr, TextSearchConfig, TypeFamily, TypeSpec, ValueRepr,
 };
-pub use raw::{RawSql, raw};
+pub use raw::{RawQuery, RawSql, raw, raw_query};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
 pub use validation::{
@@ -58,11 +58,11 @@ pub mod prelude {
         ConflictClause, ConflictTarget, Cte, Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType,
         EnumType, ExistsPredicate, Expr, Field, FieldRef, FieldType, InsertBuilder,
         InsertConflictBuilder, InsertQuery, Join, JoinKind, JsonPathPolicy, LockMode, LockWait,
-        LogicalOp, NullsOrder, Operator, RawSql, Relation, ReturningMode, RowLock, SearchRequest,
-        SelectBuilder, SelectColumn, SelectQuery, SelectRepr, Sort, SortDir, SubqueryOperator,
-        SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery,
-        Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg, count,
-        count_distinct, count_field, cte, delete, exists, field, insert, max, max_agg, min,
-        min_agg, not, not_exists, raw, select, string_agg, sum, update,
+        LogicalOp, NullsOrder, Operator, RawQuery, RawSql, Relation, ReturningMode, RowLock,
+        SearchRequest, SelectBuilder, SelectColumn, SelectQuery, SelectRepr, Sort, SortDir,
+        SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder,
+        UpdateQuery, Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg,
+        count, count_distinct, count_field, cte, delete, exists, field, insert, max, max_agg, min,
+        min_agg, not, not_exists, raw, raw_query, select, string_agg, sum, update,
     };
 }

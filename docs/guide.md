@@ -343,6 +343,41 @@ update(orders())
 
 Raw fragments are an escape hatch. They are not introspected beyond bind counting.
 
+Use `raw_query(...)` when the whole statement is outside the builder surface:
+
+```rust
+raw_query("CALL refresh_order_search(?)")
+    .bind(order_id)
+    .execute(&tx)
+    .await?;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawStats {
+    status: String,
+    orders: i64,
+    avg_total_cents: f64,
+}
+
+let stats = raw_query(
+    "SELECT status::text AS status, \
+            COUNT(*)::bigint AS orders, \
+            AVG(total_cents)::float8 AS \"avgTotalCents\" \
+     FROM order_search_view \
+     WHERE status = ?::text::order_status \
+     GROUP BY status",
+)
+.bind("paid")
+.fetch_as::<RawStats>(&db)
+.await?;
+
+let version: String = raw_query("SELECT version()")
+    .fetch_one_scalar(&db)
+    .await?;
+```
+
+`raw_query` is top-level SQL. It works with `&Db`, `&Tx`, and any `&impl PgExecutor`. `fetch_as` maps by returned column names, so alias expressions to match the target struct. It does not use dataset metadata; cast custom or ambiguous SQL expressions to the shape you want to deserialize. For example, cast exact numeric values to `text` when you need strings, or to `float8` only when lossy floating-point output is acceptable.
+
 ## Aggregations And GROUP BY
 
 ```rust

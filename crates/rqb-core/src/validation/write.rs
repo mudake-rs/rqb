@@ -2,7 +2,6 @@ use crate::dataset::{Dataset, Source};
 use crate::error::{Error, Result};
 use crate::expr::{ColumnOperator, Expr, Operator};
 use crate::field::{FieldRef, ResolvedField};
-use crate::request::SelectQuery;
 use crate::value::Value;
 use crate::write::{
     ConflictAction, ConflictClause, ConflictTarget, DeleteQuery, InsertQuery, ReturningMode,
@@ -50,7 +49,7 @@ impl ValidatedInsert {
         }
         validate_insert_rows_shape(&rows)?;
 
-        let from_select_targets = match &from_select {
+        let target_fields = match &from_select {
             Some(select) => select
                 .selected_fields
                 .iter()
@@ -58,10 +57,17 @@ impl ValidatedInsert {
                     match_write_field_by_name(&query.dataset, &field.api_name, &field.db_name)
                 })
                 .collect::<Result<Vec<_>>>()?,
-            None => Vec::new(),
+            None => rows
+                .first()
+                .map(|row| {
+                    row.iter()
+                        .map(|assignment| assignment.field.clone())
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         if let Some(select) = &from_select {
-            for (target, source) in from_select_targets.iter().zip(&select.selected_fields) {
+            for (target, source) in target_fields.iter().zip(&select.selected_fields) {
                 validate_column_operator(target, ColumnOperator::Equals, source)?;
             }
         }
@@ -73,10 +79,10 @@ impl ValidatedInsert {
             .transpose()?;
 
         Ok(Self {
-            query,
+            dataset: query.dataset,
+            target_fields,
             rows,
             from_select,
-            from_select_targets,
             returning,
             conflict,
         })
@@ -97,7 +103,7 @@ impl ValidatedUpdate {
             .transpose()?;
         let returning = resolve_returning(&query.dataset, &query.returning)?;
         Ok(Self {
-            query,
+            dataset: query.dataset,
             assignments,
             filter,
             returning,
@@ -114,7 +120,7 @@ impl ValidatedDelete {
         let filter = validate_write_filter(&query.dataset, expr)?;
         let returning = resolve_returning(&query.dataset, &query.returning)?;
         Ok(Self {
-            query,
+            dataset: query.dataset,
             filter,
             returning,
         })
@@ -122,8 +128,7 @@ impl ValidatedDelete {
 }
 
 fn validate_write_filter(dataset: &Dataset, expr: &Expr) -> Result<ValidatedExpr> {
-    let select = SelectQuery::new(dataset.clone());
-    let scope = QueryScope::new(&select)?;
+    let scope = QueryScope::from_dataset(dataset);
     validate_expr(&scope, expr, ExprContext::Filter)
 }
 
@@ -230,8 +235,7 @@ fn resolve_returning(dataset: &Dataset, returning: &ReturningMode) -> Result<Vec
 }
 
 fn resolve_write_field(dataset: &Dataset, field_ref: &FieldRef) -> Result<ResolvedField> {
-    let query = SelectQuery::new(dataset.clone());
-    let scope = QueryScope::new(&query)?;
+    let scope = QueryScope::from_dataset(dataset);
     let field = resolve_field_in_scope(&scope, field_ref)?;
     if field.is_json_path() {
         return Err(Error::NotSelectable {

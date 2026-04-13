@@ -15,8 +15,13 @@ pub(super) struct QueryScope {
 }
 
 impl QueryScope {
-    pub(super) fn new(query: &SelectQuery) -> Result<Self> {
-        Self::new_with_outer(query, &[])
+    pub(super) fn from_dataset(dataset: &Dataset) -> Self {
+        Self {
+            datasets: vec![ScopedDataset {
+                dataset: dataset.clone(),
+            }],
+            has_joins: false,
+        }
     }
 
     pub(super) fn new_with_outer(query: &SelectQuery, outer_datasets: &[Dataset]) -> Result<Self> {

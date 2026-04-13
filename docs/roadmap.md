@@ -49,13 +49,12 @@ The BFM `uint_256` domain is the reference use case for this work.
 
 ## Validated Expression Reuse
 
-Validation currently resolves some field references again during rendering paths such as CTE rendering, subqueries, write filters, and raw write conflict filters. This is correct behaviorally, but it is unnecessary repeated work and makes future type/operator metadata harder to centralize.
+Validation now carries resolved SELECT and write shapes into the renderer, including CTE/subquery bodies and write filters. The remaining work is to make type/operator metadata easier to centralize and to keep future query features from reintroducing raw AST reads in rendering.
 
 A future refactor should introduce validated expression nodes that carry `ResolvedField` data through rendering:
 
-- validate CTE and subquery bodies once
-- render write filters without constructing throwaway `ValidatedSelect` values
 - preserve already resolved fields for predicates, column predicates, and subqueries
 - keep SQL rendering a mostly mechanical pass over validated data
+- keep validated write models render-ready without depending on raw write AST details
 
 This should be an internal architecture change, not a public ergonomics regression.

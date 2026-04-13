@@ -1,8 +1,7 @@
 use crate::error::{Error, Result};
 use crate::expr::{ColumnOperator, Operator};
-use crate::field::{
-    ElemType, EnumType, FieldType, ResolvedField, TextSearchConfig, TypeFamily, TypeSpec, ValueRepr,
-};
+use crate::field::{ResolvedField, TextSearchConfig};
+use crate::types::{ElemType, EnumType, FieldType, TypeFamily, TypeSpec, ValueRepr};
 use crate::value::Value;
 
 pub(super) fn validate_operator(

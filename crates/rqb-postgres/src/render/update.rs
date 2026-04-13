@@ -9,7 +9,7 @@ impl Renderer {
     pub(crate) fn render_update(mut self, validated: &ValidatedUpdate) -> Result<BuiltQuery> {
         self.cacheable = false;
         self.sql.push_str("UPDATE ");
-        self.render_write_target(&validated.query.dataset.source);
+        self.render_write_target(&validated.dataset.source);
         self.sql.push_str(" SET ");
         for (idx, assignment) in validated.assignments.iter().enumerate() {
             if idx > 0 {

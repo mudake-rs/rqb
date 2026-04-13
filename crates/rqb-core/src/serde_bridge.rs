@@ -2,7 +2,8 @@ use serde::Serialize;
 
 use crate::dataset::Dataset;
 use crate::error::{Error, Result};
-use crate::field::{Field, FieldType};
+use crate::field::Field;
+use crate::types::FieldType;
 use crate::value::Value;
 
 pub fn fields_from_serializable<T>(dataset: &Dataset, record: &T) -> Result<Vec<(Field, Value)>>

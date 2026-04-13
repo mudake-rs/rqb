@@ -13,7 +13,6 @@ use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, Operator, SortDir, Subq
 use crate::field::ResolvedField;
 use crate::request::RowLock;
 use crate::value::Value;
-use crate::write::{DeleteQuery, InsertQuery, UpdateQuery};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedSelect {
@@ -131,17 +130,17 @@ pub enum ValidatedConflictAction {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedInsert {
-    pub query: InsertQuery,
+    pub dataset: Dataset,
+    pub target_fields: Vec<ResolvedField>,
     pub rows: Vec<Vec<ValidatedAssignment>>,
     pub from_select: Option<ValidatedSelect>,
-    pub from_select_targets: Vec<ResolvedField>,
     pub returning: Vec<ResolvedField>,
     pub conflict: Option<ValidatedConflictClause>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedUpdate {
-    pub query: UpdateQuery,
+    pub dataset: Dataset,
     pub assignments: Vec<ValidatedAssignment>,
     pub filter: Option<ValidatedExpr>,
     pub returning: Vec<ResolvedField>,
@@ -149,7 +148,7 @@ pub struct ValidatedUpdate {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedDelete {
-    pub query: DeleteQuery,
+    pub dataset: Dataset,
     pub filter: ValidatedExpr,
     pub returning: Vec<ResolvedField>,
 }

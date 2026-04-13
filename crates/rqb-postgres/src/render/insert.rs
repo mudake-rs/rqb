@@ -14,22 +14,9 @@ impl Renderer {
             self.cacheable = false;
         }
         self.sql.push_str("INSERT INTO ");
-        self.render_write_target(&validated.query.dataset.source);
+        self.render_write_target(&validated.dataset.source);
 
-        let target_fields = if validated.from_select.is_some() {
-            validated.from_select_targets.clone()
-        } else {
-            validated
-                .rows
-                .first()
-                .map(|row| {
-                    row.iter()
-                        .map(|assignment| assignment.field.clone())
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-        self.render_insert_columns(&target_fields);
+        self.render_insert_columns(&validated.target_fields);
 
         if let Some(select) = &validated.from_select {
             self.sql.push(' ');

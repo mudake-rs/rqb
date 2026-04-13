@@ -6,6 +6,7 @@ use crate::error::{Error, Result};
 use crate::expr::{Expr, LogicalOp, Sort};
 use crate::field::{FieldRef, ResolvedField};
 use crate::request::SelectQuery;
+use crate::types::FieldType;
 
 use super::operators::{count_raw_placeholders, validate_column_operator, validate_operator};
 use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
@@ -426,7 +427,7 @@ fn validate_ordered_aggregate_field(_aggregate: &str, field: &ResolvedField) -> 
 }
 
 fn validate_string_aggregate_field(field: &ResolvedField) -> Result<()> {
-    if field.ty.is_text() || matches!(field.ty, crate::field::FieldType::Enum(_)) {
+    if field.ty.is_text() || matches!(field.ty, FieldType::Enum(_)) {
         return Ok(());
     }
     Err(Error::UnsupportedAggregateField {

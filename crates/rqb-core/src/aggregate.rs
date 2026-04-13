@@ -1,5 +1,6 @@
 use crate::expr::{Expr, Sort};
-use crate::field::{FieldRef, FieldType, ResolvedField};
+use crate::field::{FieldRef, ResolvedField};
+use crate::types::FieldType;
 
 #[derive(Clone, Debug, PartialEq)]
 #[must_use]

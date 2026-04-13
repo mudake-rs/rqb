@@ -5,12 +5,15 @@ use crate::types::FieldType;
 use crate::value::Value;
 
 use super::value_check::{
-    array_elem_type, enum_type_for_array, enum_type_for_field, reject_json_for_non_jsonb_field,
-    reject_non_finite_numbers, require_array, require_array_values_for_field_type, require_between,
-    require_enum_array, require_enum_scalar, require_number, require_scalar,
-    require_scalar_array_json_or_null, require_scalar_array_or_json, require_scalar_json_or_null,
-    require_scalar_or_json, require_string, require_string_array, require_value_for_elem_type,
+    array_elem_type, enum_type_for_array, enum_type_for_field, require_array_values_for_field_type,
+    require_enum_array, require_enum_scalar, require_value_for_elem_type,
     validate_value_for_field_type,
+};
+use super::value_shape::{
+    reject_json_for_non_jsonb_field, reject_non_finite_numbers, require_array, require_between,
+    require_number, require_scalar, require_scalar_array_json_or_null,
+    require_scalar_array_or_json, require_scalar_json_or_null, require_scalar_or_json,
+    require_string, require_string_array,
 };
 
 pub(super) fn validate_operator(

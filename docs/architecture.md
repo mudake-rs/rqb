@@ -162,6 +162,7 @@ rqb-core
   scope: field and qualifier resolution
   validate: AST -> validated models
   validation::value_check: reusable value and type compatibility checks
+  validation::value_shape: reusable runtime Value shape guards
   validated: render-ready resolved structs
 
 rqb-postgres

@@ -3,6 +3,7 @@ mod resolve;
 mod scope;
 mod select;
 mod value_check;
+mod value_shape;
 mod write;
 
 #[cfg(test)]

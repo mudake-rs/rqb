@@ -20,11 +20,14 @@ mod order_search {
     );
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-    #[serde(rename_all = "snake_case")]
     pub enum OrderStatus {
+        #[serde(rename = "draft")]
         Draft,
+        #[serde(rename = "paid")]
         Paid,
+        #[serde(rename = "cancelled")]
         Cancelled,
+        #[serde(rename = "refunded")]
         Refunded,
     }
 

@@ -16,6 +16,7 @@ mod field;
 mod raw;
 mod request;
 mod serde_bridge;
+mod types;
 mod validation;
 mod value;
 mod write;
@@ -32,13 +33,14 @@ pub use expr::{
     Operator, Predicate, Sort, SortDir, SubqueryOperator, SubqueryPredicate, all, any, exists,
     field, not, not_exists,
 };
-pub use field::{
-    Capabilities, DbEnum, ElemType, EnumType, Field, FieldRef, FieldType, JsonPathPolicy,
-    ResolvedField, SelectRepr, TextSearchConfig, TypeFamily, TypeSpec, ValueRepr,
-};
+pub use field::{Capabilities, Field, FieldRef, JsonPathPolicy, ResolvedField, TextSearchConfig};
 pub use raw::{RawQuery, RawSql, raw, raw_query};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
+pub use types::{
+    DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,
+    range_type_name,
+};
 pub use validation::{
     ValidatedAggregate, ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause,
     ValidatedConflictTarget, ValidatedCte, ValidatedCteBody, ValidatedDelete, ValidatedExpr,

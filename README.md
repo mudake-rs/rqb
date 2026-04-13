@@ -422,6 +422,7 @@ This starts a dedicated Docker Compose project, puts Postgres data on tmpfs, run
 - [docs/testing.md](docs/testing.md): test layout, naming, rendering assertions, and integration pattern
 - [docs/ergonomics.md](docs/ergonomics.md): longer comparison with Diesel from an application ergonomics angle
 - [docs/diesel-migration.md](docs/diesel-migration.md): mapping Diesel patterns to rqb
+- [docs/architecture.md](docs/architecture.md): internal capability spec and refactor direction
 - [docs/roadmap.md](docs/roadmap.md): follow-up ergonomics ideas from the sample
 - [PHILOSOPHY.md](PHILOSOPHY.md): project philosophy and API design principles
 - [crates/rqb/examples](crates/rqb/examples): small compile-checked builder examples

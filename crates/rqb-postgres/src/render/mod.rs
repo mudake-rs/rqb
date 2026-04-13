@@ -4,6 +4,8 @@ mod cte;
 mod delete;
 mod expr;
 mod insert;
+mod params;
+mod predicate;
 mod select;
 mod update;
 

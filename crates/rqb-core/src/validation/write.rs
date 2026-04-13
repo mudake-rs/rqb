@@ -2,20 +2,20 @@ use crate::dataset::{Dataset, Source};
 use crate::error::{Error, Result};
 use crate::expr::{ColumnOperator, Expr, Operator};
 use crate::field::{FieldRef, ResolvedField};
-use crate::request::SelectQuery;
 use crate::value::Value;
 use crate::write::{
     ConflictAction, ConflictClause, ConflictTarget, DeleteQuery, InsertQuery, ReturningMode,
     UpdateQuery, WriteAssignment, WriteValue,
 };
 
-use super::operators::{
-    count_raw_placeholders, enum_type_for_array, enum_type_for_field, require_enum_array,
-    require_enum_scalar, validate_column_operator, validate_value_for_field_type,
-};
+use super::expr::validate_expr;
+use super::operators::count_raw_placeholders;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
-use super::select::validate_expr;
+use super::value_type::{
+    enum_type_for_array, enum_type_for_field, require_enum_array, require_enum_scalar,
+    validate_column_operator, validate_value_for_field_type,
+};
 use super::{
     ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedSelect, ValidatedUpdate,
@@ -24,15 +24,22 @@ use super::{
 
 impl ValidatedInsert {
     pub fn new(query: InsertQuery) -> Result<Self> {
-        validate_write_source(&query.dataset)?;
+        let InsertQuery {
+            dataset,
+            rows: raw_rows,
+            source,
+            returning: raw_returning,
+            conflict: raw_conflict,
+        } = query;
 
-        let rows = query
-            .rows
+        validate_write_source(&dataset)?;
+        let scope = WriteScope::new(&dataset);
+
+        let rows = raw_rows
             .iter()
-            .map(|row| validate_assignments(&query.dataset, row))
+            .map(|row| validate_assignments(&scope, row))
             .collect::<Result<Vec<_>>>()?;
-        let from_select = query
-            .source
+        let from_select = source
             .as_ref()
             .map(|select| ValidatedSelect::new((**select).clone()))
             .transpose()?;
@@ -41,7 +48,7 @@ impl ValidatedInsert {
             (true, false) => return Err(Error::EmptyInsert),
             (false, true) => {
                 return Err(Error::InvalidValue {
-                    field: query.dataset.api_name.clone(),
+                    field: dataset.api_name.clone(),
                     operator: "insert".to_owned(),
                     message: "cannot combine VALUES and SELECT insert sources".to_owned(),
                 });
@@ -50,33 +57,37 @@ impl ValidatedInsert {
         }
         validate_insert_rows_shape(&rows)?;
 
-        let from_select_targets = match &from_select {
+        let target_fields = match &from_select {
             Some(select) => select
                 .selected_fields
                 .iter()
-                .map(|field| {
-                    match_write_field_by_name(&query.dataset, &field.api_name, &field.db_name)
-                })
+                .map(|field| match_write_field_by_name(&scope, &field.api_name, &field.db_name))
                 .collect::<Result<Vec<_>>>()?,
-            None => Vec::new(),
+            None => rows
+                .first()
+                .map(|row| {
+                    row.iter()
+                        .map(|assignment| assignment.field.clone())
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         if let Some(select) = &from_select {
-            for (target, source) in from_select_targets.iter().zip(&select.selected_fields) {
+            for (target, source) in target_fields.iter().zip(&select.selected_fields) {
                 validate_column_operator(target, ColumnOperator::Equals, source)?;
             }
         }
-        let returning = resolve_returning(&query.dataset, &query.returning)?;
-        let conflict = query
-            .conflict
+        let returning = resolve_returning(&scope, &raw_returning)?;
+        let conflict = raw_conflict
             .as_ref()
-            .map(|conflict| validate_conflict(&query.dataset, conflict))
+            .map(|conflict| validate_conflict(&scope, conflict))
             .transpose()?;
 
         Ok(Self {
-            query,
+            dataset,
+            target_fields,
             rows,
             from_select,
-            from_select_targets,
             returning,
             conflict,
         })
@@ -85,19 +96,26 @@ impl ValidatedInsert {
 
 impl ValidatedUpdate {
     pub fn new(query: UpdateQuery) -> Result<Self> {
-        validate_write_source(&query.dataset)?;
-        if query.assignments.is_empty() {
+        let UpdateQuery {
+            dataset,
+            assignments: raw_assignments,
+            filter: raw_filter,
+            returning: raw_returning,
+        } = query;
+
+        validate_write_source(&dataset)?;
+        let scope = WriteScope::new(&dataset);
+        if raw_assignments.is_empty() {
             return Err(Error::EmptyUpdate);
         }
-        let assignments = validate_assignments(&query.dataset, &query.assignments)?;
-        let filter = query
-            .filter
+        let assignments = validate_assignments(&scope, &raw_assignments)?;
+        let filter = raw_filter
             .as_ref()
-            .map(|expr| validate_write_filter(&query.dataset, expr))
+            .map(|expr| scope.validate_filter(expr))
             .transpose()?;
-        let returning = resolve_returning(&query.dataset, &query.returning)?;
+        let returning = resolve_returning(&scope, &raw_returning)?;
         Ok(Self {
-            query,
+            dataset,
             assignments,
             filter,
             returning,
@@ -107,24 +125,53 @@ impl ValidatedUpdate {
 
 impl ValidatedDelete {
     pub fn new(query: DeleteQuery) -> Result<Self> {
-        validate_write_source(&query.dataset)?;
-        let Some(expr) = &query.filter else {
+        let DeleteQuery {
+            dataset,
+            filter: raw_filter,
+            returning: raw_returning,
+        } = query;
+
+        validate_write_source(&dataset)?;
+        let scope = WriteScope::new(&dataset);
+        let Some(expr) = &raw_filter else {
             return Err(Error::DeleteWithoutFilter);
         };
-        let filter = validate_write_filter(&query.dataset, expr)?;
-        let returning = resolve_returning(&query.dataset, &query.returning)?;
+        let filter = scope.validate_filter(expr)?;
+        let returning = resolve_returning(&scope, &raw_returning)?;
         Ok(Self {
-            query,
+            dataset,
             filter,
             returning,
         })
     }
 }
 
-fn validate_write_filter(dataset: &Dataset, expr: &Expr) -> Result<ValidatedExpr> {
-    let select = SelectQuery::new(dataset.clone());
-    let scope = QueryScope::new(&select)?;
-    validate_expr(&scope, expr, ExprContext::Filter)
+struct WriteScope<'a> {
+    dataset: &'a Dataset,
+    query_scope: QueryScope,
+}
+
+impl<'a> WriteScope<'a> {
+    fn new(dataset: &'a Dataset) -> Self {
+        Self {
+            dataset,
+            query_scope: QueryScope::from_dataset(dataset),
+        }
+    }
+
+    fn validate_filter(&self, expr: &Expr) -> Result<ValidatedExpr> {
+        validate_expr(&self.query_scope, expr, ExprContext::Filter)
+    }
+
+    fn resolve_field(&self, field_ref: &FieldRef) -> Result<ResolvedField> {
+        let field = resolve_field_in_scope(&self.query_scope, field_ref)?;
+        if field.is_json_path() {
+            return Err(Error::NotSelectable {
+                field: field.display_name(),
+            });
+        }
+        Ok(field)
+    }
 }
 
 fn validate_write_source(dataset: &Dataset) -> Result<()> {
@@ -135,13 +182,13 @@ fn validate_write_source(dataset: &Dataset) -> Result<()> {
 }
 
 fn validate_assignments(
-    dataset: &Dataset,
+    scope: &WriteScope<'_>,
     assignments: &[WriteAssignment],
 ) -> Result<Vec<ValidatedAssignment>> {
     assignments
         .iter()
         .map(|assignment| {
-            let field = resolve_write_field(dataset, &assignment.field)?;
+            let field = scope.resolve_field(&assignment.field)?;
             let value = match &assignment.value {
                 WriteValue::Value(value) => {
                     validate_write_value(&field, value)?;
@@ -158,7 +205,7 @@ fn validate_assignments(
                     ValidatedWriteValue::Raw(raw.clone())
                 }
                 WriteValue::Column(source) => {
-                    let source = resolve_write_field(dataset, source)?;
+                    let source = scope.resolve_field(source)?;
                     validate_column_operator(&field, ColumnOperator::Equals, &source)?;
                     ValidatedWriteValue::Column(source)
                 }
@@ -202,10 +249,14 @@ fn validate_insert_rows_shape(rows: &[Vec<ValidatedAssignment>]) -> Result<()> {
     Ok(())
 }
 
-fn resolve_returning(dataset: &Dataset, returning: &ReturningMode) -> Result<Vec<ResolvedField>> {
+fn resolve_returning(
+    scope: &WriteScope<'_>,
+    returning: &ReturningMode,
+) -> Result<Vec<ResolvedField>> {
     let fields = match returning {
         ReturningMode::None => return Ok(Vec::new()),
-        ReturningMode::All => dataset
+        ReturningMode::All => scope
+            .dataset
             .fields
             .iter()
             .copied()
@@ -218,7 +269,7 @@ fn resolve_returning(dataset: &Dataset, returning: &ReturningMode) -> Result<Vec
     fields
         .iter()
         .map(|field| {
-            let resolved = resolve_write_field(dataset, field)?;
+            let resolved = scope.resolve_field(field)?;
             if !resolved.caps.selectable {
                 return Err(Error::NotSelectable {
                     field: resolved.display_name(),
@@ -229,44 +280,33 @@ fn resolve_returning(dataset: &Dataset, returning: &ReturningMode) -> Result<Vec
         .collect()
 }
 
-fn resolve_write_field(dataset: &Dataset, field_ref: &FieldRef) -> Result<ResolvedField> {
-    let query = SelectQuery::new(dataset.clone());
-    let scope = QueryScope::new(&query)?;
-    let field = resolve_field_in_scope(&scope, field_ref)?;
-    if field.is_json_path() {
-        return Err(Error::NotSelectable {
-            field: field.display_name(),
-        });
-    }
-    Ok(field)
-}
-
 fn match_write_field_by_name(
-    dataset: &Dataset,
+    scope: &WriteScope<'_>,
     api_name: &str,
     db_name: &str,
 ) -> Result<ResolvedField> {
-    let field = dataset
+    let field = scope
+        .dataset
         .fields
         .iter()
         .find(|field| field.api_name == api_name || field.db_name == db_name)
         .copied()
         .ok_or_else(|| Error::UnknownField {
-            dataset: dataset.api_name.clone(),
+            dataset: scope.dataset.api_name.clone(),
             field: api_name.to_owned(),
         })?;
-    resolve_write_field(dataset, &FieldRef::from(field))
+    scope.resolve_field(&FieldRef::from(field))
 }
 
 fn validate_conflict(
-    dataset: &Dataset,
+    scope: &WriteScope<'_>,
     conflict: &ConflictClause,
 ) -> Result<ValidatedConflictClause> {
     let target = match &conflict.target {
         ConflictTarget::Columns(fields) => ValidatedConflictTarget::Columns(
             fields
                 .iter()
-                .map(|field| resolve_write_field(dataset, field))
+                .map(|field| scope.resolve_field(field))
                 .collect::<Result<Vec<_>>>()?,
         ),
         ConflictTarget::Constraint(constraint) => {
@@ -278,11 +318,11 @@ fn validate_conflict(
         ConflictAction::DoUpdate { fields, filter } => {
             let fields = fields
                 .iter()
-                .map(|field| resolve_write_field(dataset, field))
+                .map(|field| scope.resolve_field(field))
                 .collect::<Result<Vec<_>>>()?;
             let filter = filter
                 .as_ref()
-                .map(|expr| validate_write_filter(dataset, expr))
+                .map(|expr| scope.validate_filter(expr))
                 .transpose()?;
             ValidatedConflictAction::DoUpdate { fields, filter }
         }

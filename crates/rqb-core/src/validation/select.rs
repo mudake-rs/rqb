@@ -1,20 +1,20 @@
-use std::collections::BTreeSet;
-
-use crate::aggregate::{Aggregate, SelectColumn};
+use crate::aggregate::SelectColumn;
 use crate::dataset::{CteBody, Dataset};
 use crate::error::{Error, Result};
-use crate::expr::{Expr, Sort};
+use crate::expr::Sort;
 use crate::field::{FieldRef, ResolvedField};
 use crate::request::SelectQuery;
-use crate::types::FieldType;
 
+use super::aggregate::{
+    validate_aggregate, validate_aggregate_aliases, validate_grouped_selection,
+};
 use super::expr::validate_expr;
 use super::operators::count_raw_placeholders;
 use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
 use super::scope::{ExprContext, QueryScope};
 use super::{
-    ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedExpr, ValidatedJoin,
-    ValidatedSelect, ValidatedSort,
+    ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedJoin, ValidatedSelect,
+    ValidatedSort,
 };
 
 impl ValidatedSelect {
@@ -212,7 +212,7 @@ fn resolve_selection(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<Reso
     Ok(resolved)
 }
 
-fn validate_sort(scope: &QueryScope, sort: &Sort) -> Result<ValidatedSort> {
+pub(super) fn validate_sort(scope: &QueryScope, sort: &Sort) -> Result<ValidatedSort> {
     let field = resolve_field_in_scope(scope, &sort.field)?;
     if !field.json_path.is_empty() || !field.caps.sortable {
         return Err(Error::NotSortable {
@@ -241,237 +241,6 @@ fn resolve_group_by(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<Resol
         .collect()
 }
 
-fn validate_aggregate(scope: &QueryScope, aggregate: &Aggregate) -> Result<ValidatedAggregate> {
-    Ok(match aggregate {
-        Aggregate::Count { alias, filter } => ValidatedAggregate::Count {
-            alias: alias.clone(),
-            filter: validate_aggregate_filter(scope, filter)?,
-        },
-        Aggregate::CountField {
-            field,
-            alias,
-            distinct,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "count", field)?;
-            ValidatedAggregate::CountField {
-                field,
-                alias: alias.clone(),
-                distinct: *distinct,
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-        Aggregate::Sum {
-            field,
-            alias,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "sum", field)?;
-            validate_numeric_aggregate_field("sum", &field)?;
-            ValidatedAggregate::Sum {
-                field,
-                alias: alias.clone(),
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-        Aggregate::Avg {
-            field,
-            alias,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "avg", field)?;
-            validate_numeric_aggregate_field("avg", &field)?;
-            ValidatedAggregate::Avg {
-                field,
-                alias: alias.clone(),
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-        Aggregate::Min {
-            field,
-            alias,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "min", field)?;
-            validate_ordered_aggregate_field("min", &field)?;
-            ValidatedAggregate::Min {
-                field,
-                alias: alias.clone(),
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-        Aggregate::Max {
-            field,
-            alias,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "max", field)?;
-            validate_ordered_aggregate_field("max", &field)?;
-            ValidatedAggregate::Max {
-                field,
-                alias: alias.clone(),
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-        Aggregate::JsonAgg {
-            alias,
-            fields,
-            order_by,
-            filter,
-            default_empty,
-        } => {
-            let fields = fields
-                .iter()
-                .map(|field| resolve_aggregate_field(scope, "json_agg", field))
-                .collect::<Result<Vec<_>>>()?;
-            let order_by = order_by
-                .as_ref()
-                .map(|sort| validate_sort(scope, sort))
-                .transpose()?;
-            ValidatedAggregate::JsonAgg {
-                alias: alias.clone(),
-                fields,
-                order_by,
-                filter: validate_aggregate_filter(scope, filter)?,
-                default_empty: *default_empty,
-            }
-        }
-        Aggregate::ArrayAgg {
-            field,
-            alias,
-            distinct,
-            order_by,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "array_agg", field)?;
-            ValidatedAggregate::ArrayAgg {
-                field,
-                alias: alias.clone(),
-                distinct: *distinct,
-                order_by: order_by
-                    .as_ref()
-                    .map(|sort| validate_sort(scope, sort))
-                    .transpose()?,
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-        Aggregate::StringAgg {
-            field,
-            separator,
-            alias,
-            order_by,
-            filter,
-        } => {
-            let field = resolve_aggregate_field(scope, "string_agg", field)?;
-            validate_string_aggregate_field(&field)?;
-            ValidatedAggregate::StringAgg {
-                field,
-                separator: separator.clone(),
-                alias: alias.clone(),
-                order_by: order_by
-                    .as_ref()
-                    .map(|sort| validate_sort(scope, sort))
-                    .transpose()?,
-                filter: validate_aggregate_filter(scope, filter)?,
-            }
-        }
-    })
-}
-
-fn validate_aggregate_filter(
-    scope: &QueryScope,
-    filter: &Option<Expr>,
-) -> Result<Option<ValidatedExpr>> {
-    filter
-        .as_ref()
-        .map(|filter| validate_expr(scope, filter, ExprContext::Filter))
-        .transpose()
-}
-
-fn resolve_aggregate_field(
-    scope: &QueryScope,
-    _aggregate: &str,
-    field_ref: &FieldRef,
-) -> Result<ResolvedField> {
-    let field = resolve_field_in_scope(scope, field_ref)?;
-    if field.is_json_path() {
-        return Err(Error::NotSelectable {
-            field: field.display_name(),
-        });
-    }
-    if !field.caps.selectable {
-        return Err(Error::NotSelectable {
-            field: field.display_name(),
-        });
-    }
-    Ok(field)
-}
-
-fn validate_numeric_aggregate_field(aggregate: &str, field: &ResolvedField) -> Result<()> {
-    if field.ty.is_numeric() {
-        return Ok(());
-    }
-    Err(Error::UnsupportedAggregateField {
-        aggregate: aggregate.to_owned(),
-        field: field.display_name(),
-        field_type: field.ty.display_name().into_owned(),
-    })
-}
-
-fn validate_ordered_aggregate_field(_aggregate: &str, field: &ResolvedField) -> Result<()> {
-    if field.caps.sortable {
-        return Ok(());
-    }
-    Err(Error::NotSortable {
-        field: field.display_name(),
-    })
-}
-
-fn validate_string_aggregate_field(field: &ResolvedField) -> Result<()> {
-    if field.ty.is_text() || matches!(field.ty, FieldType::Enum(_)) {
-        return Ok(());
-    }
-    Err(Error::UnsupportedAggregateField {
-        aggregate: "string_agg".to_owned(),
-        field: field.display_name(),
-        field_type: field.ty.display_name().into_owned(),
-    })
-}
-
-fn validate_aggregate_aliases(aggregates: &[ValidatedAggregate]) -> Result<()> {
-    let mut seen = BTreeSet::new();
-    for aggregate in aggregates {
-        let alias = aggregate.alias();
-        if !seen.insert(alias.to_owned()) {
-            return Err(Error::DuplicateAggregateAlias {
-                alias: alias.to_owned(),
-            });
-        }
-    }
-    Ok(())
-}
-
-fn validate_grouped_selection(
-    selected_fields: &[ResolvedField],
-    group_by: &[ResolvedField],
-    aggregates: &[ValidatedAggregate],
-) -> Result<()> {
-    if group_by.is_empty() || aggregates.is_empty() {
-        return Ok(());
-    }
-    for field in selected_fields {
-        if !group_by
-            .iter()
-            .any(|group| same_resolved_field(group, field))
-        {
-            return Err(Error::UngroupedField {
-                field: field.display_name(),
-            });
-        }
-    }
-    Ok(())
-}
-
 fn select_columns(
     selected_fields: &[ResolvedField],
     aggregates: &[ValidatedAggregate],
@@ -485,12 +254,4 @@ fn select_columns(
             ty: aggregate.aggregate_type(),
         }))
         .collect()
-}
-
-fn same_resolved_field(left: &ResolvedField, right: &ResolvedField) -> bool {
-    left.db_name == right.db_name
-        && left.api_name == right.api_name
-        && left.qualifier == right.qualifier
-        && left.explicit_qualifier == right.explicit_qualifier
-        && left.json_path == right.json_path
 }

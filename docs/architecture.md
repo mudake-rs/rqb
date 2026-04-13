@@ -161,6 +161,7 @@ rqb-core
   ast: SelectQuery, SearchRequest, Expr, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> validated models
+  validation::aggregate: aggregate fields, filters, aliases, and grouping rules
   validation::expr: validated expression tree construction
   validation::value_check: reusable value and type compatibility checks
   validation::value_shape: reusable runtime Value shape guards

@@ -1,3 +1,4 @@
+mod aggregate;
 mod expr;
 mod operators;
 mod resolve;

@@ -1,3 +1,4 @@
+mod expr;
 mod operators;
 mod resolve;
 mod scope;

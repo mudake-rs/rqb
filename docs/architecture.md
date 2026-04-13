@@ -77,15 +77,16 @@ casts, params, row mapping, CLI, tests, and docs.
 
 ## Pressure Points
 
-### Type Knowledge Is Scattered
+### Type Knowledge Is Scattered, But Bounded
 
 Type behavior currently lives in several places:
 
 - `FieldType` / `ElemType` methods in `rqb-core`
 - value validation in `validation/operators.rs`
-- Postgres cast helpers in `rqb-postgres/src/type_sql.rs`
-- parameter conversion in `params.rs`
-- row mapping in `row_map.rs`
+- Postgres cast helpers in `rqb-postgres/src/type_sql/{casts,names,selection}.rs`
+- SQL placeholder/cast rendering in `render/params.rs`
+- runtime parameter conversion in `params.rs`
+- row mapping in `row_map/{typed,raw,values}.rs`
 - CLI catalog introspection, type mapping, and code generation modules
 
 This is correct behaviorally, but adding a new type still requires touching
@@ -94,31 +95,40 @@ Postgres cast/selection behavior now have dedicated modules; future type work
 should keep tightening that checklist instead of scattering new switch arms into
 generic helpers.
 
-### Operator Semantics Are Parallel Switches
+### Operator Semantics Are Lowered In Validation
 
-Validation and rendering both switch over `Operator` and field type shape. That
-keeps SQL rendering simple, but it means a new operator requires careful edits in
-both layers.
+`Operator` remains the user-facing and JSON-facing enum, but rendering no longer
+interprets `Operator + FieldType + Value` directly. Validation routes operators
+through `OperatorCategory`, validates the field/type/value combination, and
+lowers each leaf into a concrete `ValidatedPredicate` shape.
 
-The target is not to hide SQL behind a generic trait maze. The target is to make
-operator categories explicit: scalar comparison, text match, array membership,
-JSONB key, range/network containment, regex, text search, and subquery.
+The current expression model is:
 
-Rendering has started moving in that direction: `render::expr` dispatches the
-validated expression tree, while `render::predicate` owns concrete SQL for
-field predicates and column predicates. Validation also routes the top-level
-operator switch through category helpers, so scalar ordering, equality,
-array membership, JSON keys, text matching, containment, regex, and text search
-stay readable without inventing a trait hierarchy.
+```text
+ValidatedExpr
+  Predicate(ValidatedPredicate)
+  Logical { and/or/not, predicates }
+```
 
-### Write Validation Still Reuses Select Machinery
+`ValidatedPredicate` owns value predicates, column comparisons, subqueries,
+`EXISTS`, and raw server-owned fragments. This keeps `render::expr` focused on
+logical composition, while `render::predicate` mechanically renders concrete
+predicate shapes.
 
-Write filters and write field resolution currently create small throwaway
-`SelectQuery` / `QueryScope` values to reuse field resolution. That works, but it
-is the wrong abstraction. Writes need a dedicated scope over one writable
-dataset.
+The remaining cleanup is naming and file placement, not behavior. In particular,
+`OperatorCategory::Contains` still covers both text-like `LIKE` lowering and
+range/network containment lowering. That is workable, but should be revisited
+when operator naming gets a final ergonomics pass.
 
-Validated write structs should only contain data the renderer needs. They should
+### Write Validation Has A Dedicated Scope
+
+Write validation now uses a `WriteScope` over one writable dataset. It still
+reuses the generic field resolver internally, but it no longer constructs
+throwaway `SelectQuery` values just to validate assignments, filters, or
+`RETURNING`.
+
+Validated write structs contain the writable dataset and render-ready resolved
+fields, assignments, conflict clauses, filters, and returning fields. They do
 not keep the original write AST.
 
 ### Execution Surface Is Wider Than The Conceptual Model
@@ -163,13 +173,15 @@ rqb-core
   ast: SelectQuery, SearchRequest, Expr, OperatorCategory, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> concrete validated models
+  validation::mod: validated model structs currently live here
   validation::ValidatedPredicate: lowered predicate shapes used by renderers
   validation::aggregate: aggregate fields, filters, aliases, and grouping rules
   validation::expr: validated expression tree construction
   validation::sort: validated sort field construction
   validation::value_type: reusable value/type compatibility checks
   validation::value_guard: reusable runtime Value guards
-  validated: render-ready resolved structs
+  validation::write: write-specific scope and validated write construction
+  target: move validated model structs into a smaller validation/model module
 
 rqb-postgres
   build: validation + rendering entry points and BuildPostgres traits
@@ -177,8 +189,8 @@ rqb-postgres
   error: structured Core/Postgres/runtime error surface
   type_sql::{casts, selection, names}: bind casts, selection repr, type identifiers
   render: validated models -> BuiltQuery
-  render::expr: validated expression tree dispatch
-  render::predicate::{comparison, text, collection, target}: categorized predicate SQL
+  render::expr: logical expression dispatch
+  render::predicate::{comparison, text, collection, target}: concrete predicate SQL
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
   row_map::{typed, raw}: metadata-driven and OID-driven Row -> serde bridge
@@ -206,27 +218,37 @@ every layer.
    Store the writable dataset and validated fields directly; do not store the
    original write AST in render inputs.
 
-2. Add a write-specific scope. Started.
-   Replace throwaway `SelectQuery` construction in write validation with a small
-   `WriteScope` or single-dataset resolver.
+2. Add a write-specific scope. Done.
+   Write validation uses `WriteScope` over a single writable dataset. The scope
+   delegates to the generic field resolver, but no longer builds throwaway
+   select queries for write validation.
 
 3. Centralize type behavior. Started.
    Introduce small helper APIs that answer type-family, value shape, element
    type, Postgres cast, selection representation, and array cast questions from
    one place per layer.
 
-4. Categorize operators.
+4. Categorize and lower operators. Done.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
-   rendering through explicit operator categories to reduce parallel branching.
-   Started with `OperatorCategory`, validation dispatch, rendering dispatch, and
-   `ValidatedPredicate` lowering for value, column, subquery, exists, and raw
-   predicates.
+   lowering through explicit operator categories. Rendering consumes concrete
+   `ValidatedPredicate` shapes and no longer reinterprets user-facing operators.
 
-5. Revisit execution traits.
+5. Clean the facade API surface. Pending.
+   `rqb-core` must expose validated models for backend crates, but the `rqb`
+   facade currently glob-reexports `rqb_core::*`, so internal `Validated*` types
+   appear under `rqb::*`. Replace the facade glob with an explicit ergonomic
+   export list while keeping `rqb::prelude::*` focused.
+
+6. Split validated model definitions. Pending.
+   `validation/mod.rs` currently hosts all validated structs and enums. Move the
+   render-ready model definitions into a focused module such as
+   `validation/model.rs` once the predicate model settles.
+
+7. Revisit execution traits. Pending.
    Only after rendering and validation are cleaner, decide whether select/write
    and raw execution helpers can share implementation without hiding semantics.
 
-6. Split CLI internals. Done.
+8. Split CLI internals. Done.
    Catalog introspection, type mapping, code rendering, identifier hygiene, and
    shared schema models now live in separate modules.
 

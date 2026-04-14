@@ -301,6 +301,9 @@ fn core_field_type_tokens(field_type: FieldType) -> proc_macro2::TokenStream {
         FieldType::Timestamp => quote! { FieldType::Timestamp },
         FieldType::Timestamptz => quote! { FieldType::Timestamptz },
         FieldType::Date => quote! { FieldType::Date },
+        FieldType::Time => quote! { FieldType::Time },
+        FieldType::Timetz => quote! { FieldType::Timetz },
+        FieldType::Interval => quote! { FieldType::Interval },
         FieldType::Jsonb => quote! { FieldType::Jsonb },
         FieldType::Bytea => quote! { FieldType::Bytea },
         FieldType::Inet => quote! { FieldType::Inet },
@@ -331,6 +334,9 @@ fn elem_type_tokens(elem_type: ElemType) -> proc_macro2::TokenStream {
         ElemType::Timestamp => quote! { ElemType::Timestamp },
         ElemType::Timestamptz => quote! { ElemType::Timestamptz },
         ElemType::Date => quote! { ElemType::Date },
+        ElemType::Time => quote! { ElemType::Time },
+        ElemType::Timetz => quote! { ElemType::Timetz },
+        ElemType::Interval => quote! { ElemType::Interval },
         ElemType::Enum(_) => {
             unreachable!("enum element types are rendered from ColumnType::ArrayEnum")
         }
@@ -349,6 +355,9 @@ fn type_family_tokens(family: TypeFamily) -> proc_macro2::TokenStream {
         TypeFamily::Timestamp => quote! { TypeFamily::Timestamp },
         TypeFamily::Timestamptz => quote! { TypeFamily::Timestamptz },
         TypeFamily::Date => quote! { TypeFamily::Date },
+        TypeFamily::Time => quote! { TypeFamily::Time },
+        TypeFamily::Timetz => quote! { TypeFamily::Timetz },
+        TypeFamily::Interval => quote! { TypeFamily::Interval },
         TypeFamily::Jsonb => quote! { TypeFamily::Jsonb },
         TypeFamily::Bytes => quote! { TypeFamily::Bytes },
         TypeFamily::Network => quote! { TypeFamily::Network },

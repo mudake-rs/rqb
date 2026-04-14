@@ -1512,8 +1512,10 @@ dependencies = [
 name = "rqb-postgres"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "deadpool-postgres",
+ "itoa",
  "rqb-core",
  "serde",
  "serde_json",

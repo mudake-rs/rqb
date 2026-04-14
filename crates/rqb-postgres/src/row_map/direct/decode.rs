@@ -24,6 +24,9 @@ fn field_to_decoded(row: &Row, index: usize, field_type: FieldType) -> DeResult<
     match field_type {
         FieldType::Text
         | FieldType::Citext
+        | FieldType::Time
+        | FieldType::Timetz
+        | FieldType::Interval
         | FieldType::Inet
         | FieldType::Cidr
         | FieldType::Range(_)
@@ -59,6 +62,9 @@ fn custom_field_to_decoded(
         | TypeFamily::Timestamp
         | TypeFamily::Timestamptz
         | TypeFamily::Date
+        | TypeFamily::Time
+        | TypeFamily::Timetz
+        | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range
         | TypeFamily::Numeric => read_decoded_scalar(row, index, DecodedValue::String),
@@ -82,9 +88,12 @@ fn aggregate_to_decoded(row: &Row, index: usize, ty: &AggregateType) -> DeResult
 
 fn array_to_decoded(row: &Row, index: usize, elem_type: ElemType) -> DeResult<DecodedValue> {
     match elem_type {
-        ElemType::Text | ElemType::Citext | ElemType::Enum(_) => {
-            read_decoded_array(row, index, DecodedArray::String)
-        }
+        ElemType::Text
+        | ElemType::Citext
+        | ElemType::Time
+        | ElemType::Timetz
+        | ElemType::Interval
+        | ElemType::Enum(_) => read_decoded_array(row, index, DecodedArray::String),
         ElemType::Uuid => uuid_array_to_decoded(row, index),
         ElemType::Timestamp => timestamp_array_to_decoded(row, index),
         ElemType::Timestamptz => timestamptz_array_to_decoded(row, index),
@@ -113,6 +122,9 @@ fn custom_array_to_decoded(
         | TypeFamily::Timestamp
         | TypeFamily::Timestamptz
         | TypeFamily::Date
+        | TypeFamily::Time
+        | TypeFamily::Timetz
+        | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range
         | TypeFamily::Numeric => read_decoded_array(row, index, DecodedArray::String),
@@ -150,98 +162,50 @@ fn to_json_error(error: tokio_postgres::Error) -> JsonError {
     JsonError::custom(error.to_string())
 }
 
-#[cfg(feature = "with-uuid")]
 fn uuid_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_scalar(row, index, |value: uuid::Uuid| {
         DecodedValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-uuid"))]
-fn uuid_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, DecodedValue::String)
-}
-
-#[cfg(feature = "with-uuid")]
 fn uuid_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_array(row, index, |values: Vec<uuid::Uuid>| {
         DecodedArray::String(values.into_iter().map(|value| value.to_string()).collect())
     })
 }
 
-#[cfg(not(feature = "with-uuid"))]
-fn uuid_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, DecodedArray::String)
-}
-
-#[cfg(feature = "with-chrono")]
 fn timestamp_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_scalar(row, index, |value: chrono::NaiveDateTime| {
         DecodedValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-fn timestamp_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, DecodedValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 fn timestamp_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_array(row, index, |values: Vec<chrono::NaiveDateTime>| {
         DecodedArray::String(values.into_iter().map(|value| value.to_string()).collect())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-fn timestamp_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, DecodedArray::String)
-}
-
-#[cfg(feature = "with-chrono")]
 fn timestamptz_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_scalar(row, index, |value: chrono::DateTime<chrono::Utc>| {
         DecodedValue::String(value.to_rfc3339())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-fn timestamptz_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, DecodedValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 fn timestamptz_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_array(row, index, |values: Vec<chrono::DateTime<chrono::Utc>>| {
         DecodedArray::String(values.into_iter().map(|value| value.to_rfc3339()).collect())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-fn timestamptz_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, DecodedArray::String)
-}
-
-#[cfg(feature = "with-chrono")]
 fn date_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_scalar(row, index, |value: chrono::NaiveDate| {
         DecodedValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-fn date_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, DecodedValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 fn date_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
     read_decoded_array(row, index, |values: Vec<chrono::NaiveDate>| {
         DecodedArray::String(values.into_iter().map(|value| value.to_string()).collect())
     })
-}
-
-#[cfg(not(feature = "with-chrono"))]
-fn date_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, DecodedArray::String)
 }

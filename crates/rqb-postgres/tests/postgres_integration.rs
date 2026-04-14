@@ -13,7 +13,10 @@ use rqb_postgres::{
     ExecuteWritePostgres, PgExecutor, ResultExt, StatementCache, row_to_json,
 };
 use serde::{Deserialize, Serialize};
-use tokio_postgres::{Client, Row, types::ToSql};
+use tokio_postgres::{
+    Client, Row,
+    types::{ToSql, Type},
+};
 
 mod order_search {
     use super::*;
@@ -302,6 +305,9 @@ fn row_mapping_matrix_fields() -> Vec<Field> {
             FieldType::Timestamptz,
         ),
         Field::mapped("dateValue", "date_value", FieldType::Date),
+        Field::mapped("timeValue", "time_value", FieldType::Time),
+        Field::mapped("timetzValue", "timetz_value", FieldType::Timetz),
+        Field::mapped("intervalValue", "interval_value", FieldType::Interval),
         Field::mapped("intValue", "int_value", FieldType::Integer),
         Field::mapped("bigintValue", "bigint_value", FieldType::BigInt),
         Field::mapped("floatValue", "float_value", FieldType::Float),
@@ -332,6 +338,17 @@ fn row_mapping_matrix_fields() -> Vec<Field> {
             FieldType::Array(ElemType::Timestamptz),
         ),
         Field::mapped("dateArray", "date_array", FieldType::Array(ElemType::Date)),
+        Field::mapped("timeArray", "time_array", FieldType::Array(ElemType::Time)),
+        Field::mapped(
+            "timetzArray",
+            "timetz_array",
+            FieldType::Array(ElemType::Timetz),
+        ),
+        Field::mapped(
+            "intervalArray",
+            "interval_array",
+            FieldType::Array(ElemType::Interval),
+        ),
         Field::mapped("intArray", "int_array", FieldType::Array(ElemType::Int)),
         Field::mapped(
             "bigintArray",
@@ -396,6 +413,9 @@ SELECT
     '2026-02-01 12:30:00'::timestamp AS timestamp_value,
     '2026-02-01T12:30:00Z'::timestamptz AS timestamptz_value,
     '2026-02-01'::date AS date_value,
+    '09:30:15'::time AS time_value,
+    '09:30:15+02'::timetz AS timetz_value,
+    '90 minutes'::interval AS interval_value,
     42::int AS int_value,
     9007199254740993::bigint AS bigint_value,
     1.25::double precision AS float_value,
@@ -410,6 +430,9 @@ SELECT
     ARRAY['2026-02-01 12:30:00'::timestamp] AS timestamp_array,
     ARRAY['2026-02-01T12:30:00Z'::timestamptz] AS timestamptz_array,
     ARRAY['2026-02-01'::date] AS date_array,
+    ARRAY['09:30:15'::time] AS time_array,
+    ARRAY['09:30:15+02'::timetz] AS timetz_array,
+    ARRAY['90 minutes'::interval] AS interval_array,
     ARRAY[1,2]::int[] AS int_array,
     ARRAY[9007199254740993,9007199254740994]::bigint[] AS bigint_array,
     ARRAY[1.25,2.5]::double precision[] AS float_array,
@@ -432,6 +455,9 @@ SELECT
     NULL::timestamp AS timestamp_value,
     NULL::timestamptz AS timestamptz_value,
     NULL::date AS date_value,
+    NULL::time AS time_value,
+    NULL::timetz AS timetz_value,
+    NULL::interval AS interval_value,
     NULL::int AS int_value,
     NULL::bigint AS bigint_value,
     NULL::double precision AS float_value,
@@ -446,6 +472,9 @@ SELECT
     NULL::timestamp[] AS timestamp_array,
     NULL::timestamptz[] AS timestamptz_array,
     NULL::date[] AS date_array,
+    NULL::time[] AS time_array,
+    NULL::timetz[] AS timetz_array,
+    NULL::interval[] AS interval_array,
     NULL::int[] AS int_array,
     NULL::bigint[] AS bigint_array,
     NULL::double precision[] AS float_array,
@@ -469,6 +498,9 @@ struct RowMappingNonNull {
     timestamp_value: String,
     timestamptz_value: String,
     date_value: String,
+    time_value: String,
+    timetz_value: String,
+    interval_value: String,
     int_value: i32,
     bigint_value: i64,
     float_value: f64,
@@ -483,6 +515,9 @@ struct RowMappingNonNull {
     timestamp_array: Vec<String>,
     timestamptz_array: Vec<String>,
     date_array: Vec<String>,
+    time_array: Vec<String>,
+    timetz_array: Vec<String>,
+    interval_array: Vec<String>,
     int_array: Vec<i32>,
     bigint_array: Vec<i64>,
     float_array: Vec<f64>,
@@ -506,6 +541,9 @@ struct RowMappingNullable {
     timestamp_value: Option<String>,
     timestamptz_value: Option<String>,
     date_value: Option<String>,
+    time_value: Option<String>,
+    timetz_value: Option<String>,
+    interval_value: Option<String>,
     int_value: Option<i32>,
     bigint_value: Option<i64>,
     float_value: Option<f64>,
@@ -520,6 +558,9 @@ struct RowMappingNullable {
     timestamp_array: Option<Vec<String>>,
     timestamptz_array: Option<Vec<String>>,
     date_array: Option<Vec<String>>,
+    time_array: Option<Vec<String>>,
+    timetz_array: Option<Vec<String>>,
+    interval_array: Option<Vec<String>>,
     int_array: Option<Vec<i32>>,
     bigint_array: Option<Vec<i64>>,
     float_array: Option<Vec<f64>>,
@@ -875,7 +916,13 @@ async fn direct_row_mapping_deserializes_supported_type_matrix_into_structs() ->
     );
     assert_eq!(row.bytes_value, vec![0xde, 0xad, 0xbe, 0xef]);
     assert_eq!(row.numeric_value, "9007199254740993.123");
+    assert_eq!(row.time_value, "09:30:15");
+    assert!(row.timetz_value.starts_with("09:30:15"));
+    assert!(row.interval_value.contains("01:30:00"));
     assert_eq!(row.custom_numeric_array[1], "42");
+    assert_eq!(row.time_array, vec!["09:30:15"]);
+    assert!(row.timetz_array[0].starts_with("09:30:15"));
+    assert!(row.interval_array[0].contains("01:30:00"));
     assert_eq!(serde_json::to_value(&row)?, expected);
 
     Ok(())
@@ -900,6 +947,8 @@ async fn direct_row_mapping_deserializes_typed_nulls_into_options() -> TestResul
     assert!(row.text_value.is_none());
     assert!(row.enum_value.is_none());
     assert!(row.bytes_value.is_none());
+    assert!(row.time_value.is_none());
+    assert!(row.interval_array.is_none());
     assert!(row.custom_numeric_array.is_none());
     assert_eq!(serde_json::to_value(&row)?, expected);
 
@@ -1539,7 +1588,6 @@ async fn raw_query_executes_bind_param_scalar_and_array_matrix() -> TestResult {
     Ok(())
 }
 
-#[cfg(all(feature = "with-uuid", feature = "with-chrono"))]
 #[tokio::test]
 async fn uuid_chrono_and_page_helpers_are_ergonomic() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
@@ -1822,6 +1870,18 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
         .fetch_all(&cache_client)
         .await?;
     assert_eq!(cache_client.statement_cache.size(), cached_after_in);
+
+    let typed_cache_sql = "SELECT $1::text";
+    cache_client
+        .prepare_typed_cached(typed_cache_sql, &[Type::TEXT])
+        .await?;
+    assert_eq!(cache_client.statement_cache.size(), cached_after_in + 1);
+
+    db.remove_cached_statement(typed_cache_sql, &[Type::TEXT]);
+    assert_eq!(cache_client.statement_cache.size(), cached_after_in);
+
+    db.clear_statement_cache();
+    assert_eq!(cache_client.statement_cache.size(), 0);
     drop(cache_client);
 
     let _ = delete(events_table::dataset())

@@ -621,7 +621,7 @@ JSON path comparisons use `#>` for JSON equality and `#>>` for text/numeric oper
 
 | Rust value | `Value` | SQL cast |
 | --- | --- | --- |
-| `&str`, `String` | `String` | text, uuid, timestamp, date, enum as needed |
+| `&str`, `String` | `String` | text, uuid, timestamp, date/time, interval, enum as needed |
 | integer types | `I64` | bigint, int |
 | `f32`, `f64` | `F64` | double precision; avoid for exact numeric |
 | exact numeric strings | `String` | numeric and numeric-like domains |
@@ -631,7 +631,7 @@ JSON path comparisons use `#>` for JSON equality and `#>>` for text/numeric oper
 | `Vec<T>`, `[T; N]` | `Array` | array casts from field type |
 | Rust enums implementing `DbEnum` | `String` | Postgres enum casts |
 
-UUID, timestamp, timestamptz, date, and enum inputs can be strings. With `with-uuid` and `with-chrono`, `uuid::Uuid`, `chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::DateTime<Tz>` can be passed directly. The renderer adds Postgres casts from the `FieldType`.
+UUID, timestamp, timestamptz, date, time, timetz, interval, and enum inputs can be strings. `uuid::Uuid`, `chrono::NaiveDate`, `chrono::NaiveTime`, `chrono::NaiveDateTime`, and `chrono::DateTime<Tz>` can be passed directly where the Rust type has an obvious Postgres representation. The renderer adds Postgres casts from the `FieldType`.
 
 ### Exact Numeric Values
 
@@ -648,11 +648,10 @@ such as `uint_256`. rqb selects exact numeric fields as text so serde maps them
 to `String` or a string-backed newtype. Do not use `f64` unless the field is
 semantically floating-point.
 
-Current pre-release code still accepts `F64` for some `Numeric` paths, but the
-target API is stricter: exact numeric fields should reject implicit float values
-or require an explicit cast/escape hatch. See
-[`docs/numeric-policy.md`](numeric-policy.md) for the full policy and open
-pre-beta fixes.
+Exact numeric fields reject implicit float values and numeric special strings
+such as `NaN` and `Infinity`. Use an explicit raw SQL escape hatch if a query
+really needs a Postgres numeric special value. See
+[`docs/numeric-policy.md`](numeric-policy.md) for the full policy.
 
 ### Output
 
@@ -660,7 +659,7 @@ pre-beta fixes.
 
 | `FieldType` | JSON value | Struct field |
 | --- | --- | --- |
-| `Text`, `Citext`, `Uuid`, `Timestamp`, `Timestamptz`, `Date`, `Enum` | string | `String`, `uuid::Uuid`, chrono types with serde |
+| `Text`, `Citext`, `Uuid`, `Timestamp`, `Timestamptz`, `Date`, `Time`, `Timetz`, `Interval`, `Enum` | string | `String`, `uuid::Uuid`, chrono types with serde |
 | `Integer` | number | `i32` |
 | `BigInt` | number | `i64` |
 | `Float` | number | `f64` |
@@ -702,6 +701,8 @@ let custom = rqb::postgres::Db::from_pool(pool);
 `connect` uses `NoTls` for local development. For cloud Postgres, pass a `tokio-postgres` TLS connector through `connect_with_tls` or `Db::connect_with_max_size_and_tls`.
 
 `PgExecutor` is implemented for `tokio_postgres::Client`, `tokio_postgres::Transaction`, `deadpool_postgres::Client`, `Db`, and `Tx`. The same builder can run against any of them.
+
+`Db::clear_statement_cache()` clears cached statements on all pooled clients that the pool has handed out. `Db::remove_cached_statement(sql, types)` removes one cached statement from all of those clients.
 
 ## Transactions
 
@@ -762,7 +763,7 @@ match error {
 }
 ```
 
-Use `fetch_optional` or `fetch_optional_as` when zero rows are a valid result. Use `is_retryable`, `constraint_name`, `table_name`, `column_name`, `code`, `detail`, and `hint` to map database errors into API errors. Direct enum matches remain the clearest choice for single variants such as `QueryCanceled`, `InsufficientPrivilege`, or `NotFound`.
+Use `fetch_optional` or `fetch_optional_as` when zero rows are a valid result. Use `is_retryable`, `constraint_name`, `schema_name`, `table_name`, `column_name`, `datatype_name`, `where_context`, `position`, `code`, `detail`, and `hint` to map database errors into API errors. Direct enum matches remain the clearest choice for single variants such as `QueryCanceled`, `InsufficientPrivilege`, or `NotFound`.
 
 For named business conflicts, keep the mapping next to the write:
 

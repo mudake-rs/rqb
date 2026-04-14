@@ -10,9 +10,6 @@ categories = ["database", "web-programming"]
 
 [features]
 default = []
-uuid = ["rqb-core/uuid"]
-with-uuid = ["rqb-core/with-uuid", "rqb-postgres/with-uuid"]
-with-chrono = ["rqb-core/with-chrono", "rqb-postgres/with-chrono"]
 runtime-tokio-postgres = ["rqb-postgres/runtime-tokio-postgres"]
 runtime-deadpool = ["runtime-tokio-postgres", "rqb-postgres/runtime-deadpool"]
 pool = ["runtime-deadpool", "rqb-postgres/pool"]
@@ -29,4 +26,4 @@ uuid = { workspace = true, features = ["v4"] }
 
 [[example]]
 name = "transactions"
-required-features = ["pool", "with-uuid"]
+required-features = ["pool"]

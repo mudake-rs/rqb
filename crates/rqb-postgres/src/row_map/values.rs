@@ -42,98 +42,50 @@ pub(super) fn f64_to_json(value: f64) -> JsonValue {
         .unwrap_or(JsonValue::Null)
 }
 
-#[cfg(feature = "with-uuid")]
 pub(super) fn raw_uuid_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_scalar_idx(row, idx, |value: uuid::Uuid| {
         JsonValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-uuid"))]
-pub(super) fn raw_uuid_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_scalar_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-uuid")]
 pub(super) fn raw_uuid_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_array_idx(row, idx, |value: uuid::Uuid| {
         JsonValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-uuid"))]
-pub(super) fn raw_uuid_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_array_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 pub(super) fn raw_timestamp_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_scalar_idx(row, idx, |value: chrono::NaiveDateTime| {
         JsonValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-pub(super) fn raw_timestamp_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_scalar_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 pub(super) fn raw_timestamp_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_array_idx(row, idx, |value: chrono::NaiveDateTime| {
         JsonValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-pub(super) fn raw_timestamp_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_array_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 pub(super) fn raw_timestamptz_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_scalar_idx(row, idx, |value: chrono::DateTime<chrono::Utc>| {
         JsonValue::String(value.to_rfc3339())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-pub(super) fn raw_timestamptz_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_scalar_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 pub(super) fn raw_timestamptz_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_array_idx(row, idx, |value: chrono::DateTime<chrono::Utc>| {
         JsonValue::String(value.to_rfc3339())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-pub(super) fn raw_timestamptz_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_array_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 pub(super) fn raw_date_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_scalar_idx(row, idx, |value: chrono::NaiveDate| {
         JsonValue::String(value.to_string())
     })
 }
 
-#[cfg(not(feature = "with-chrono"))]
-pub(super) fn raw_date_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_scalar_idx(row, idx, JsonValue::String)
-}
-
-#[cfg(feature = "with-chrono")]
 pub(super) fn raw_date_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
     read_array_idx(row, idx, |value: chrono::NaiveDate| {
         JsonValue::String(value.to_string())
     })
-}
-
-#[cfg(not(feature = "with-chrono"))]
-pub(super) fn raw_date_array_to_json(row: &Row, idx: usize) -> Result<JsonValue> {
-    read_array_idx(row, idx, JsonValue::String)
 }

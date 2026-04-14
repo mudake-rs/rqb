@@ -150,6 +150,7 @@ mod tests {
         let duplicate = Err::<u64, _>(rqb::Error::UniqueViolation {
             constraint: Some("app_users_email_key".to_owned()),
             detail: None,
+            info: Default::default(),
         })
         .on_constraint("app_users_email_key", map_email_taken)
         .unwrap_err();
@@ -158,6 +159,7 @@ mod tests {
         let missing_org = Err::<u64, _>(rqb::Error::ForeignKeyViolation {
             constraint: Some("app_users_organization_id_fkey".to_owned()),
             detail: None,
+            info: Default::default(),
         })
         .on_constraint("app_users_organization_id_fkey", map_missing_organization)
         .unwrap_err();
@@ -169,6 +171,7 @@ mod tests {
         let error = Err::<u64, _>(rqb::Error::UniqueViolation {
             constraint: Some("other_key".to_owned()),
             detail: None,
+            info: Default::default(),
         })
         .on_constraint("app_users_email_key", map_email_taken)
         .unwrap_err();

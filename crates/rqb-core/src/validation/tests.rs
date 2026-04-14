@@ -67,6 +67,9 @@ fn dataset() -> Dataset {
         Field::new("active", FieldType::Bool),
         Field::mapped("createdAt", "created_at", FieldType::Timestamp),
         Field::mapped("observedAt", "observed_at", FieldType::Timestamptz),
+        Field::mapped("localTime", "local_time", FieldType::Time),
+        Field::mapped("offsetTime", "offset_time", FieldType::Timetz),
+        Field::new("duration", FieldType::Interval),
         Field::new("payload", FieldType::Bytea),
         Field::mapped("ipAddr", "ip_addr", FieldType::Inet),
         Field::new("network", FieldType::Cidr),
@@ -807,6 +810,9 @@ fn accepts_between_on_numeric_and_temporal_fields() {
         field("score").between(1, 10),
         field("createdAt").between("2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"),
         field("observedAt").between("2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"),
+        field("localTime").between("09:00:00", "17:30:00"),
+        field("offsetTime").between("09:00:00+02", "17:30:00+02"),
+        field("duration").between("1 hour", "2 hours"),
     ] {
         let query = crate::select(dataset()).filter(expr).build();
         ValidatedSelect::new(query).unwrap();
@@ -822,6 +828,9 @@ fn accepts_native_postgres_type_values_and_operators() {
             field("ipAddr").contained_by("10.0.0.0/8"),
             field("network").covers("10.1.2.0/24"),
             field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
+            field("localTime").eq("09:30:00"),
+            field("offsetTime").eq("09:30:00+02"),
+            field("duration").gte("30 minutes"),
         ]))
         .build();
 
@@ -875,6 +884,44 @@ fn rejects_between_without_two_values() {
         err,
         Error::InvalidValue { message, .. } if message == "expected exactly 2 values, got 1"
     ));
+}
+
+#[test]
+fn rejects_null_values_inside_scalar_operator_arrays() {
+    for (operator, expr) in [
+        (
+            "in",
+            Expr::predicate(
+                field("score"),
+                Operator::In,
+                Value::Array(vec![1.into(), Value::Null]),
+            ),
+        ),
+        (
+            "between",
+            Expr::predicate(
+                field("score"),
+                Operator::Between,
+                Value::Array(vec![Value::Null, 10.into()]),
+            ),
+        ),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::InvalidValue {
+                    ref field,
+                    operator: ref actual_operator,
+                    ref message,
+                } if field == "score"
+                    && actual_operator == operator
+                    && message == "expected integer, got null"
+            ),
+            "{err}"
+        );
+    }
 }
 
 #[test]
@@ -1419,6 +1466,21 @@ fn accepts_numeric_strings_only_for_numeric_fields() {
         .build();
 
     ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn rejects_numeric_special_strings_for_exact_numeric_fields() {
+    for value in ["NaN", "Infinity", "-Infinity"] {
+        let query = crate::select(dataset())
+            .filter(field("amount").eq(value))
+            .build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidValue { ref field, ref message, .. }
+                if field == "amount" && message == "expected integer or numeric string, got string"),
+            "unexpected error for {value}: {err}"
+        );
+    }
 }
 
 #[test]

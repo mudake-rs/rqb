@@ -19,6 +19,9 @@ pub enum ElemType {
     Timestamp,
     Timestamptz,
     Date,
+    Time,
+    Timetz,
+    Interval,
     Enum(EnumType),
     Custom(&'static TypeSpec),
 }
@@ -37,6 +40,9 @@ impl ElemType {
             Self::Timestamp => "timestamp",
             Self::Timestamptz => "timestamptz",
             Self::Date => "date",
+            Self::Time => "time",
+            Self::Timetz => "timetz",
+            Self::Interval => "interval",
             Self::Enum(enum_type) => enum_type.name,
             Self::Custom(type_spec) => type_spec.name,
         }
@@ -65,6 +71,9 @@ pub enum FieldType {
     Timestamp,
     Timestamptz,
     Date,
+    Time,
+    Timetz,
+    Interval,
     Jsonb,
     Bytea,
     Inet,
@@ -109,15 +118,27 @@ impl FieldType {
 
     #[inline]
     pub fn is_temporal(self) -> bool {
-        matches!(self, Self::Timestamp | Self::Timestamptz | Self::Date)
-            || matches!(
-                self,
-                Self::Custom(type_spec)
-                    if matches!(
-                        type_spec.family,
-                        TypeFamily::Timestamp | TypeFamily::Timestamptz | TypeFamily::Date
-                    )
-            )
+        matches!(
+            self,
+            Self::Timestamp
+                | Self::Timestamptz
+                | Self::Date
+                | Self::Time
+                | Self::Timetz
+                | Self::Interval
+        ) || matches!(
+            self,
+            Self::Custom(type_spec)
+                if matches!(
+                    type_spec.family,
+                    TypeFamily::Timestamp
+                        | TypeFamily::Timestamptz
+                        | TypeFamily::Date
+                        | TypeFamily::Time
+                        | TypeFamily::Timetz
+                        | TypeFamily::Interval
+                )
+        )
     }
 
     #[inline]
@@ -139,6 +160,9 @@ impl FieldType {
             Self::Timestamp => Some(Self::Array(ElemType::Timestamp)),
             Self::Timestamptz => Some(Self::Array(ElemType::Timestamptz)),
             Self::Date => Some(Self::Array(ElemType::Date)),
+            Self::Time => Some(Self::Array(ElemType::Time)),
+            Self::Timetz => Some(Self::Array(ElemType::Timetz)),
+            Self::Interval => Some(Self::Array(ElemType::Interval)),
             Self::Enum(enum_type) => Some(Self::Array(ElemType::Enum(enum_type))),
             Self::Custom(type_spec) => Some(Self::Array(ElemType::Custom(type_spec))),
             Self::Jsonb
@@ -163,6 +187,9 @@ impl FieldType {
             Self::Array(ElemType::Timestamp) => Self::Timestamp,
             Self::Array(ElemType::Timestamptz) => Self::Timestamptz,
             Self::Array(ElemType::Date) => Self::Date,
+            Self::Array(ElemType::Time) => Self::Time,
+            Self::Array(ElemType::Timetz) => Self::Timetz,
+            Self::Array(ElemType::Interval) => Self::Interval,
             Self::Array(ElemType::Enum(enum_type)) => Self::Enum(enum_type),
             Self::Array(ElemType::Custom(type_spec)) => Self::Custom(type_spec),
             other => other,
@@ -182,6 +209,9 @@ impl FieldType {
             Self::Timestamp => "timestamp",
             Self::Timestamptz => "timestamptz",
             Self::Date => "date",
+            Self::Time => "time",
+            Self::Timetz => "timetz",
+            Self::Interval => "interval",
             Self::Jsonb => "jsonb",
             Self::Bytea => "bytea",
             Self::Inet => "inet",
@@ -201,6 +231,9 @@ impl FieldType {
                 ElemType::Timestamp => "timestamp[]",
                 ElemType::Timestamptz => "timestamptz[]",
                 ElemType::Date => "date[]",
+                ElemType::Time => "time[]",
+                ElemType::Timetz => "timetz[]",
+                ElemType::Interval => "interval[]",
                 ElemType::Enum(_) => "enum[]",
                 ElemType::Custom(_) => "custom[]",
             },
@@ -258,6 +291,18 @@ mod tests {
             Some(FieldType::Array(ElemType::Text))
         );
         assert_eq!(
+            FieldType::Time.array_type_for_scalar(),
+            Some(FieldType::Array(ElemType::Time))
+        );
+        assert_eq!(
+            FieldType::Timetz.array_type_for_scalar(),
+            Some(FieldType::Array(ElemType::Timetz))
+        );
+        assert_eq!(
+            FieldType::Interval.array_type_for_scalar(),
+            Some(FieldType::Array(ElemType::Interval))
+        );
+        assert_eq!(
             FieldType::Enum(crate::EnumType::new(Some("public"), "status", &["active"]))
                 .array_type_for_scalar(),
             Some(FieldType::Array(ElemType::Enum(crate::EnumType::new(
@@ -282,6 +327,10 @@ mod tests {
         assert_eq!(
             FieldType::Array(ElemType::BigInt).array_element_type(),
             FieldType::BigInt
+        );
+        assert_eq!(
+            FieldType::Array(ElemType::Interval).array_element_type(),
+            FieldType::Interval
         );
         assert_eq!(
             FieldType::Array(ElemType::Custom(&MONEY)).array_element_type(),

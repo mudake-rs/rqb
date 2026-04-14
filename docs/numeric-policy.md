@@ -27,7 +27,8 @@ PRICE.eq(19.99)     // Rejected: f64 already lost decimal intent before rqb sees
 
 Exact numeric fields reject implicit `f64` values. If lossy floating-point
 behavior is intentional, use a `Float` field or an explicit cast / raw SQL escape
-hatch.
+hatch. Decimal strings must be finite decimal literals; `NaN`, `Infinity`, and
+`-Infinity` are rejected on metadata-backed exact numeric fields.
 
 ## Why Not BigDecimal By Default?
 

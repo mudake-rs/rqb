@@ -359,6 +359,9 @@ fn target_custom_type_assignable(type_spec: TypeSpec, expr: FieldType) -> bool {
         | TypeFamily::Timestamp
         | TypeFamily::Timestamptz
         | TypeFamily::Date
+        | TypeFamily::Time
+        | TypeFamily::Timetz
+        | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range => false,
     }

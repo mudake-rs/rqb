@@ -35,6 +35,9 @@ fn field_to_json(row: &Row, index: usize, field_type: FieldType) -> Result<JsonV
     match field_type {
         FieldType::Text
         | FieldType::Citext
+        | FieldType::Time
+        | FieldType::Timetz
+        | FieldType::Interval
         | FieldType::Inet
         | FieldType::Cidr
         | FieldType::Range(_)
@@ -74,6 +77,9 @@ fn custom_field_to_json(
         | TypeFamily::Timestamp
         | TypeFamily::Timestamptz
         | TypeFamily::Date
+        | TypeFamily::Time
+        | TypeFamily::Timetz
+        | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range
         | TypeFamily::Numeric => read_scalar_idx(row, index, JsonValue::String),
@@ -99,9 +105,12 @@ fn aggregate_to_json(row: &Row, index: usize, ty: &AggregateType) -> Result<Json
 
 fn array_to_json(row: &Row, index: usize, elem_type: ElemType) -> Result<JsonValue> {
     match elem_type {
-        ElemType::Text | ElemType::Citext | ElemType::Enum(_) => {
-            read_array_idx(row, index, JsonValue::String)
-        }
+        ElemType::Text
+        | ElemType::Citext
+        | ElemType::Time
+        | ElemType::Timetz
+        | ElemType::Interval
+        | ElemType::Enum(_) => read_array_idx(row, index, JsonValue::String),
         ElemType::Uuid => raw_uuid_array_to_json(row, index),
         ElemType::Timestamp => raw_timestamp_array_to_json(row, index),
         ElemType::Timestamptz => raw_timestamptz_array_to_json(row, index),
@@ -134,6 +143,9 @@ fn custom_array_to_json(
         | TypeFamily::Timestamp
         | TypeFamily::Timestamptz
         | TypeFamily::Date
+        | TypeFamily::Time
+        | TypeFamily::Timetz
+        | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range
         | TypeFamily::Numeric => read_array_idx(row, index, JsonValue::String),

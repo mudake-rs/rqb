@@ -49,6 +49,9 @@ pub(crate) fn map_field_type(
         ("ARRAY", "_timestamp") => FieldType::Array(ElemType::Timestamp),
         ("ARRAY", "_timestamptz") => FieldType::Array(ElemType::Timestamptz),
         ("ARRAY", "_date") => FieldType::Array(ElemType::Date),
+        ("ARRAY", "_time") => FieldType::Array(ElemType::Time),
+        ("ARRAY", "_timetz") => FieldType::Array(ElemType::Timetz),
+        ("ARRAY", "_interval") => FieldType::Array(ElemType::Interval),
         (_, "int4range") => FieldType::Range(ElemType::Int),
         (_, "int8range") => FieldType::Range(ElemType::BigInt),
         (_, "numrange") => FieldType::Range(ElemType::Numeric),
@@ -66,6 +69,9 @@ pub(crate) fn map_field_type(
         (_, "float4" | "float8") => FieldType::Float,
         (_, "numeric") => FieldType::Numeric,
         (_, "date") => FieldType::Date,
+        (_, "time") => FieldType::Time,
+        (_, "timetz") => FieldType::Timetz,
+        (_, "interval") => FieldType::Interval,
         (_, "timestamp") => FieldType::Timestamp,
         (_, "timestamptz") => FieldType::Timestamptz,
         (_, "json" | "jsonb") => FieldType::Jsonb,
@@ -79,6 +85,9 @@ pub(crate) fn type_family_for_udt(udt_name: &str) -> TypeFamily {
         "int2" | "int4" | "int8" | "float4" | "float8" | "numeric" => TypeFamily::Numeric,
         "uuid" => TypeFamily::Uuid,
         "date" => TypeFamily::Date,
+        "time" => TypeFamily::Time,
+        "timetz" => TypeFamily::Timetz,
+        "interval" => TypeFamily::Interval,
         "timestamp" => TypeFamily::Timestamp,
         "timestamptz" => TypeFamily::Timestamptz,
         "json" | "jsonb" => TypeFamily::Jsonb,
@@ -100,6 +109,9 @@ pub(crate) fn value_repr_for_family(family: TypeFamily) -> ValueRepr {
         | TypeFamily::Timestamp
         | TypeFamily::Timestamptz
         | TypeFamily::Date
+        | TypeFamily::Time
+        | TypeFamily::Timetz
+        | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range => ValueRepr::String,
     }
@@ -143,6 +155,9 @@ mod tests {
             ("_timestamp", ElemType::Timestamp),
             ("_timestamptz", ElemType::Timestamptz),
             ("_date", ElemType::Date),
+            ("_time", ElemType::Time),
+            ("_timetz", ElemType::Timetz),
+            ("_interval", ElemType::Interval),
         ] {
             assert!(
                 matches!(
@@ -197,6 +212,9 @@ mod tests {
             ("citext", FieldType::Citext),
             ("inet", FieldType::Inet),
             ("cidr", FieldType::Cidr),
+            ("time", FieldType::Time),
+            ("timetz", FieldType::Timetz),
+            ("interval", FieldType::Interval),
             ("int4range", FieldType::Range(ElemType::Int)),
             ("tstzrange", FieldType::Range(ElemType::Timestamptz)),
         ] {

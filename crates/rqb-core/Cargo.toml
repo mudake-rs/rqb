@@ -10,16 +10,13 @@ categories = ["database", "web-programming"]
 
 [features]
 default = []
-uuid = ["with-uuid"]
-with-uuid = ["dep:uuid"]
-with-chrono = ["dep:chrono"]
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-uuid = { workspace = true, optional = true }
-chrono = { workspace = true, optional = true }
+uuid.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

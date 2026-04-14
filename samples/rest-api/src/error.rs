@@ -71,6 +71,7 @@ mod tests {
         let unique = AppError::from(rqb::Error::UniqueViolation {
             constraint: Some("users_email_key".to_owned()),
             detail: None,
+            info: Default::default(),
         });
         assert!(matches!(unique, AppError::Conflict(ref name) if name == "users_email_key"));
         assert_eq!(unique.status_code(), StatusCode::CONFLICT);

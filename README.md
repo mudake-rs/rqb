@@ -15,7 +15,7 @@ That gives a Knex-like runtime composition model without exposing arbitrary SQL 
 
 ```toml
 [dependencies]
-rqb = { version = "0.1", features = ["pool", "with-uuid", "with-chrono"] }
+rqb = { version = "0.1", features = ["pool"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["serde"] }
@@ -29,10 +29,9 @@ Feature flags:
 | `runtime-tokio-postgres` | SQL params, execution traits, row deserialization | You own a `tokio_postgres::Client` or transaction |
 | `runtime-deadpool` | `runtime-tokio-postgres` plus deadpool client support | You manage your own pool |
 | `pool` | `Db`, `connect`, `begin`, transactions, savepoints | You want the built-in pool facade |
-| `with-uuid` | `uuid::Uuid` values and native row reads | Your IDs are UUIDs |
-| `with-chrono` | chrono date/time values and native row reads | Your structs use chrono |
 
-Core query building and SQL rendering do not require a runtime feature.
+UUID and chrono conversions are always available. Core query building and SQL
+rendering do not require a runtime feature.
 
 ## Quick Start
 

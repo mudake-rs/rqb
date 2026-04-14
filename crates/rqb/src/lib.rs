@@ -43,12 +43,12 @@ pub use rqb_postgres::{
     BindParam, BindType, BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql,
     DebugSql, Postgres,
 };
-pub use rqb_postgres::{Error, Result};
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use rqb_postgres::{
-    ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams,
-    ResultExt, StatementCache,
+    DbErrorInfo, DbErrorPosition, ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page,
+    PgExecutor, PgParams, ResultExt, StatementCache,
 };
+pub use rqb_postgres::{Error, Result};
 pub use serde;
 
 pub mod prelude {
@@ -60,8 +60,8 @@ pub mod prelude {
 
     #[cfg(feature = "runtime-tokio-postgres")]
     pub use rqb_postgres::{
-        ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams,
-        ResultExt, StatementCache,
+        DbErrorInfo, DbErrorPosition, ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres,
+        Page, PgExecutor, PgParams, ResultExt, StatementCache,
     };
 
     #[cfg(feature = "pool")]

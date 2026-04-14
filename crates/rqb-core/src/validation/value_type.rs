@@ -103,7 +103,7 @@ pub(super) fn require_array_values_for_field_type(
         unreachable!("array shape validated by require_array");
     };
     for value in values {
-        validate_value_for_field_type(field, operator, value)?;
+        require_value_for_field_type(field, operator, field.ty, value)?;
     }
     Ok(())
 }
@@ -152,6 +152,19 @@ fn require_value_for_field_type(
         FieldType::Date => require_value_shape(field, operator, value, "date string", |value| {
             matches!(value, Value::String(_))
         }),
+        FieldType::Time => require_value_shape(field, operator, value, "time string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        FieldType::Timetz => {
+            require_value_shape(field, operator, value, "timetz string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
+        FieldType::Interval => {
+            require_value_shape(field, operator, value, "interval string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
         FieldType::Jsonb => {
             if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
                 reject_non_finite_numbers(field, operator, value)?;
@@ -247,6 +260,21 @@ fn require_value_for_type_spec(
             }
             TypeFamily::Date => {
                 require_value_shape(field, operator, value, "date string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
+            TypeFamily::Time => {
+                require_value_shape(field, operator, value, "time string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
+            TypeFamily::Timetz => {
+                require_value_shape(field, operator, value, "timetz string", |value| {
+                    matches!(value, Value::String(_))
+                })
+            }
+            TypeFamily::Interval => {
+                require_value_shape(field, operator, value, "interval string", |value| {
                     matches!(value, Value::String(_))
                 })
             }
@@ -400,6 +428,17 @@ pub(super) fn require_value_for_elem_type(
         ElemType::Date => require_value_shape(field, operator, value, "date string", |value| {
             matches!(value, Value::String(_))
         }),
+        ElemType::Time => require_value_shape(field, operator, value, "time string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        ElemType::Timetz => require_value_shape(field, operator, value, "timetz string", |value| {
+            matches!(value, Value::String(_))
+        }),
+        ElemType::Interval => {
+            require_value_shape(field, operator, value, "interval string", |value| {
+                matches!(value, Value::String(_))
+            })
+        }
         ElemType::Enum(enum_type) => require_enum_scalar_by_name(field, operator, enum_type, value),
         ElemType::Custom(type_spec) => {
             require_value_for_type_spec(field, operator, *type_spec, value)

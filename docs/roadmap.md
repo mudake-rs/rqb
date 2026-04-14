@@ -128,7 +128,8 @@ Done:
 - `QueryCanceled` for statement timeouts and cancellations.
 - `InsufficientPrivilege` for RLS and permission failures.
 - `RestrictViolation` completes the important constraint family.
-- `is_retryable()`, raw SQLSTATE `code()`, `table_name()`, `column_name()`,
+- `is_retryable()`, raw SQLSTATE `code()`, `schema_name()`, `table_name()`,
+  `column_name()`, `datatype_name()`, `where_context()`, `position()`,
   `detail()`, and `hint()` are available.
 - Single-variant `is_*` helpers were pruned where they did not carry real
   ergonomic value.
@@ -180,12 +181,11 @@ P1 is the next feature layer after the P0 correctness/API pass.
 Already covered well:
 
 - UUID, booleans, integer/bigint/float/numeric, text, citext, JSONB, bytea,
-  timestamp/timestamptz/date, arrays, enums, ranges, inet/cidr, and custom
-  domains through `TypeSpec`.
+  timestamp/timestamptz/date/time/timetz/interval, arrays, enums, ranges,
+  inet/cidr, and custom domains through `TypeSpec`.
 
 Add next:
 
-- `time`, `timetz`, and `interval`.
 - `json` in addition to `jsonb`, with honest operator limitations.
 - `macaddr` and `macaddr8`.
 - `tsvector` and `tsquery` for indexed full-text search columns.

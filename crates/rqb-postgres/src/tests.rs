@@ -118,7 +118,6 @@ const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
     .value_repr(ValueRepr::DecimalString)
     .select_repr(SelectRepr::Text);
 
-#[cfg(feature = "with-uuid")]
 fn uuid_projection(expr: &str, alias: &str, force_alias: bool) -> String {
     if force_alias {
         format!("{expr} AS \"{alias}\"")
@@ -127,29 +126,12 @@ fn uuid_projection(expr: &str, alias: &str, force_alias: bool) -> String {
     }
 }
 
-#[cfg(not(feature = "with-uuid"))]
-fn uuid_projection(expr: &str, alias: &str, _force_alias: bool) -> String {
-    format!("{expr}::text AS \"{alias}\"")
-}
-
-#[cfg(feature = "with-uuid")]
 fn uuid_value(expr: &str) -> String {
     expr.to_owned()
 }
 
-#[cfg(not(feature = "with-uuid"))]
-fn uuid_value(expr: &str) -> String {
-    format!("{expr}::text")
-}
-
-#[cfg(feature = "with-chrono")]
 fn timestamp_projection(expr: &str, alias: &str) -> String {
     format!("{expr} AS \"{alias}\"")
-}
-
-#[cfg(not(feature = "with-chrono"))]
-fn timestamp_projection(expr: &str, alias: &str) -> String {
-    format!("{expr}::text AS \"{alias}\"")
 }
 
 #[derive(Clone, Copy)]
@@ -352,6 +334,28 @@ fn rejects_float_values_for_exact_numeric_fields_before_rendering() {
 }
 
 #[test]
+fn rejects_null_values_inside_in_arrays_before_rendering() {
+    let amounts = Dataset::table("amounts").fields([Field::new("amount", FieldType::Numeric)]);
+    let err = select(amounts)
+        .filter(rqb_core::Expr::predicate(
+            field("amount"),
+            rqb_core::Operator::In,
+            Value::Array(vec!["19.99".into(), Value::Null]),
+        ))
+        .build_rows_pg()
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            err,
+            Error::Core(rqb_core::Error::InvalidValue { ref field, ref message, .. })
+                if field == "amount" && message == "expected integer or numeric string, got null"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
 fn renders_scalar_range_and_text_negation_operators() {
     let built = select(orders())
         .filter(all([
@@ -536,14 +540,6 @@ fn renders_postgres_type_cast_matrix() {
     assert!(built.sql.contains("$9::int[]"));
     assert!(built.sql.contains("$10::text[]::uuid[]"));
     assert!(built.sql.contains("$11::text[]::timestamptz[]"));
-    #[cfg(not(feature = "with-uuid"))]
-    assert!(built.sql.contains("\"ids\"::text[] AS \"ids\""));
-    #[cfg(not(feature = "with-chrono"))]
-    assert!(
-        built
-            .sql
-            .contains("\"created_at_list\"::text[] AS \"createdAtList\"")
-    );
 }
 
 #[test]
@@ -602,6 +598,18 @@ fn bind_param_typed_lowering_preserves_postgres_wire_shapes() {
             FieldType::Uuid
         ),
         BindParam::Text("10000000-0000-0000-0000-000000000001".to_owned())
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from("09:30:00"), FieldType::Time),
+        BindParam::Text("09:30:00".to_owned())
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from("09:30:00+02"), FieldType::Timetz),
+        BindParam::Text("09:30:00+02".to_owned())
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from("30 minutes"), FieldType::Interval),
+        BindParam::Text("30 minutes".to_owned())
     );
     assert_eq!(
         BindParam::from_typed_value(&Value::Null, FieldType::Integer),
@@ -675,6 +683,88 @@ fn renders_native_postgres_type_casts_and_operators() {
     assert!(built.sql.contains("\"local_window\" <@ $6::text::tsrange"));
     assert!(built.sql.contains("$7::text::timestamptz"));
     assert_eq!(built.params[1], BindParam::Bytes(vec![0xde, 0xad]));
+}
+
+#[test]
+fn renders_time_timetz_and_interval_casts() {
+    let dataset = Dataset::table("temporal_examples").fields([
+        Field::mapped("localTime", "local_time", FieldType::Time),
+        Field::mapped("offsetTime", "offset_time", FieldType::Timetz),
+        Field::new("duration", FieldType::Interval),
+        Field::mapped(
+            "localTimes",
+            "local_times",
+            FieldType::Array(ElemType::Time),
+        )
+        .sortable(false),
+        Field::mapped(
+            "offsetTimes",
+            "offset_times",
+            FieldType::Array(ElemType::Timetz),
+        )
+        .sortable(false),
+        Field::mapped(
+            "durations",
+            "durations",
+            FieldType::Array(ElemType::Interval),
+        )
+        .sortable(false),
+    ]);
+
+    let built = select(dataset)
+        .fields([
+            "localTime",
+            "offsetTime",
+            "duration",
+            "localTimes",
+            "offsetTimes",
+            "durations",
+        ])
+        .filter(all([
+            field("localTime").eq("09:30:00"),
+            field("offsetTime").eq("09:30:00+02"),
+            field("duration").gte("30 minutes"),
+            field("localTimes").contains_any(["09:00:00", "17:00:00"]),
+            field("offsetTimes").contains_any(["09:00:00+02"]),
+            field("durations").contains_any(["30 minutes", "1 hour"]),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"local_time\"::text AS \"localTime\""));
+    assert!(
+        built
+            .sql
+            .contains("\"offset_time\"::text AS \"offsetTime\"")
+    );
+    assert!(built.sql.contains("\"duration\"::text AS \"duration\""));
+    assert!(
+        built
+            .sql
+            .contains("\"local_times\"::text[] AS \"localTimes\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"offset_times\"::text[] AS \"offsetTimes\"")
+    );
+    assert!(built.sql.contains("\"durations\"::text[] AS \"durations\""));
+    assert!(built.sql.contains("\"local_time\" = $1::text::time"));
+    assert!(built.sql.contains("\"offset_time\" = $2::text::timetz"));
+    assert!(built.sql.contains("\"duration\" >= $3::text::interval"));
+    assert!(built.sql.contains("\"local_times\" && $4::text[]::time[]"));
+    assert!(
+        built
+            .sql
+            .contains("\"offset_times\" && $5::text[]::timetz[]")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"durations\" && $6::text[]::interval[]")
+    );
+    assert_eq!(built.params.len(), 6);
+    assert!(built.cacheable);
 }
 
 #[test]
@@ -2159,6 +2249,7 @@ fn postgres_error_helpers_classify_variants() {
     let unique = Error::UniqueViolation {
         constraint: Some("users_email_key".to_owned()),
         detail: Some("duplicate key".to_owned()),
+        info: Default::default(),
     };
     assert!(matches!(unique, Error::UniqueViolation { .. }));
     assert_eq!(unique.code(), Some("23505"));
@@ -2169,18 +2260,21 @@ fn postgres_error_helpers_classify_variants() {
         Error::ForeignKeyViolation {
             constraint: None,
             detail: None,
+            info: Default::default(),
         },
         Error::ForeignKeyViolation { .. }
     ));
     assert!(matches!(
         Error::NotNullViolation {
             column: Some("email".to_owned()),
+            info: Default::default(),
         },
         Error::NotNullViolation { .. }
     ));
     assert_eq!(
         Error::NotNullViolation {
             column: Some("email".to_owned()),
+            info: Default::default(),
         }
         .column_name(),
         Some("email")
@@ -2188,6 +2282,7 @@ fn postgres_error_helpers_classify_variants() {
     assert!(matches!(
         Error::CheckViolation {
             constraint: Some("orders_total_positive".to_owned()),
+            info: Default::default(),
         },
         Error::CheckViolation { .. }
     ));
@@ -2195,6 +2290,7 @@ fn postgres_error_helpers_classify_variants() {
     let restrict = Error::RestrictViolation {
         constraint: Some("orders_user_id_fkey".to_owned()),
         detail: Some("still referenced".to_owned()),
+        info: Default::default(),
     };
     assert_eq!(restrict.code(), Some("23001"));
     assert_eq!(restrict.constraint_name(), Some("orders_user_id_fkey"));
@@ -2204,6 +2300,7 @@ fn postgres_error_helpers_classify_variants() {
         message: "could not serialize access".to_owned(),
         detail: None,
         hint: Some("retry the transaction".to_owned()),
+        info: Default::default(),
     };
     assert!(serialization.is_retryable());
     assert_eq!(serialization.code(), Some("40001"));
@@ -2213,6 +2310,7 @@ fn postgres_error_helpers_classify_variants() {
         message: "deadlock detected".to_owned(),
         detail: Some("process waits".to_owned()),
         hint: None,
+        info: Default::default(),
     };
     assert!(deadlock.is_retryable());
     assert_eq!(deadlock.code(), Some("40P01"));
@@ -2222,6 +2320,7 @@ fn postgres_error_helpers_classify_variants() {
         message: "canceling statement due to statement timeout".to_owned(),
         detail: None,
         hint: None,
+        info: Default::default(),
     };
     assert_eq!(canceled.code(), Some("57014"));
     assert!(!canceled.is_retryable());
@@ -2232,6 +2331,7 @@ fn postgres_error_helpers_classify_variants() {
         hint: Some("check grants".to_owned()),
         table: Some("orders".to_owned()),
         column: Some("status".to_owned()),
+        info: Default::default(),
     };
     assert_eq!(privilege.code(), Some("42501"));
     assert_eq!(privilege.table_name(), Some("orders"));
@@ -2240,6 +2340,39 @@ fn postgres_error_helpers_classify_variants() {
 
     assert!(Error::Connection("closed".to_owned()).is_connection());
     assert!(Error::Connection("closed".to_owned()).is_retryable());
+
+    let info = DbErrorInfo {
+        schema: Some("public".to_owned()),
+        table: Some("orders".to_owned()),
+        column: Some("amount".to_owned()),
+        datatype: Some("numeric".to_owned()),
+        constraint: Some("orders_amount_positive".to_owned()),
+        where_: Some("PL/pgSQL function check_order() line 4".to_owned()),
+        position: Some(DbErrorPosition::Original(17)),
+    };
+    let database = Error::Database {
+        code: "22003".to_owned(),
+        message: "numeric field overflow".to_owned(),
+        detail: Some("overflow detail".to_owned()),
+        hint: Some("use a smaller value".to_owned()),
+        constraint: None,
+        table: None,
+        column: None,
+        info,
+    };
+    assert_eq!(database.schema_name(), Some("public"));
+    assert_eq!(database.table_name(), Some("orders"));
+    assert_eq!(database.column_name(), Some("amount"));
+    assert_eq!(database.datatype_name(), Some("numeric"));
+    assert_eq!(database.constraint_name(), Some("orders_amount_positive"));
+    assert_eq!(
+        database.where_context(),
+        Some("PL/pgSQL function check_order() line 4")
+    );
+    assert_eq!(database.position(), Some(&DbErrorPosition::Original(17)));
+    assert_eq!(database.detail(), Some("overflow detail"));
+    assert_eq!(database.hint(), Some("use a smaller value"));
+    assert!(database.db_error_info().is_some());
 }
 
 #[cfg(feature = "runtime-tokio-postgres")]
@@ -2265,6 +2398,7 @@ fn result_ext_maps_conflicts_and_preserves_other_errors() {
     let conflict = Err::<(), _>(Error::UniqueViolation {
         constraint: Some("users_email_key".to_owned()),
         detail: None,
+        info: Default::default(),
     })
     .on_constraint("users_email_key", |_| AppError::Conflict)
     .unwrap_err();
@@ -2272,6 +2406,7 @@ fn result_ext_maps_conflicts_and_preserves_other_errors() {
 
     let passthrough = Err::<(), _>(Error::CheckViolation {
         constraint: Some("orders_total_positive".to_owned()),
+        info: Default::default(),
     })
     .on_conflict(|_| AppError::Conflict)
     .unwrap_err();

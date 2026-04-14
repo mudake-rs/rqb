@@ -180,49 +180,54 @@ impl<const N: usize> From<&[u8; N]> for Value {
     }
 }
 
-#[cfg(feature = "with-uuid")]
 impl From<uuid::Uuid> for Value {
     fn from(value: uuid::Uuid) -> Self {
         Self::String(value.to_string())
     }
 }
 
-#[cfg(feature = "with-uuid")]
 impl From<&uuid::Uuid> for Value {
     fn from(value: &uuid::Uuid) -> Self {
         Self::String(value.to_string())
     }
 }
 
-#[cfg(feature = "with-chrono")]
 impl From<chrono::NaiveDate> for Value {
     fn from(value: chrono::NaiveDate) -> Self {
         Self::String(value.to_string())
     }
 }
 
-#[cfg(feature = "with-chrono")]
 impl From<&chrono::NaiveDate> for Value {
     fn from(value: &chrono::NaiveDate) -> Self {
         Self::String(value.to_string())
     }
 }
 
-#[cfg(feature = "with-chrono")]
 impl From<chrono::NaiveDateTime> for Value {
     fn from(value: chrono::NaiveDateTime) -> Self {
         Self::String(value.to_string())
     }
 }
 
-#[cfg(feature = "with-chrono")]
 impl From<&chrono::NaiveDateTime> for Value {
     fn from(value: &chrono::NaiveDateTime) -> Self {
         Self::String(value.to_string())
     }
 }
 
-#[cfg(feature = "with-chrono")]
+impl From<chrono::NaiveTime> for Value {
+    fn from(value: chrono::NaiveTime) -> Self {
+        Self::String(value.to_string())
+    }
+}
+
+impl From<&chrono::NaiveTime> for Value {
+    fn from(value: &chrono::NaiveTime) -> Self {
+        Self::String(value.to_string())
+    }
+}
+
 impl<Tz> From<chrono::DateTime<Tz>> for Value
 where
     Tz: chrono::TimeZone,
@@ -233,7 +238,6 @@ where
     }
 }
 
-#[cfg(feature = "with-chrono")]
 impl<Tz> From<&chrono::DateTime<Tz>> for Value
 where
     Tz: chrono::TimeZone,
@@ -349,7 +353,6 @@ mod tests {
         assert_eq!(Value::Json(serde_json::json!({})).type_name(), "json");
     }
 
-    #[cfg(feature = "with-uuid")]
     #[test]
     fn uuid_values_convert_to_strings() {
         let id = uuid::Uuid::parse_str("10000000-0000-0000-0000-000000000001").unwrap();
@@ -358,7 +361,6 @@ mod tests {
         assert_eq!(Value::from(&id), Value::String(id.to_string()));
     }
 
-    #[cfg(feature = "with-chrono")]
     #[test]
     fn chrono_values_convert_to_wire_strings() {
         let date = chrono::NaiveDate::from_ymd_opt(2026, 4, 12).unwrap();

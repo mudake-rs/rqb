@@ -75,6 +75,9 @@ impl BindParam {
             | FieldType::Timestamp
             | FieldType::Timestamptz
             | FieldType::Date
+            | FieldType::Time
+            | FieldType::Timetz
+            | FieldType::Interval
             | FieldType::Inet
             | FieldType::Cidr
             | FieldType::Enum(_)
@@ -92,6 +95,9 @@ impl BindParam {
                     | TypeFamily::Timestamp
                     | TypeFamily::Timestamptz
                     | TypeFamily::Date
+                    | TypeFamily::Time
+                    | TypeFamily::Timetz
+                    | TypeFamily::Interval
                     | TypeFamily::Network
                     | TypeFamily::Range => Self::Text(expect_string(value).to_owned()),
                     TypeFamily::Bool => Self::Bool(expect_bool(value)),
@@ -229,6 +235,9 @@ fn null_bind_type(field_type: FieldType) -> BindType {
         | FieldType::Timestamp
         | FieldType::Timestamptz
         | FieldType::Date
+        | FieldType::Time
+        | FieldType::Timetz
+        | FieldType::Interval
         | FieldType::Inet
         | FieldType::Cidr
         | FieldType::Enum(_)
@@ -250,6 +259,9 @@ fn null_array_bind_type(elem_type: ElemType) -> BindType {
         | ElemType::Timestamp
         | ElemType::Timestamptz
         | ElemType::Date
+        | ElemType::Time
+        | ElemType::Timetz
+        | ElemType::Interval
         | ElemType::Enum(_)
         | ElemType::Custom(_) => BindType::TextArray,
     }
@@ -276,6 +288,9 @@ fn typed_array_from_values(values: &[Value], elem_type: ElemType) -> BindParam {
         | ElemType::Timestamp
         | ElemType::Timestamptz
         | ElemType::Date
+        | ElemType::Time
+        | ElemType::Timetz
+        | ElemType::Interval
         | ElemType::Enum(_)
         | ElemType::Custom(_) => {
             BindParam::TextArray(values.iter().map(expect_string_like).collect())

@@ -2,6 +2,7 @@ use deadpool_postgres::{GenericClient, Manager, ManagerConfig, Pool, RecyclingMe
 use tokio_postgres::{
     NoTls, Socket,
     tls::{MakeTlsConnect, TlsConnect},
+    types::Type,
 };
 
 use crate::{Error, Result};
@@ -63,6 +64,14 @@ impl Db {
 
     pub fn pool(&self) -> &Pool {
         &self.pool
+    }
+
+    pub fn clear_statement_cache(&self) {
+        self.pool.manager().statement_caches.clear();
+    }
+
+    pub fn remove_cached_statement(&self, query: &str, types: &[Type]) {
+        self.pool.manager().statement_caches.remove(query, types);
     }
 
     pub async fn get(&self) -> Result<deadpool_postgres::Client> {

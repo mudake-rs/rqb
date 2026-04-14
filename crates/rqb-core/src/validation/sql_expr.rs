@@ -542,9 +542,11 @@ fn date_trunc_result_type(function: BuiltinFunction, ty: FieldType) -> Result<Fi
     match ty {
         FieldType::Timestamptz => Ok(FieldType::Timestamptz),
         FieldType::Timestamp | FieldType::Date => Ok(FieldType::Timestamp),
+        FieldType::Interval => Ok(FieldType::Interval),
         FieldType::Custom(type_spec) => match type_spec.family {
             TypeFamily::Timestamptz => Ok(FieldType::Timestamptz),
             TypeFamily::Timestamp | TypeFamily::Date => Ok(FieldType::Timestamp),
+            TypeFamily::Interval => Ok(FieldType::Interval),
             _ => Err(invalid_function_arg(
                 function,
                 format!("expected temporal argument, got `{}`", ty.display_name()),

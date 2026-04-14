@@ -60,15 +60,6 @@ impl Renderer {
         }
     }
 
-    pub(super) fn render_subquery(
-        &mut self,
-        validated: &ValidatedSelect,
-        projection: SelectProjection,
-    ) -> Result<()> {
-        self.cacheable &= validated.cacheable;
-        self.render_subquery_select(validated, projection)
-    }
-
     pub(super) fn render_subquery_select(
         &mut self,
         validated: &ValidatedSelect,
@@ -94,6 +85,23 @@ impl Renderer {
         Ok(())
     }
 
+    pub(super) fn render_set_select_arm(&mut self, validated: &ValidatedSelect) -> Result<()> {
+        self.cacheable &= validated.cacheable;
+        self.render_ctes(validated)?;
+        self.sql.push_str("SELECT ");
+        self.render_distinct(validated);
+        self.render_value_projection(validated, true)?;
+        self.sql.push_str(" FROM ");
+        self.render_from_and_joins(validated)?;
+        self.render_where(validated)?;
+        self.render_group_by(validated);
+        self.render_having(validated)?;
+        self.render_order(validated);
+        self.render_limit_offset(validated, LimitPolicy::ExplicitOnly);
+        self.render_row_lock(validated);
+        Ok(())
+    }
+
     fn render_selection(&mut self, validated: &ValidatedSelect) -> Result<()> {
         self.columns.clone_from(&validated.columns);
         if validated.selected_fields.is_empty()
@@ -104,32 +112,18 @@ impl Renderer {
             return Ok(());
         }
 
-        let mut wrote = false;
-        for field in &validated.selected_fields {
-            if wrote {
-                self.sql.push_str(", ");
-            }
-            self.render_selected_field(field);
-            wrote = true;
-        }
-        for aggregate in &validated.aggregates {
-            if wrote {
-                self.sql.push_str(", ");
-            }
-            self.render_aggregate(aggregate)?;
-            wrote = true;
-        }
-        for item in &validated.select_items {
-            if wrote {
-                self.sql.push_str(", ");
-            }
-            self.render_selected_expr(item)?;
-            wrote = true;
-        }
-        Ok(())
+        self.render_value_projection(validated, true)
     }
 
     fn render_subquery_value_projection(&mut self, validated: &ValidatedSelect) -> Result<()> {
+        self.render_value_projection(validated, false)
+    }
+
+    fn render_value_projection(
+        &mut self,
+        validated: &ValidatedSelect,
+        alias_fields: bool,
+    ) -> Result<()> {
         if validated.selected_fields.is_empty()
             && validated.aggregates.is_empty()
             && validated.select_items.is_empty()
@@ -143,7 +137,11 @@ impl Renderer {
             if wrote {
                 self.sql.push_str(", ");
             }
-            self.render_column_name(field);
+            if alias_fields {
+                self.render_selected_field(field);
+            } else {
+                self.render_column_name(field);
+            }
             wrote = true;
         }
         for aggregate in &validated.aggregates {

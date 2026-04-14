@@ -2,8 +2,8 @@ use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::field::{Field, FieldRef};
+use crate::query::QueryExpr;
 use crate::raw::RawSql;
-use crate::request::SelectQuery;
 use crate::value::Value;
 
 macro_rules! impl_as_str {
@@ -53,11 +53,11 @@ pub fn not(expr: impl Into<Expr>) -> Expr {
     expr.into().not()
 }
 
-pub fn exists(query: impl Into<SelectQuery>) -> Expr {
+pub fn exists(query: impl Into<QueryExpr>) -> Expr {
     Expr::exists(query)
 }
 
-pub fn not_exists(query: impl Into<SelectQuery>) -> Expr {
+pub fn not_exists(query: impl Into<QueryExpr>) -> Expr {
     Expr::not_exists(query)
 }
 
@@ -119,12 +119,12 @@ impl SubqueryOperator {
 pub struct SubqueryPredicate {
     pub field: FieldRef,
     pub operator: SubqueryOperator,
-    pub query: Box<SelectQuery>,
+    pub query: Box<QueryExpr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExistsPredicate {
-    pub query: Box<SelectQuery>,
+    pub query: Box<QueryExpr>,
     pub negated: bool,
 }
 
@@ -229,7 +229,7 @@ impl Expr {
     pub fn subquery(
         field: impl Into<FieldRef>,
         operator: SubqueryOperator,
-        query: impl Into<SelectQuery>,
+        query: impl Into<QueryExpr>,
     ) -> Self {
         Self::Subquery(SubqueryPredicate {
             field: field.into(),
@@ -238,14 +238,14 @@ impl Expr {
         })
     }
 
-    pub fn exists(query: impl Into<SelectQuery>) -> Self {
+    pub fn exists(query: impl Into<QueryExpr>) -> Self {
         Self::Exists(ExistsPredicate {
             query: Box::new(query.into()),
             negated: false,
         })
     }
 
-    pub fn not_exists(query: impl Into<SelectQuery>) -> Self {
+    pub fn not_exists(query: impl Into<QueryExpr>) -> Self {
         Self::Exists(ExistsPredicate {
             query: Box::new(query.into()),
             negated: true,

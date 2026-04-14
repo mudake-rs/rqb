@@ -36,8 +36,8 @@ impl Renderer {
             self.sql.push_str(" AS (");
             match &cte.body {
                 ValidatedCteBody::Raw(raw) => self.render_raw(raw),
-                ValidatedCteBody::Select(select) => {
-                    self.render_subquery_select(select, super::SelectProjection::Value)?
+                ValidatedCteBody::Query(query) => {
+                    self.render_query_expr(query, super::SelectProjection::Value, true)?
                 }
             }
             self.sql.push(')');

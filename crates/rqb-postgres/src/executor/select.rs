@@ -1,8 +1,8 @@
-use rqb_core::{SelectBuilder, SelectQuery};
+use rqb_core::{QueryExpr, SelectBuilder, SelectQuery, SetQuery};
 use serde::de::DeserializeOwned;
 use tokio_postgres::Row;
 
-use crate::{BuildPostgres, Postgres, Result};
+use crate::{BuildPostgres, BuildRowsPostgres, Postgres, Result};
 
 use super::driver::{Page, PgExecutor};
 use super::query::{
@@ -130,5 +130,99 @@ impl ExecutePostgres for SelectQuery {
     {
         let (built, limit, offset) = Postgres::build_page(self)?;
         query_page_as(exec, built, limit, offset).await
+    }
+}
+
+impl ExecutePostgres for QueryExpr {
+    async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>> {
+        query_all(exec, self.build_rows_pg()?).await
+    }
+
+    async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row> {
+        query_one(exec, self.limit(1).build_rows_pg()?).await
+    }
+
+    async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>> {
+        query_optional(exec, self.limit(1).build_rows_pg()?).await
+    }
+
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned,
+    {
+        query_all_as(exec, self.build_rows_pg()?).await
+    }
+
+    async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        query_one_as(exec, self.limit(1).build_rows_pg()?).await
+    }
+
+    async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        query_optional_as(exec, self.limit(1).build_rows_pg()?).await
+    }
+
+    async fn count(self, exec: &impl PgExecutor) -> Result<i64> {
+        let built = Postgres::build_query(self)?;
+        query_count(exec, built.count).await
+    }
+
+    async fn page_as<T>(self, exec: &impl PgExecutor) -> Result<Page<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let (built, limit, offset) = Postgres::build_query_page(self)?;
+        query_page_as(exec, built, limit, offset).await
+    }
+}
+
+impl ExecutePostgres for SetQuery {
+    async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>> {
+        QueryExpr::from(self).fetch_all(exec).await
+    }
+
+    async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row> {
+        QueryExpr::from(self).fetch_one(exec).await
+    }
+
+    async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>> {
+        QueryExpr::from(self).fetch_optional(exec).await
+    }
+
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned,
+    {
+        QueryExpr::from(self).fetch_all_as(exec).await
+    }
+
+    async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        QueryExpr::from(self).fetch_one_as(exec).await
+    }
+
+    async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        QueryExpr::from(self).fetch_optional_as(exec).await
+    }
+
+    async fn count(self, exec: &impl PgExecutor) -> Result<i64> {
+        QueryExpr::from(self).count(exec).await
+    }
+
+    async fn page_as<T>(self, exec: &impl PgExecutor) -> Result<Page<T>>
+    where
+        T: DeserializeOwned,
+    {
+        QueryExpr::from(self).page_as(exec).await
     }
 }

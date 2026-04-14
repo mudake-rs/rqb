@@ -12,6 +12,7 @@ mod dataset;
 mod error;
 mod expr;
 mod field;
+mod query;
 mod raw;
 mod request;
 mod serde_bridge;
@@ -34,6 +35,10 @@ pub use expr::{
     field, not, not_exists,
 };
 pub use field::{Capabilities, Field, FieldRef, JsonPathPolicy, ResolvedField, TextSearchConfig};
+pub use query::{
+    QueryExpr, SetOperator, SetQuery, except, except_all, intersect, intersect_all, union,
+    union_all,
+};
 pub use raw::{RawQuery, RawSql, raw, raw_query};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
@@ -50,8 +55,9 @@ pub use validation::{
     ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
     ValidatedContainmentOperator, ValidatedContainmentTarget, ValidatedCte, ValidatedCteBody,
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedJoin, ValidatedLikePattern,
-    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedReturningItem, ValidatedSelect,
-    ValidatedSelectItem, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
+    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedQueryExpr,
+    ValidatedReturningItem, ValidatedSelect, ValidatedSelectItem, ValidatedSetQuery,
+    ValidatedSetSort, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
 };
 pub use value::Value;
 pub use write::{
@@ -68,13 +74,14 @@ pub mod prelude {
         Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType, ExistsPredicate, Expr,
         Field, FieldRef, FieldType, FunctionBuilder, InsertBuilder, InsertConflictBuilder,
         InsertQuery, IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LockMode, LockWait, LogicalOp,
-        NullsOrder, Operator, RawQuery, RawSql, Relation, ReturningMode, RowLock, SearchRequest,
-        SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr, Sort, SortDir, SqlExpr,
-        SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder,
-        UpdateQuery, Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg,
-        case_when, cast, coalesce, count, count_distinct, count_field, cte, delete, excluded,
-        exists, field, func, insert, json_agg, json_agg_nullable, max, max_agg, min, min_agg, not,
-        not_exists, raw, raw_expr, raw_query, select, set, set_col, set_default, set_expr, set_raw,
-        string_agg, sum, update,
+        NullsOrder, Operator, QueryExpr, RawQuery, RawSql, Relation, ReturningMode, RowLock,
+        SearchRequest, SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr,
+        SetOperator, SetQuery, Sort, SortDir, SqlExpr, SubqueryOperator, SubqueryPredicate,
+        TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr,
+        WriteAssignment, WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count,
+        count_distinct, count_field, cte, delete, except, except_all, excluded, exists, field,
+        func, insert, intersect, intersect_all, json_agg, json_agg_nullable, max, max_agg, min,
+        min_agg, not, not_exists, raw, raw_expr, raw_query, select, set, set_col, set_default,
+        set_expr, set_raw, string_agg, sum, union, union_all, update,
     };
 }

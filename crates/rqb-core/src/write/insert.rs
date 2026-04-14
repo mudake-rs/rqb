@@ -4,7 +4,7 @@ use crate::dataset::Dataset;
 use crate::error::{Error, Result};
 use crate::expr::Expr;
 use crate::field::FieldRef;
-use crate::request::SelectQuery;
+use crate::query::QueryExpr;
 use crate::serde_bridge::fields_from_serializable;
 use crate::sql_expr::{IntoSqlExpr, SelectItem};
 use crate::value::Value;
@@ -22,7 +22,7 @@ pub fn insert(dataset: impl Into<Dataset>) -> InsertBuilder {
 pub struct InsertQuery {
     pub dataset: Dataset,
     pub rows: Vec<Vec<WriteAssignment>>,
-    pub source: Option<Box<SelectQuery>>,
+    pub source: Option<Box<QueryExpr>>,
     pub returning: ReturningMode,
     pub conflict: Option<ConflictClause>,
 }
@@ -129,8 +129,8 @@ impl InsertBuilder {
         self
     }
 
-    pub fn from_select(mut self, select: SelectQuery) -> Self {
-        self.query.source = Some(Box::new(select));
+    pub fn from_select(mut self, select: impl Into<QueryExpr>) -> Self {
+        self.query.source = Some(Box::new(select.into()));
         self
     }
 

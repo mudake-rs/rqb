@@ -3,7 +3,7 @@ mod reference;
 mod resolved;
 
 use crate::expr::{Expr, Sort, SortDir};
-use crate::request::SelectQuery;
+use crate::query::QueryExpr;
 use crate::sql_expr::SqlExpr;
 use crate::types::FieldType;
 use crate::value::Value;
@@ -163,11 +163,11 @@ impl Field {
 
     delegate_col_ops!(eq_col, ne_col, gt_col, gte_col, lt_col, lte_col);
 
-    pub fn in_subquery(self, query: impl Into<SelectQuery>) -> Expr {
+    pub fn in_subquery(self, query: impl Into<QueryExpr>) -> Expr {
         FieldRef::from(self).in_subquery(query)
     }
 
-    pub fn not_in_subquery(self, query: impl Into<SelectQuery>) -> Expr {
+    pub fn not_in_subquery(self, query: impl Into<QueryExpr>) -> Expr {
         FieldRef::from(self).not_in_subquery(query)
     }
 

@@ -147,4 +147,18 @@ pub enum Error {
 
     #[error("subquery must select {expected} column(s), but selects {actual}")]
     InvalidSubquerySelection { expected: usize, actual: usize },
+
+    #[error(
+        "set operation inputs must select the same number of columns: left selects {left}, right selects {right}"
+    )]
+    InvalidSetOperationSelection { left: usize, right: usize },
+
+    #[error(
+        "set operation column {column} has incompatible types `{left_type}` and `{right_type}`"
+    )]
+    IncompatibleSetOperationTypes {
+        column: usize,
+        left_type: String,
+        right_type: String,
+    },
 }

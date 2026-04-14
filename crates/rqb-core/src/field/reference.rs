@@ -1,7 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::expr::{ColumnOperator, Expr, Operator, Sort, SortDir, SubqueryOperator};
-use crate::request::SelectQuery;
+use crate::query::QueryExpr;
 use crate::sql_expr::SqlExpr;
 use crate::value::Value;
 
@@ -201,11 +201,11 @@ impl FieldRef {
         lte_col => Lte,
     );
 
-    pub fn in_subquery(self, query: impl Into<SelectQuery>) -> Expr {
+    pub fn in_subquery(self, query: impl Into<QueryExpr>) -> Expr {
         Expr::subquery(self, SubqueryOperator::In, query)
     }
 
-    pub fn not_in_subquery(self, query: impl Into<SelectQuery>) -> Expr {
+    pub fn not_in_subquery(self, query: impl Into<QueryExpr>) -> Expr {
         Expr::subquery(self, SubqueryOperator::NotIn, query)
     }
 

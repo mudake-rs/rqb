@@ -3,7 +3,7 @@ use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
     SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast, coalesce, count, cte,
     delete, excluded, exists, field, func, insert, not_exists, raw, raw_query, select, set_default,
-    set_expr, sum, update,
+    set_expr, sum, union, union_all, update,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -628,6 +628,61 @@ async fn executes_correlated_exists_and_in_subquery() -> TestResult {
         ))
         .build_pg()?;
     assert_count(&client, &orders_without_events.count, 1).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn executes_set_queries_and_set_subqueries() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    struct EmailRow {
+        email: String,
+    }
+
+    let active = select(users_table::dataset())
+        .fields([users_table::EMAIL])
+        .filter(users_table::STATUS.eq("active"));
+    let disabled = select(users_table::dataset())
+        .fields([users_table::EMAIL])
+        .filter(users_table::STATUS.eq("disabled"));
+
+    let emails = union(active, disabled)
+        .order_by(field("email").asc())
+        .fetch_all_as::<EmailRow>(&client)
+        .await?
+        .into_iter()
+        .map(|row| row.email)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        emails,
+        vec!["ada@example.com", "grace@example.com", "linus@example.com"]
+    );
+
+    let paid_or_draft_user_ids = union_all(
+        select(orders_table::dataset().alias("paid"))
+            .fields([orders_table::USER_ID.on("paid")])
+            .filter(orders_table::STATUS.on("paid").eq("paid")),
+        select(orders_table::dataset().alias("draft"))
+            .fields([orders_table::USER_ID.on("draft")])
+            .filter(orders_table::STATUS.on("draft").eq("draft")),
+    );
+
+    let mut rows = select(users_table::dataset())
+        .fields([users_table::EMAIL])
+        .filter(users_table::ID.in_subquery(paid_or_draft_user_ids))
+        .fetch_all_as::<EmailRow>(&client)
+        .await?
+        .into_iter()
+        .map(|row| row.email)
+        .collect::<Vec<_>>();
+    rows.sort();
+    assert_eq!(
+        rows,
+        vec!["ada@example.com", "grace@example.com", "linus@example.com"]
+    );
     Ok(())
 }
 

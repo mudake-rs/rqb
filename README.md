@@ -248,6 +248,22 @@ let rows = select(users())
 
 Subquery expressions are Rust-only and skipped by serde. This is deliberate: JSON clients should not author arbitrary subqueries.
 
+### Set Operations
+
+```rust
+let rows = union_all(
+    select(users()).fields([EMAIL]).filter(STATUS.eq("active")),
+    select(users()).fields([EMAIL]).filter(STATUS.eq("disabled")),
+)
+.order_by(field("email").asc())
+.fetch_all_as::<EmailRow>(&db)
+.await?;
+```
+
+Set queries are regular query bodies: they work as top-level reads, CTE bodies,
+`EXISTS`, `IN (subquery)`, and `INSERT ... SELECT` sources. rqb validates column
+count and output type compatibility before rendering SQL.
+
 ## Postgres Features
 
 ### DISTINCT ON

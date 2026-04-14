@@ -1,4 +1,4 @@
-use rqb_core::{ElemType, FieldType, ValueRepr};
+use rqb_core::{ElemType, FieldType};
 
 use super::names::{write_enum_type, write_type_spec, write_type_spec_array_cast};
 
@@ -56,9 +56,10 @@ pub(crate) fn write_postgres_cast(output: &mut String, field_type: FieldType) ->
             output.push_str(FieldType::Range(elem_type).as_str());
         }
         FieldType::Custom(type_spec) => {
-            output.push_str(match type_spec.value_repr {
-                ValueRepr::String | ValueRepr::DecimalString => "::text::",
-                ValueRepr::Native => "::",
+            output.push_str(if type_spec.value_is_string_backed() {
+                "::text::"
+            } else {
+                "::"
             });
             write_type_spec(output, *type_spec);
         }
@@ -106,47 +107,4 @@ pub(crate) fn write_postgres_array_cast_for_scalar(
         FieldType::Array(_) => return false,
     }
     true
-}
-
-pub(crate) fn array_field_type_for_scalar(field_type: FieldType) -> Option<FieldType> {
-    match field_type {
-        FieldType::Text => Some(FieldType::Array(ElemType::Text)),
-        FieldType::Citext => Some(FieldType::Array(ElemType::Citext)),
-        FieldType::Integer => Some(FieldType::Array(ElemType::Int)),
-        FieldType::BigInt => Some(FieldType::Array(ElemType::BigInt)),
-        FieldType::Float => Some(FieldType::Array(ElemType::Float)),
-        FieldType::Numeric => Some(FieldType::Array(ElemType::Numeric)),
-        FieldType::Bool => Some(FieldType::Array(ElemType::Bool)),
-        FieldType::Uuid => Some(FieldType::Array(ElemType::Uuid)),
-        FieldType::Timestamp => Some(FieldType::Array(ElemType::Timestamp)),
-        FieldType::Timestamptz => Some(FieldType::Array(ElemType::Timestamptz)),
-        FieldType::Date => Some(FieldType::Array(ElemType::Date)),
-        FieldType::Enum(enum_type) => Some(FieldType::Array(ElemType::Enum(enum_type))),
-        FieldType::Custom(type_spec) => Some(FieldType::Array(ElemType::Custom(type_spec))),
-        FieldType::Jsonb
-        | FieldType::Bytea
-        | FieldType::Inet
-        | FieldType::Cidr
-        | FieldType::Range(_)
-        | FieldType::Array(_) => None,
-    }
-}
-
-pub(crate) fn array_element_field_type(field_type: FieldType) -> FieldType {
-    match field_type {
-        FieldType::Array(ElemType::Text) => FieldType::Text,
-        FieldType::Array(ElemType::Citext) => FieldType::Citext,
-        FieldType::Array(ElemType::Int) => FieldType::Integer,
-        FieldType::Array(ElemType::BigInt) => FieldType::BigInt,
-        FieldType::Array(ElemType::Float) => FieldType::Float,
-        FieldType::Array(ElemType::Numeric) => FieldType::Numeric,
-        FieldType::Array(ElemType::Bool) => FieldType::Bool,
-        FieldType::Array(ElemType::Uuid) => FieldType::Uuid,
-        FieldType::Array(ElemType::Timestamp) => FieldType::Timestamp,
-        FieldType::Array(ElemType::Timestamptz) => FieldType::Timestamptz,
-        FieldType::Array(ElemType::Date) => FieldType::Date,
-        FieldType::Array(ElemType::Enum(enum_type)) => FieldType::Enum(enum_type),
-        FieldType::Array(ElemType::Custom(type_spec)) => FieldType::Custom(type_spec),
-        other => other,
-    }
 }

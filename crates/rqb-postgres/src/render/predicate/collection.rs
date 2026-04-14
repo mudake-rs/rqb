@@ -4,7 +4,6 @@ use rqb_core::{
 };
 
 use crate::helpers::value_to_json_array;
-use crate::type_sql::array_element_field_type;
 
 use super::super::Renderer;
 
@@ -104,7 +103,7 @@ impl Renderer {
         if negate {
             self.sql.push_str("NOT (");
         }
-        self.push_typed_param(value, array_element_field_type(field.ty));
+        self.push_typed_param(value, field.ty.array_element_type());
         self.sql.push_str(" = ANY(");
         self.render_column_name(field);
         self.sql.push(')');

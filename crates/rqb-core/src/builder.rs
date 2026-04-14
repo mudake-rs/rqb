@@ -216,13 +216,13 @@ impl SelectBuilder {
         I: IntoIterator<Item = F>,
         F: Into<FieldRef>,
     {
-        self.query.aggregates.push(Aggregate::JsonAgg {
-            alias: alias.into(),
-            fields: fields.into_iter().map(Into::into).collect(),
-            order_by: None,
-            filter: None,
-            default_empty,
-        });
+        self.query
+            .aggregates
+            .push(crate::aggregate::json_agg_with_default(
+                alias,
+                fields,
+                default_empty,
+            ));
         self
     }
 

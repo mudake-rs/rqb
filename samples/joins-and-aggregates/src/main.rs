@@ -43,16 +43,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user = select(&user)
         .left_join(&order, user.id().eq_col(order.user_id()))
         .fields([user.id().alias("id"), user.email().alias("email")])
-        .json_agg(
-            "orders",
-            [
-                order.id().alias("id"),
-                order.status().alias("status"),
-                order.channel().alias("channel"),
-                order.created_at().alias("createdAt"),
-            ],
+        .agg(
+            json_agg(
+                "orders",
+                [
+                    order.id().alias("id"),
+                    order.status().alias("status"),
+                    order.channel().alias("channel"),
+                    order.created_at().alias("createdAt"),
+                ],
+            )
+            .filter(order.id().is_not_null()),
         )
-        .filter_agg("orders", order.id().is_not_null())
         .filter(user.id().eq(user_id))
         .fetch_one_as::<UserWithOrders>(&db)
         .await?;

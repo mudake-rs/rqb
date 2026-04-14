@@ -1,12 +1,15 @@
+use std::sync::Mutex;
+
 use super::*;
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
     SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, count,
-    count_distinct, delete, exists, field, insert, max, min, not_exists, raw, raw_query, select,
-    string_agg, sum, update,
+    count_distinct, delete, exists, field, insert, json_agg, max, min, not_exists, raw, raw_query,
+    select, string_agg, sum, update,
 };
 use serde::Serialize;
+use tokio_postgres::{Row, types::ToSql};
 
 fn orders() -> Dataset {
     Dataset::view("order_search_view")
@@ -1455,6 +1458,84 @@ fn cache_policy_rejects_unbounded_or_raw_statement_shapes() {
     assert!(!update.cacheable);
 }
 
+#[derive(Default)]
+struct RecordingExecutor {
+    calls: Mutex<Vec<StatementCache>>,
+}
+
+impl RecordingExecutor {
+    fn record(&self, cache: StatementCache) {
+        self.calls.lock().unwrap().push(cache);
+    }
+
+    fn calls(&self) -> Vec<StatementCache> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl PgExecutor for RecordingExecutor {
+    async fn query(
+        &self,
+        _sql: &str,
+        _params: &[&(dyn ToSql + Sync)],
+        cache: StatementCache,
+    ) -> Result<Vec<Row>> {
+        self.record(cache);
+        Ok(Vec::new())
+    }
+
+    async fn query_opt(
+        &self,
+        _sql: &str,
+        _params: &[&(dyn ToSql + Sync)],
+        cache: StatementCache,
+    ) -> Result<Option<Row>> {
+        self.record(cache);
+        Ok(None)
+    }
+
+    async fn execute_sql(
+        &self,
+        _sql: &str,
+        _params: &[&(dyn ToSql + Sync)],
+        cache: StatementCache,
+    ) -> Result<u64> {
+        self.record(cache);
+        Ok(0)
+    }
+}
+
+#[tokio::test]
+async fn executor_receives_statement_cache_policy() {
+    let exec = RecordingExecutor::default();
+
+    select(orders()).fetch_all(&exec).await.unwrap();
+    raw_query("SELECT 1").fetch_all(&exec).await.unwrap();
+    insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .set("userId", "10000000-0000-0000-0000-000000000001")
+        .set("status", "paid")
+        .execute(&exec)
+        .await
+        .unwrap();
+    update(writable_orders())
+        .set("status", "paid")
+        .filter(field("id").eq("30000000-0000-0000-0000-000000009999"))
+        .execute(&exec)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        exec.calls(),
+        vec![
+            StatementCache::Use,
+            StatementCache::Bypass,
+            StatementCache::Use,
+            StatementCache::Bypass
+        ]
+    );
+}
+
 #[test]
 fn renders_debug_sql_with_params() {
     let built = select(orders())
@@ -1596,9 +1677,11 @@ fn renders_json_agg_with_order_and_filter() {
             field("o.userId").eq_col(field("u.id")),
         )
         .fields([field("u.email")])
-        .json_agg("orders", [field("o.id"), field("o.status")])
-        .order_within("orders", Sort::desc("o.createdAt"))
-        .filter_agg("orders", field("o.status").eq("paid"))
+        .agg(
+            json_agg("orders", [field("o.id"), field("o.status")])
+                .order_by(Sort::desc("o.createdAt"))
+                .filter(field("o.status").eq("paid")),
+        )
         .group_by([field("u.email")])
         .build_rows_pg()
         .unwrap();
@@ -1619,8 +1702,10 @@ fn renders_json_agg_default_empty_auto_group_by_and_root_aliases() {
             field("u.id").eq_col(field("o.userId")),
         )
         .fields([field("u.id"), field("u.email")])
-        .json_agg("orders", [field("o.id"), field("o.status")])
-        .filter_agg("orders", field("o.id").is_not_null())
+        .agg(
+            json_agg("orders", [field("o.id"), field("o.status")])
+                .filter(field("o.id").is_not_null()),
+        )
         .build_rows_pg()
         .unwrap();
 

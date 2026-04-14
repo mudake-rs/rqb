@@ -60,6 +60,24 @@ traits, pool and transaction helpers.
 
 `rqb-cli` owns database introspection and generated schema shape.
 
+## Postgres-Only Modularity
+
+rqb is Postgres-only. The crate split is not a promise of future MySQL, SQLite,
+or generic SQL dialect support.
+
+Keep modules when they separate real responsibilities:
+
+- `rqb-core`: runtime-free metadata, ASTs, JSON request types, validation, and
+  validated models
+- `rqb-postgres`: Postgres SQL rendering, casts, params, row mapping, execution,
+  pools, transactions, and savepoints
+- `rqb-cli`: Postgres catalog introspection and generated schema code
+- `rqb`: facade and prelude
+
+Do not add `Backend`, `Dialect`, generic renderer, or generic executor layers
+without a concrete current need. The architecture should expose Postgres clearly
+instead of hiding it behind lowest-common-denominator abstractions.
+
 ## Architecture Rules
 
 Validation owns correctness. Rendering should be a mostly mechanical pass over
@@ -91,9 +109,10 @@ Type behavior currently lives in several places:
 
 This is correct behaviorally, but adding a new type still requires touching
 several files. The target is not a dynamic registry yet. Type classification and
-Postgres cast/selection behavior now have dedicated modules; future type work
-should keep tightening that checklist instead of scattering new switch arms into
-generic helpers.
+array element metadata live on `FieldType`; representation helpers live on
+`ValueRepr`, `SelectRepr`, and `TypeSpec`; Postgres cast/selection behavior now
+has dedicated modules. Future type work should keep tightening that checklist
+instead of scattering new switch arms into generic helpers.
 
 ### Operator Semantics Are Lowered In Validation
 
@@ -115,10 +134,10 @@ ValidatedExpr
 logical composition, while `render::predicate` mechanically renders concrete
 predicate shapes.
 
-The remaining cleanup is naming and file placement, not behavior. In particular,
-`OperatorCategory::Contains` still covers both text-like `LIKE` lowering and
-range/network containment lowering. That is workable, but should be revisited
-when operator naming gets a final ergonomics pass.
+`OperatorCategory::ContainsDispatch` is intentionally type-dependent: validation
+lowers `contains` / `notContains` to either text-like `LIKE` predicates or
+range/network containment predicates. The renderer only sees the concrete
+lowered shape.
 
 ### Write Validation Has A Dedicated Scope
 
@@ -135,11 +154,12 @@ not keep the original write AST.
 
 The user sees query helpers through prelude, so the ergonomics are acceptable,
 but internally there are separate execution traits for select, write, and raw
-queries. `PgExecutor` also exposes cached and uncached methods because cache
-policy lives in `BuiltQuery`.
+queries. `PgExecutor` now has one low-level method per operation and receives
+`StatementCache` from `BuiltQuery`, so raw cache bypass stays explicit without
+duplicating cached and uncached executor methods.
 
-This should stay stable until a refactor clearly reduces code without making raw
-cache bypass or pool/client/transaction support less explicit.
+Keep this separation unless a later refactor clearly reduces code without
+making raw cache bypass or pool/client/transaction support less explicit.
 
 ### Row Mapping Has Two Paths
 
@@ -170,18 +190,17 @@ rqb-core
   metadata: Dataset, Source, Field, FieldType, TypeSpec, capabilities
   field::{capabilities, reference, resolved}: field metadata, FieldRef API, resolved fields
   types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
-  ast: SelectQuery, SearchRequest, Expr, OperatorCategory, Aggregate, write ASTs, RawSql
+  ast: SelectQuery, SearchRequest, Expr, Operator, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> concrete validated models
-  validation::mod: validated model structs currently live here
-  validation::ValidatedPredicate: lowered predicate shapes used by renderers
+  validation::model: render-ready validated structs and enums
+  validation::model::ValidatedPredicate: lowered predicate shapes used by renderers
   validation::aggregate: aggregate fields, filters, aliases, and grouping rules
   validation::expr: validated expression tree construction
   validation::sort: validated sort field construction
   validation::value_type: reusable value/type compatibility checks
   validation::value_guard: reusable runtime Value guards
   validation::write: write-specific scope and validated write construction
-  target: move validated model structs into a smaller validation/model module
 
 rqb-postgres
   build: validation + rendering entry points and BuildPostgres traits
@@ -223,30 +242,32 @@ every layer.
    delegates to the generic field resolver, but no longer builds throwaway
    select queries for write validation.
 
-3. Centralize type behavior. Started.
-   Introduce small helper APIs that answer type-family, value shape, element
-   type, Postgres cast, selection representation, and array cast questions from
-   one place per layer.
+3. Centralize type behavior. Done.
+   Type-family and array element metadata live on `FieldType`; custom
+   representation helpers live on `ValueRepr`, `SelectRepr`, and `TypeSpec`;
+   Postgres cast, selection, type-name, and array-cast behavior lives in
+   `rqb-postgres/src/type_sql`; runtime value-shape guards live in validation.
 
 4. Categorize and lower operators. Done.
    Keep `Operator` as the JSON/user-facing enum, but route validation and
    lowering through explicit operator categories. Rendering consumes concrete
    `ValidatedPredicate` shapes and no longer reinterprets user-facing operators.
 
-5. Clean the facade API surface. Pending.
-   `rqb-core` must expose validated models for backend crates, but the `rqb`
-   facade currently glob-reexports `rqb_core::*`, so internal `Validated*` types
-   appear under `rqb::*`. Replace the facade glob with an explicit ergonomic
-   export list while keeping `rqb::prelude::*` focused.
+5. Clean the facade API surface. Done.
+   `rqb-core` must expose validated models for `rqb-postgres`, but the `rqb`
+   facade uses an explicit ergonomic export list, so internal `Validated*`
+   types stay in `rqb_core` instead of appearing under `rqb::*`.
 
-6. Split validated model definitions. Pending.
-   `validation/mod.rs` currently hosts all validated structs and enums. Move the
-   render-ready model definitions into a focused module such as
-   `validation/model.rs` once the predicate model settles.
+6. Split validated model definitions. Done.
+   Render-ready validated structs and enums live in `validation/model.rs`.
+   `validation/mod.rs` now wires validation modules together and re-exports the
+   validated model for `rqb-postgres`.
 
-7. Revisit execution traits. Pending.
-   Only after rendering and validation are cleaner, decide whether select/write
-   and raw execution helpers can share implementation without hiding semantics.
+7. Revisit execution traits. Done.
+   Select, write, and raw user-facing traits stay separate because their
+   semantics differ, but the lower `PgExecutor` contract now carries
+   `StatementCache` explicitly instead of exposing duplicate cached/uncached
+   methods.
 
 8. Split CLI internals. Done.
    Catalog introspection, type mapping, code rendering, identifier hygiene, and

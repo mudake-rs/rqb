@@ -6,7 +6,7 @@ use rqb_core::{
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
-    ExecuteWritePostgres, PgExecutor, ResultExt,
+    ExecuteWritePostgres, PgExecutor, ResultExt, StatementCache,
 };
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{Client, Row, types::ToSql};
@@ -955,15 +955,15 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
 
     let read_only_tx = db.begin().serializable().read_only().deferrable().await?;
     let isolation = read_only_tx
-        .query_one("SHOW transaction_isolation", &[])
+        .query_one("SHOW transaction_isolation", &[], StatementCache::Bypass)
         .await?
         .get::<_, String>(0);
     let read_only = read_only_tx
-        .query_one("SHOW transaction_read_only", &[])
+        .query_one("SHOW transaction_read_only", &[], StatementCache::Bypass)
         .await?
         .get::<_, String>(0);
     let deferrable = read_only_tx
-        .query_one("SHOW transaction_deferrable", &[])
+        .query_one("SHOW transaction_deferrable", &[], StatementCache::Bypass)
         .await?
         .get::<_, String>(0);
     assert_eq!(isolation, "serializable");
@@ -1384,6 +1384,7 @@ impl PgExecutor for TestDb {
         &self,
         sql: &str,
         params: &[&(dyn ToSql + Sync)],
+        _cache: StatementCache,
     ) -> rqb_postgres::Result<Vec<Row>> {
         self.client()
             .query(sql, params)
@@ -1395,6 +1396,7 @@ impl PgExecutor for TestDb {
         &self,
         sql: &str,
         params: &[&(dyn ToSql + Sync)],
+        _cache: StatementCache,
     ) -> rqb_postgres::Result<Row> {
         self.client()
             .query_opt(sql, params)
@@ -1407,6 +1409,7 @@ impl PgExecutor for TestDb {
         &self,
         sql: &str,
         params: &[&(dyn ToSql + Sync)],
+        _cache: StatementCache,
     ) -> rqb_postgres::Result<Option<Row>> {
         self.client()
             .query_opt(sql, params)
@@ -1418,6 +1421,7 @@ impl PgExecutor for TestDb {
         &self,
         sql: &str,
         params: &[&(dyn ToSql + Sync)],
+        _cache: StatementCache,
     ) -> rqb_postgres::Result<u64> {
         self.client()
             .execute(sql, params)

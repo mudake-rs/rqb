@@ -396,14 +396,16 @@ Nested objects through `json_agg`:
 let rows = select(Dataset::table("app_users").alias("u").fields([ID, EMAIL]))
     .left_join(Dataset::table("orders").alias("o").fields([ID, USER_ID, STATUS]), ID.on("u").eq_col(USER_ID.on("o")))
     .fields([ID.on("u"), EMAIL.on("u")])
-    .json_agg("orders", [ID.on("o"), STATUS.on("o")])
-    .filter_agg("orders", ID.on("o").is_not_null());
+    .agg(
+        json_agg("orders", [ID.on("o"), STATUS.on("o")])
+            .filter(ID.on("o").is_not_null())
+    );
 ```
 
-When aggregates are present and `.group_by(...)` is omitted, rqb groups by selected fields. Aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `string_agg`, and builder `.json_agg`.
+When aggregates are present and `.group_by(...)` is omitted, rqb groups by selected fields. Aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `json_agg`, and `string_agg`.
 
 `json_agg` defaults to `[]` for empty aggregate results. Use `json_agg_nullable` when a SQL `NULL` result is part of the API contract.
-Aggregate modifiers such as `filter_agg` and `order_within` validate the aggregate alias; typos fail at build time instead of being ignored.
+Prefer inline aggregate modifiers such as `json_agg(...).filter(...)` and `array_agg(...).order_by(...)`. Alias-based modifiers such as `filter_agg` and `order_within` remain available and validate the aggregate alias; typos fail at build time instead of being ignored.
 
 ## Operators
 

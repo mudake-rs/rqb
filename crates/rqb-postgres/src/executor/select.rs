@@ -15,7 +15,7 @@ pub trait ExecutePostgres {
     async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>>;
     async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row>;
     async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>>;
-    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned;
     async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
@@ -43,7 +43,7 @@ impl ExecutePostgres for SelectBuilder {
         query_optional(exec, self.limit(1).build_pg()?.rows).await
     }
 
-    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
     {
@@ -95,7 +95,7 @@ impl ExecutePostgres for SelectQuery {
         query_optional(exec, query.build_pg()?.rows).await
     }
 
-    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
     {

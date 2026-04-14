@@ -128,7 +128,7 @@ rqb also does not force `.fields(...)`. Omitted fields mean all `selectable` fie
 ```rust
 let rows = select(orders())
     .filter(STATUS.eq("paid"))
-    .fetch_as::<Order>(&db)
+    .fetch_all_as::<Order>(&db)
     .await?;
 ```
 
@@ -138,7 +138,7 @@ Use `.fields([...])` when changing the projection:
 let rows = select(orders())
     .fields([ID, STATUS, TOTAL_CENTS])
     .filter(STATUS.eq("paid"))
-    .fetch_as::<OrderSummary>(&db)
+    .fetch_all_as::<OrderSummary>(&db)
     .await?;
 ```
 
@@ -148,7 +148,7 @@ One useful rqb difference: on joins, the default remains the root dataset only. 
 let rows = select(users().alias("u"))
     .left_join(orders().alias("o"), ID.on("u").eq_col(USER_ID.on("o")))
     .filter(STATUS.on("o").eq("paid"))
-    .fetch_as::<User>(&db)
+    .fetch_all_as::<User>(&db)
     .await?;
 ```
 
@@ -181,7 +181,7 @@ let rows = select(orders())
     .filter_option(params.min_total, |min_total| TOTAL_CENTS.gte(min_total))
     .order_by(CREATED_AT.desc())
     .limit(20)
-    .fetch_as::<Order>(&db)
+    .fetch_all_as::<Order>(&db)
     .await?;
 ```
 
@@ -335,7 +335,7 @@ tx.commit().await?;
 Services can accept any executor:
 
 ```rust
-pub async fn create_order(exec: &impl PgExecutor, order: NewOrder) -> rqb::postgres::Result<Order> {
+pub async fn create_order(exec: &impl PgExecutor, order: NewOrder) -> rqb::Result<Order> {
     insert(orders())
         .value(&order)
         .fetch_one_as::<Order>(exec)
@@ -375,7 +375,7 @@ let rows = select(orders())
     .filter(METADATA.path("campaign").eq("spring"))
     .filter(METADATA.path("score").gte(80))
     .filter(METADATA.key_exists("gift"))
-    .fetch_as::<Order>(&db)
+    .fetch_all_as::<Order>(&db)
     .await?;
 ```
 
@@ -463,7 +463,7 @@ let recent = cte(
 let rows = select(Dataset::cte("recent_orders").fields([ID, USER_ID, STATUS, CREATED_AT]))
     .cte(recent)
     .filter(STATUS.eq("paid"))
-    .fetch_as::<Order>(&db)
+    .fetch_all_as::<Order>(&db)
     .await?;
 ```
 
@@ -477,7 +477,7 @@ let rows = select(orders().alias("o"))
             EVENT_TYPE.on("e").eq("paid"),
         ])),
     ))
-    .fetch_as::<Order>(&db)
+    .fetch_all_as::<Order>(&db)
     .await?;
 ```
 
@@ -492,7 +492,7 @@ let source = Dataset::raw(
 
 let rows = select(source)
     .request(request)
-    .fetch_as::<serde_json::Value>(&db)
+    .fetch_all_as::<serde_json::Value>(&db)
     .await?;
 ```
 

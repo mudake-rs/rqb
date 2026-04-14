@@ -283,7 +283,7 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
             withdrawals_table::AMOUNT.gte(high_value),
             withdrawals_table::AMOUNT_HISTORY.has(high_value),
         ]))
-        .fetch_as(&client)
+        .fetch_all_as(&client)
         .await?;
 
     assert_eq!(rows.len(), 1);
@@ -378,7 +378,7 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
             pg_type_examples::ACTIVE_WINDOW.overlaps("[2026-02-15T00:00:00Z,2026-02-20T00:00:00Z)"),
             pg_type_examples::BILLING_DATES.contains("[2026-02-10,2026-02-11)"),
         ]))
-        .fetch_as(&client)
+        .fetch_all_as(&client)
         .await?;
 
     assert_eq!(rows.len(), 1);
@@ -661,7 +661,7 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
     )
     .bind("paid")
     .bind(10_000)
-    .fetch_as::<RawOrder>(&client)
+    .fetch_all_as::<RawOrder>(&client)
     .await?;
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].email, "ada@example.com");
@@ -1174,7 +1174,7 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
 }
 
 #[tokio::test]
-async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult {
+async fn fetch_all_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
@@ -1243,7 +1243,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
         .agg(sum(order_search::TOTAL_CENTS, "total"))
         .group_by([order_search::STATUS])
         .order_by(order_search::STATUS.asc())
-        .fetch_as(&client)
+        .fetch_all_as(&client)
         .await?;
     let paid = rollups
         .iter()
@@ -1279,7 +1279,7 @@ async fn fetch_as_deserializes_fields_json_arrays_and_aggregates() -> TestResult
         .order_within("orders", orders_table::CREATED_AT.on("o").asc())
         .filter(users_table::EMAIL.on("u").eq("ada@example.com"))
         .group_by([users_table::EMAIL.on("u")])
-        .fetch_as(&client)
+        .fetch_all_as(&client)
         .await?;
     assert_eq!(nested.len(), 1);
     assert_eq!(nested[0].email, "ada@example.com");

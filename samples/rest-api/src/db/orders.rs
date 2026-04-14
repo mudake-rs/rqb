@@ -110,7 +110,7 @@ impl OrderService {
     pub async fn list(
         exec: &impl PgExecutor,
         query: OrderListQuery,
-    ) -> rqb::postgres::Result<Page<Order>> {
+    ) -> rqb::Result<Page<Order>> {
         // The list endpoint is the "normal code" path: typed params become optional filters,
         // and rqb still validates field names, operators, and sortability before SQL is rendered.
         let page = select(order_search::dataset())
@@ -127,7 +127,7 @@ impl OrderService {
         Ok(page)
     }
 
-    pub async fn get(exec: &impl PgExecutor, id: Uuid) -> rqb::postgres::Result<Order> {
+    pub async fn get(exec: &impl PgExecutor, id: Uuid) -> rqb::Result<Order> {
         select(order_search::dataset())
             .filter(order_search::ID.eq(id))
             .fetch_one_as(exec)
@@ -137,7 +137,7 @@ impl OrderService {
     pub async fn create(
         exec: &impl PgExecutor,
         order: CreateOrder,
-    ) -> rqb::postgres::Result<Order> {
+    ) -> rqb::Result<Order> {
         // The caller owns transaction boundaries. Handlers can pass `&Db` for one-shot writes or
         // `&Tx` when multiple service calls must commit/rollback together.
         let order_id = Uuid::new_v4();
@@ -181,7 +181,7 @@ impl OrderService {
         exec: &impl PgExecutor,
         id: Uuid,
         patch: OrderPatch,
-    ) -> rqb::postgres::Result<Order> {
+    ) -> rqb::Result<Order> {
         // We only need a marker row from the write. The public response is loaded from
         // `order_search_view`, where totals and user fields are already joined/precomputed.
         update(orders::dataset())
@@ -193,7 +193,7 @@ impl OrderService {
         Self::get(exec, id).await
     }
 
-    pub async fn delete(exec: &impl PgExecutor, id: Uuid) -> rqb::postgres::Result<Order> {
+    pub async fn delete(exec: &impl PgExecutor, id: Uuid) -> rqb::Result<Order> {
         let existing = select(order_search::dataset())
             .filter(order_search::ID.eq(id))
             .fetch_one_as(exec)
@@ -215,7 +215,7 @@ impl OrderService {
         Ok(existing)
     }
 
-    pub async fn stats(exec: &impl PgExecutor) -> rqb::postgres::Result<Vec<OrderStats>> {
+    pub async fn stats(exec: &impl PgExecutor) -> rqb::Result<Vec<OrderStats>> {
         // Aggregates use the same field descriptors as regular selects; there is no hand-written
         // SQL here, but rqb still renders GROUP BY for the selected non-aggregate field.
         select(order_search::dataset())
@@ -223,14 +223,14 @@ impl OrderService {
             .agg(count("orders"))
             .agg(sum(order_search::TOTAL_CENTS, "totalCents"))
             .order_by(order_search::STATUS.asc())
-            .fetch_as(exec)
+            .fetch_all_as(exec)
             .await
     }
 
     pub async fn search(
         exec: &impl PgExecutor,
         request: SearchRequest,
-    ) -> rqb::postgres::Result<Page<serde_json::Value>> {
+    ) -> rqb::Result<Page<serde_json::Value>> {
         // This endpoint shows the JSON request API. Client-selected fields make the shape dynamic,
         // so the sample returns serde_json::Value instead of pretending it has a fixed DTO.
         let page = select(order_search::dataset())

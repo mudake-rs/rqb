@@ -70,7 +70,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .filter(STATUS.eq("active"))
         .order_by(CREATED_AT.desc())
         .limit(20)
-        .fetch_as::<UserRow>(&db)
+        .fetch_all_as::<UserRow>(&db)
         .await?;
 
     Ok(())
@@ -86,7 +86,7 @@ You do not have to list fields for a normal `select(dataset())`. If `.fields(...
 ```rust
 let rows = select(users())
     .filter(STATUS.eq("active"))
-    .fetch_as::<UserRow>(&db)
+    .fetch_all_as::<UserRow>(&db)
     .await?;
 ```
 
@@ -98,7 +98,7 @@ On joined queries, the default projection is still the root dataset only. Joined
 let rows = select(users().alias("u"))
     .left_join(orders().alias("o"), ID.on("u").eq_col(USER_ID.on("o")))
     .filter(STATUS.on("o").eq("paid"))
-    .fetch_as::<UserRow>(&db)
+    .fetch_all_as::<UserRow>(&db)
     .await?;
 ```
 
@@ -154,7 +154,7 @@ Apply it to a server-owned query:
 async fn search_orders(
     db: &Db,
     request: SearchRequest,
-) -> rqb::postgres::Result<Page<serde_json::Value>> {
+) -> rqb::Result<Page<serde_json::Value>> {
     select(order_search_view())
         .filter(ORGANIZATION_ID.eq(current_org_id()))
         .request(request)
@@ -179,7 +179,7 @@ let rows = select(users)
     .left_join(orders, ID.on("u").eq_col(USER_ID.on("o")))
     .fields([ID.on("u"), EMAIL.on("u"), STATUS.on("o")])
     .filter(STATUS.on("o").eq("paid"))
-    .fetch_as::<serde_json::Value>(&db)
+    .fetch_all_as::<serde_json::Value>(&db)
     .await?;
 ```
 
@@ -199,7 +199,7 @@ let recent = cte(
 let rows = select(Dataset::cte("recent_orders").fields([ID, USER_ID, STATUS]))
     .cte(recent)
     .filter(STATUS.eq("paid"))
-    .fetch_as::<serde_json::Value>(&db)
+    .fetch_all_as::<serde_json::Value>(&db)
     .await?;
 ```
 
@@ -229,7 +229,7 @@ let rows = select(orders().alias("o"))
             EVENT_TYPE.on("e").eq("paid"),
         ])),
     ))
-    .fetch_as::<OrderRow>(&db)
+    .fetch_all_as::<OrderRow>(&db)
     .await?;
 ```
 
@@ -242,7 +242,7 @@ let rows = select(users())
             .fields([USER_ID.on("o")])
             .filter(STATUS.on("o").eq("paid")),
     ))
-    .fetch_as::<UserRow>(&db)
+    .fetch_all_as::<UserRow>(&db)
     .await?;
 ```
 
@@ -271,7 +271,7 @@ let jobs = select(job_queue())
     .limit(100)
     .for_update()
     .skip_locked()
-    .fetch_as::<Job>(&tx)
+    .fetch_all_as::<Job>(&tx)
     .await?;
 ```
 
@@ -287,7 +287,7 @@ let rows = select(users().alias("u"))
         json_agg("orders", [ORDER_ID.on("o"), STATUS.on("o")])
             .filter(ORDER_ID.on("o").is_not_null())
     )
-    .fetch_as::<UserWithOrders>(&db)
+    .fetch_all_as::<UserWithOrders>(&db)
     .await?;
 ```
 

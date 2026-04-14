@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let active_users = select(app_users::dataset())
         .filter(app_users::STATUS.eq(UserStatus::Active))
         .order_by(app_users::EMAIL.asc())
-        .fetch_as::<User>(&db)
+        .fetch_all_as::<User>(&db)
         .await?;
     println!("active users: {active_users:#?}");
 
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             not(app_users::TAGS.has("blocked")),
         ]))
         .order_by(app_users::CREATED_AT.desc())
-        .fetch_as::<UserId>(&db)
+        .fetch_all_as::<UserId>(&db)
         .await?;
     let id_values = matching_ids.iter().map(|row| row.id).collect::<Vec<_>>();
     println!("matching user ids only: {id_values:#?}");

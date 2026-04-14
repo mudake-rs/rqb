@@ -14,7 +14,7 @@ pub struct AppServices {
 }
 
 impl AppServices {
-    pub async fn connect(database_url: &str) -> rqb::postgres::Result<Self> {
+    pub async fn connect(database_url: &str) -> rqb::Result<Self> {
         // One pooled Db is shared by handlers; transaction boundaries stay explicit at call sites.
         let db = rqb::connect(database_url).await?;
         Ok(Self::new(db))

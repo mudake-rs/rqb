@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .agg(count("orders"))
         .agg(sum(order_search::TOTAL_CENTS, "totalCents"))
         .order_by(order_search::STATUS.asc())
-        .fetch_as::<OrderStats>(&db)
+        .fetch_all_as::<OrderStats>(&db)
         .await?;
     for row in &stats {
         println!(

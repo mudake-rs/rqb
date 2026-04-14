@@ -11,7 +11,7 @@ enum AppError {
     #[error("email is already taken")]
     EmailTaken,
     #[error(transparent)]
-    Db(#[from] rqb::postgres::Error),
+    Db(#[from] rqb::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cte(recent)
         .filter(order_search::STATUS.eq(rqb_sample_base::OrderStatus::Paid))
         .order_by(order_search::CREATED_AT.desc())
-        .fetch_as::<OrderRow>(&db)
+        .fetch_all_as::<OrderRow>(&db)
         .await?;
     print_orders("paid recent orders", &paid_recent);
 
@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .filter(order.user_id().eq_col(user.id()))
                 .build(),
         ))
-        .fetch_as::<UserRow>(&db)
+        .fetch_all_as::<UserRow>(&db)
         .await?;
     print_users("users with any order", &users_with_orders);
 
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .build(),
             ),
         )
-        .fetch_as::<UserRow>(&db)
+        .fetch_all_as::<UserRow>(&db)
         .await?;
     print_users("users with paid orders", &users_with_paid_orders);
 
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .fields([app_users::ID, app_users::EMAIL]);
     let raw_rows = select(raw_source)
-        .fetch_as::<serde_json::Value>(&db)
+        .fetch_all_as::<serde_json::Value>(&db)
         .await?;
     println!(
         "raw source rows: {}",

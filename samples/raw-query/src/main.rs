@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
          GROUP BY status",
     )
     .bind("paid")
-    .fetch_as::<RawOrderStats>(&db)
+    .fetch_all_as::<RawOrderStats>(&db)
     .await?;
     for row in &stats {
         println!(

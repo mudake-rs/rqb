@@ -16,7 +16,7 @@ pub trait ExecuteRawPostgres {
     async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>>;
     async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row>;
     async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>>;
-    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned;
     async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
@@ -53,7 +53,7 @@ impl ExecuteRawPostgres for RawQuery {
         query_optional(exec, self.build_pg()?).await
     }
 
-    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
     {

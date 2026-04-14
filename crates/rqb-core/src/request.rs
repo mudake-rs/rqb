@@ -8,6 +8,7 @@ use crate::field::FieldRef;
 use crate::sql_expr::SelectItem;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[must_use]
 pub struct SearchRequest {
     #[serde(default)]
@@ -19,7 +20,7 @@ pub struct SearchRequest {
     #[serde(default)]
     pub sort: Vec<Sort>,
     #[serde(default)]
-    pub query: Option<Expr>,
+    pub filter: Option<Expr>,
 }
 
 impl SearchRequest {
@@ -45,7 +46,7 @@ impl SearchRequest {
         if request.offset.is_some() {
             self.offset = request.offset;
         }
-        self.query = match (self.query.take(), request.query) {
+        self.filter = match (self.filter.take(), request.filter) {
             (Some(existing), Some(incoming)) => Some(existing.and(incoming)),
             (Some(existing), None) => Some(existing),
             (None, Some(incoming)) => Some(incoming),
@@ -170,20 +171,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn search_request_merge_replaces_shape_and_ands_queries() {
+    fn search_request_merge_replaces_shape_and_ands_filters() {
         let base = SearchRequest {
             offset: Some(10),
             limit: Some(20),
             fields: vec![field("id")],
             sort: vec![field("createdAt").desc()],
-            query: Some(field("status").eq("paid")),
+            filter: Some(field("status").eq("paid")),
         };
         let incoming = SearchRequest {
             offset: Some(0),
             limit: Some(5),
             fields: vec![field("email")],
             sort: vec![field("email").asc()],
-            query: Some(field("email").contains("@example.com")),
+            filter: Some(field("email").contains("@example.com")),
         };
 
         let merged = base.merge(incoming);
@@ -194,7 +195,7 @@ mod tests {
         assert_eq!(merged.sort[0].field, field("email"));
         assert_eq!(merged.sort[0].dir, SortDir::Asc);
         assert!(matches!(
-            merged.query,
+            merged.filter,
             Some(Expr::Logical(LogicalExpr {
                 logical: LogicalOp::And,
                 predicates,
@@ -209,11 +210,37 @@ mod tests {
             limit: Some(20),
             fields: vec![field("id")],
             sort: vec![field("createdAt").desc()],
-            query: Some(field("status").eq("paid")),
+            filter: Some(field("status").eq("paid")),
         };
 
         let merged = base.clone().merge(SearchRequest::new());
 
         assert_eq!(merged, base);
+    }
+
+    #[test]
+    fn search_request_json_uses_filter_and_lowercase_sort_direction() {
+        let request: SearchRequest = serde_json::from_value(serde_json::json!({
+            "fields": ["id"],
+            "sort": [{ "field": "createdAt", "dir": "desc" }],
+            "filter": { "field": "status", "operator": "equals", "value": "paid" }
+        }))
+        .unwrap();
+
+        assert!(request.filter.is_some());
+        assert_eq!(request.sort[0].dir, SortDir::Desc);
+    }
+
+    #[test]
+    fn search_request_json_rejects_legacy_query_and_uppercase_sort_direction() {
+        let legacy_query = serde_json::from_value::<SearchRequest>(serde_json::json!({
+            "query": { "field": "status", "operator": "equals", "value": "paid" }
+        }));
+        assert!(legacy_query.is_err());
+
+        let uppercase_dir = serde_json::from_value::<SearchRequest>(serde_json::json!({
+            "sort": [{ "field": "createdAt", "dir": "DESC" }]
+        }));
+        assert!(uppercase_dir.is_err());
     }
 }

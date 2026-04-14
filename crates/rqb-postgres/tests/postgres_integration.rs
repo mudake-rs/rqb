@@ -243,7 +243,7 @@ async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestRes
         ])
         .filter(all([
             order_search::STATUS.eq(order_search::OrderStatus::Paid),
-            order_search::STATUS_HISTORY.has(order_search::OrderStatus::Paid),
+            order_search::STATUS_HISTORY.contains_element(order_search::OrderStatus::Paid),
             order_search::TAGS.contains_any(["vip", "gift"]),
             order_search::METADATA.path("score").gte(80),
             order_search::CREATED_AT.gte("2026-01-01T00:00:00Z"),
@@ -283,7 +283,7 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
         ])
         .filter(all([
             withdrawals_table::AMOUNT.gte(high_value),
-            withdrawals_table::AMOUNT_HISTORY.has(high_value),
+            withdrawals_table::AMOUNT_HISTORY.contains_element(high_value),
         ]))
         .fetch_all_as(&client)
         .await?;
@@ -387,13 +387,13 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
                 Value::bytes([0xca, 0xfe]),
             ]),
             pg_type_examples::IP_ADDR.is_in(["10.1.2.3", "10.1.2.4"]),
-            pg_type_examples::NETWORK.contains("10.1.2.0/24"),
+            pg_type_examples::NETWORK.covers("10.1.2.0/24"),
             pg_type_examples::ACTIVE_WINDOW.is_in([
                 "[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)",
                 "[2026-04-01T00:00:00Z,2026-05-01T00:00:00Z)",
             ]),
             pg_type_examples::ACTIVE_WINDOW.overlaps("[2026-02-15T00:00:00Z,2026-02-20T00:00:00Z)"),
-            pg_type_examples::BILLING_DATES.contains("[2026-02-10,2026-02-11)"),
+            pg_type_examples::BILLING_DATES.covers("[2026-02-10,2026-02-11)"),
         ]))
         .fetch_all_as(&client)
         .await?;
@@ -559,8 +559,8 @@ async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestRes
     let request: SearchRequest = serde_json::from_value(serde_json::json!({
         "fields": ["id", "email", "totalCents"],
         "limit": 5,
-        "sort": [{ "field": "totalCents", "dir": "DESC" }],
-        "query": {
+        "sort": [{ "field": "totalCents", "dir": "desc" }],
+        "filter": {
             "logical": "and",
             "predicates": [
                 { "field": "status", "operator": "equals", "value": "paid" },
@@ -1197,7 +1197,7 @@ async fn db_pool_executes_queries_and_transactions() -> TestResult {
     assert_eq!(cache_client.statement_cache.size(), cached_after_in);
 
     let dynamic_request = SearchRequest {
-        query: Some(events_table::PAYLOAD.path("cacheProbe").eq(true)),
+        filter: Some(events_table::PAYLOAD.path("cacheProbe").eq(true)),
         ..SearchRequest::new()
     };
     select(events_table::dataset())
@@ -1589,7 +1589,7 @@ async fn executes_extended_operators_against_postgres() -> TestResult {
         .fields([order_search::EMAIL])
         .filter(all([
             order_search::ID.contains("30000000"),
-            order_search::TAGS.has("vip"),
+            order_search::TAGS.contains_element("vip"),
             order_search::TAGS.contains_all(["vip", "gift"]),
             order_search::TAGS.elem_match("vip"),
             order_search::TAGS.is_not_empty(),

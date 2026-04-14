@@ -62,7 +62,7 @@ pub(super) fn validate_predicate(
             Ok(ValidatedPredicate::ArrayMembership {
                 field: field.clone(),
                 value: value.clone(),
-                negated: operator == Operator::ArrayNotContains,
+                negated: operator == Operator::ArrayNotContainsElement,
             })
         }
         OperatorCategory::ArrayState => {
@@ -94,24 +94,14 @@ pub(super) fn validate_predicate(
                 all: operator == Operator::JsonKeysExistAll,
             })
         }
-        OperatorCategory::ContainsDispatch => {
-            validate_contains_operator(field, operator, value)?;
-            if field.ty.is_range() || field.ty.is_network() {
-                Ok(ValidatedPredicate::Containment {
-                    field: field.clone(),
-                    op: ValidatedContainmentOperator::Contains,
-                    target: containment_target(field),
-                    value: value.clone(),
-                    negated: operator == Operator::NotContains,
-                })
-            } else {
-                Ok(ValidatedPredicate::Like {
-                    field: field.clone(),
-                    pattern: ValidatedLikePattern::Contains,
-                    value: string_value(value),
-                    negated: operator == Operator::NotContains,
-                })
-            }
+        OperatorCategory::TextContains => {
+            validate_text_contains_operator(field, operator, value)?;
+            Ok(ValidatedPredicate::Like {
+                field: field.clone(),
+                pattern: ValidatedLikePattern::Contains,
+                value: string_value(value),
+                negated: operator == Operator::NotContains,
+            })
         }
         OperatorCategory::TextAffix => {
             validate_text_affix_operator(field, operator, value)?;
@@ -129,7 +119,7 @@ pub(super) fn validate_predicate(
                 op: containment_operator(operator),
                 target: containment_target(field),
                 value: value.clone(),
-                negated: false,
+                negated: operator == Operator::NotCovers,
             })
         }
         OperatorCategory::Regex => {
@@ -296,15 +286,12 @@ fn validate_json_key_set_operator(
     Ok(())
 }
 
-fn validate_contains_operator(
+fn validate_text_contains_operator(
     field: &ResolvedField,
     operator: Operator,
     value: &Value,
 ) -> Result<()> {
     require_string(field, operator, value)?;
-    if field.ty.is_range() || field.ty.is_network() {
-        return validate_value_for_field_type(field, operator.as_str(), value);
-    }
     if !(field.ty.is_text() || field.ty == FieldType::Uuid || field.is_json_path()) {
         return unsupported(field, operator);
     }
@@ -461,6 +448,7 @@ fn array_set_operator(operator: Operator) -> ValidatedArraySetOperator {
 
 fn containment_operator(operator: Operator) -> ValidatedContainmentOperator {
     match operator {
+        Operator::Covers | Operator::NotCovers => ValidatedContainmentOperator::Contains,
         Operator::ContainedBy => ValidatedContainmentOperator::ContainedBy,
         Operator::Overlaps => ValidatedContainmentOperator::Overlaps,
         _ => unreachable!("operator category validated by Operator::category"),

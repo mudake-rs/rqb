@@ -100,7 +100,7 @@ impl UserService {
         // boilerplate is needed for common filters.
         let page = select(users::dataset())
             .filter_option(query.status, |status| users::STATUS.eq(status))
-            .filter_option(query.tag, |tag| users::TAGS.has(tag))
+            .filter_option(query.tag, |tag| users::TAGS.contains_element(tag))
             .order_by(users::CREATED_AT.desc())
             .limit(query.limit)
             .offset(query.offset)

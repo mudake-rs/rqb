@@ -69,8 +69,8 @@ curl -X POST 'http://127.0.0.1:3000/orders/search' \
   -d '{
     "fields": ["id", "email", "status", "totalCents"],
     "limit": 5,
-    "sort": [{ "field": "createdAt", "dir": "DESC" }],
-    "query": {
+    "sort": [{ "field": "createdAt", "dir": "desc" }],
+    "filter": {
       "logical": "and",
       "predicates": [
         { "field": "status", "operator": "equals", "value": "paid" },

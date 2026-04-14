@@ -33,8 +33,8 @@ fn order_search() -> Dataset {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request: SearchRequest = serde_json::from_value(serde_json::json!({
         "fields": ["id", "email", "status", "totalCents"],
-        "sort": [{ "field": "createdAt", "dir": "DESC" }],
-        "query": {
+        "sort": [{ "field": "createdAt", "dir": "desc" }],
+        "filter": {
             "logical": "and",
             "predicates": [
                 { "field": "status", "operator": "equals", "value": "paid" },

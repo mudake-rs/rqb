@@ -6,6 +6,8 @@ pub enum Operator {
     StartsWith,
     Contains,
     NotContains,
+    Covers,
+    NotCovers,
     EndsWith,
     Equals,
     NotEquals,
@@ -26,8 +28,8 @@ pub enum Operator {
     ArrayContainsAny,
     ArrayContainsAll,
     ArrayElemMatch,
-    ArrayContains,
-    ArrayNotContains,
+    ArrayContainsElement,
+    ArrayNotContainsElement,
     ArrayIsEmpty,
     ArrayIsNotEmpty,
     JsonKeyExists,
@@ -44,6 +46,8 @@ impl_as_str!(Operator {
     StartsWith => "startsWith",
     Contains => "contains",
     NotContains => "notContains",
+    Covers => "covers",
+    NotCovers => "notCovers",
     EndsWith => "endsWith",
     Equals => "equals",
     NotEquals => "notEquals",
@@ -64,8 +68,8 @@ impl_as_str!(Operator {
     ArrayContainsAny => "arrayContainsAny",
     ArrayContainsAll => "arrayContainsAll",
     ArrayElemMatch => "arrayElemMatch",
-    ArrayContains => "arrayContains",
-    ArrayNotContains => "arrayNotContains",
+    ArrayContainsElement => "arrayContainsElement",
+    ArrayNotContainsElement => "arrayNotContainsElement",
     ArrayIsEmpty => "arrayIsEmpty",
     ArrayIsNotEmpty => "arrayIsNotEmpty",
     JsonKeyExists => "jsonKeyExists",
@@ -86,7 +90,7 @@ pub(crate) enum OperatorCategory {
     Ordering,
     Inclusion,
     Between,
-    ContainsDispatch,
+    TextContains,
     TextAffix,
     Regex,
     ArraySet,
@@ -108,18 +112,22 @@ impl Operator {
             Self::Gt | Self::Gte | Self::Lt | Self::Lte => OperatorCategory::Ordering,
             Self::In | Self::NotIn => OperatorCategory::Inclusion,
             Self::Between | Self::NotBetween => OperatorCategory::Between,
-            Self::Contains | Self::NotContains => OperatorCategory::ContainsDispatch,
+            Self::Contains | Self::NotContains => OperatorCategory::TextContains,
             Self::StartsWith | Self::EndsWith | Self::NotStartsWith | Self::NotEndsWith => {
                 OperatorCategory::TextAffix
             }
             Self::Regex | Self::NotRegex => OperatorCategory::Regex,
             Self::ArrayContainsAny | Self::ArrayContainsAll => OperatorCategory::ArraySet,
-            Self::ArrayContains | Self::ArrayNotContains => OperatorCategory::ArrayMembership,
+            Self::ArrayContainsElement | Self::ArrayNotContainsElement => {
+                OperatorCategory::ArrayMembership
+            }
             Self::ArrayIsEmpty | Self::ArrayIsNotEmpty => OperatorCategory::ArrayState,
             Self::ArrayElemMatch => OperatorCategory::ArrayElementMatch,
             Self::JsonKeyExists => OperatorCategory::JsonKey,
             Self::JsonKeysExistAny | Self::JsonKeysExistAll => OperatorCategory::JsonKeySet,
-            Self::ContainedBy | Self::Overlaps => OperatorCategory::Containment,
+            Self::Covers | Self::NotCovers | Self::ContainedBy | Self::Overlaps => {
+                OperatorCategory::Containment
+            }
             Self::TextSearch => OperatorCategory::TextSearch,
         }
     }
@@ -171,8 +179,10 @@ mod tests {
             (Operator::NotIn, OperatorCategory::Inclusion),
             (Operator::Between, OperatorCategory::Between),
             (Operator::NotBetween, OperatorCategory::Between),
-            (Operator::Contains, OperatorCategory::ContainsDispatch),
-            (Operator::NotContains, OperatorCategory::ContainsDispatch),
+            (Operator::Contains, OperatorCategory::TextContains),
+            (Operator::NotContains, OperatorCategory::TextContains),
+            (Operator::Covers, OperatorCategory::Containment),
+            (Operator::NotCovers, OperatorCategory::Containment),
             (Operator::StartsWith, OperatorCategory::TextAffix),
             (Operator::EndsWith, OperatorCategory::TextAffix),
             (Operator::NotStartsWith, OperatorCategory::TextAffix),
@@ -181,9 +191,12 @@ mod tests {
             (Operator::NotRegex, OperatorCategory::Regex),
             (Operator::ArrayContainsAny, OperatorCategory::ArraySet),
             (Operator::ArrayContainsAll, OperatorCategory::ArraySet),
-            (Operator::ArrayContains, OperatorCategory::ArrayMembership),
             (
-                Operator::ArrayNotContains,
+                Operator::ArrayContainsElement,
+                OperatorCategory::ArrayMembership,
+            ),
+            (
+                Operator::ArrayNotContainsElement,
                 OperatorCategory::ArrayMembership,
             ),
             (Operator::ArrayIsEmpty, OperatorCategory::ArrayState),

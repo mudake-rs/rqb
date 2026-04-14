@@ -309,7 +309,7 @@ impl From<RawSql> for Expr {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
+#[serde(rename_all = "lowercase")]
 pub enum SortDir {
     Asc,
     Desc,

@@ -43,12 +43,12 @@ macro_rules! select_filter_methods {
         }
 
         pub fn replace_filter(mut self, expr: impl Into<Expr>) -> Self {
-            self.query.request.query = Some(expr.into());
+            self.query.request.filter = Some(expr.into());
             self
         }
 
         pub fn and_where(mut self, expr: impl Into<Expr>) -> Self {
-            self.query.request.query = match self.query.request.query.take() {
+            self.query.request.filter = match self.query.request.filter.take() {
                 Some(existing) => Some(existing.and(expr)),
                 None => Some(expr.into()),
             };
@@ -56,7 +56,7 @@ macro_rules! select_filter_methods {
         }
 
         pub fn or_where(mut self, expr: impl Into<Expr>) -> Self {
-            self.query.request.query = match self.query.request.query.take() {
+            self.query.request.filter = match self.query.request.filter.take() {
                 Some(existing) => Some(existing.or(expr)),
                 None => Some(expr.into()),
             };

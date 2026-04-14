@@ -78,7 +78,7 @@ pub struct OrderMetadata {
 pub struct OrderStats {
     pub status: OrderStatus,
     pub orders: i64,
-    pub total_cents: f64,
+    pub total_cents: String,
 }
 
 #[derive(Debug, Serialize)]

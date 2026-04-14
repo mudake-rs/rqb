@@ -1,4 +1,4 @@
-use crate::aggregate::{AggregateType, SelectColumn};
+use crate::aggregate::{AggregateType, SelectColumn, avg_output_type, sum_output_type};
 use crate::dataset::{Dataset, JoinKind, Source};
 use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, SortDir, SubqueryOperator};
 use crate::field::ResolvedField;
@@ -504,8 +504,8 @@ impl ValidatedAggregate {
     pub fn aggregate_type(&self) -> AggregateType {
         match self {
             Self::Count { .. } | Self::CountField { .. } => AggregateType::Count,
-            Self::Sum { .. } => AggregateType::Sum,
-            Self::Avg { .. } => AggregateType::Avg,
+            Self::Sum { field, .. } => AggregateType::Sum(sum_output_type(field.ty)),
+            Self::Avg { field, .. } => AggregateType::Avg(avg_output_type(field.ty)),
             Self::Min { field, .. } => AggregateType::Min(field.ty),
             Self::Max { field, .. } => AggregateType::Max(field.ty),
             Self::JsonAgg { .. } | Self::ArrayAgg { .. } => AggregateType::Json,

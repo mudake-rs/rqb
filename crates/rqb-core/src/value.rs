@@ -113,6 +113,14 @@ impl From<bool> for Value {
 impl_value_from!(I64: i8, i16, i32, i64, u8, u16, u32);
 impl_value_from!(F64: f32, f64);
 
+impl From<u64> for Value {
+    fn from(value: u64) -> Self {
+        i64::try_from(value)
+            .map(Self::I64)
+            .unwrap_or_else(|_| Self::String(value.to_string()))
+    }
+}
+
 impl From<&str> for Value {
     fn from(value: &str) -> Self {
         Self::String(value.to_owned())
@@ -243,6 +251,12 @@ mod tests {
         let value = serde_json::from_value::<Value>(serde_json::json!(u64::MAX)).unwrap();
 
         assert_eq!(value, Value::String(u64::MAX.to_string()));
+    }
+
+    #[test]
+    fn u64_conversion_preserves_large_values_without_f64() {
+        assert_eq!(Value::from(42_u64), Value::I64(42));
+        assert_eq!(Value::from(u64::MAX), Value::String(u64::MAX.to_string()));
     }
 
     #[test]

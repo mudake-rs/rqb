@@ -105,7 +105,7 @@ pub enum Error {
     #[error("write queries support only table and view datasets")]
     UnsupportedWriteSource,
 
-    #[error("insert conflict filter requires `do_update`")]
+    #[error("insert conflict filter requires `on_conflict(...).do_update(...)`")]
     InvalidConflictFilter,
 
     #[error("selected field `{field}` must be present in GROUP BY or be aggregated")]

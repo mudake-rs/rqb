@@ -125,7 +125,7 @@ impl InsertBuilder {
         }
     }
 
-    pub fn filter(mut self, expr: impl Into<Expr>) -> Self {
+    pub fn conflict_filter(mut self, expr: impl Into<Expr>) -> Self {
         if let Some(ConflictClause {
             action: ConflictAction::DoUpdate { filter, .. },
             ..

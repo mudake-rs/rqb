@@ -660,7 +660,7 @@ fn reports_serde_errors_from_record_conversion() {
 fn rejects_conflict_filter_without_update_action() {
     let err = insert(dataset())
         .set("id", "10000000-0000-0000-0000-000000000001")
-        .filter(field("name").eq("Ada"))
+        .conflict_filter(field("name").eq("Ada"))
         .build()
         .unwrap_err();
 

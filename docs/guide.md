@@ -68,7 +68,7 @@ let query = select(orders())
 ```rust
 let rows = select(orders())
     .filter(STATUS.eq("paid"))
-    .fetch_as::<Order>(&db)
+    .fetch_all_as::<Order>(&db)
     .await?;
 ```
 
@@ -368,7 +368,7 @@ let stats = raw_query(
      GROUP BY status",
 )
 .bind("paid")
-.fetch_as::<RawStats>(&db)
+.fetch_all_as::<RawStats>(&db)
 .await?;
 
 let version: String = raw_query("SELECT version()")
@@ -376,7 +376,7 @@ let version: String = raw_query("SELECT version()")
     .await?;
 ```
 
-`raw_query` is top-level SQL. It works with `&Db`, `&Tx`, and any `&impl PgExecutor`. `fetch_as` maps by returned column names, so alias expressions to match the target struct. It does not use dataset metadata; cast custom or ambiguous SQL expressions to the shape you want to deserialize. For example, cast exact numeric values to `text` when you need strings, or to `float8` only when lossy floating-point output is acceptable.
+`raw_query` is top-level SQL. It works with `&Db`, `&Tx`, and any `&impl PgExecutor`. `fetch_all_as` maps by returned column names, so alias expressions to match the target struct. It does not use dataset metadata; cast custom or ambiguous SQL expressions to the shape you want to deserialize. For example, cast exact numeric values to `text` when you need strings, or to `float8` only when lossy floating-point output is acceptable.
 
 ## Aggregations And GROUP BY
 
@@ -453,7 +453,7 @@ UUID, timestamp, timestamptz, date, and enum inputs can be strings. With `with-u
 
 ### Output
 
-`fetch_all`, `fetch_one`, and `fetch_optional` return `tokio_postgres::Row`. `fetch_as::<T>` converts each row to JSON using selected `FieldType`s, then deserializes with serde.
+`fetch_all`, `fetch_one`, and `fetch_optional` return `tokio_postgres::Row`. `fetch_all_as::<T>` converts each row to JSON using selected `FieldType`s, then deserializes with serde.
 
 | `FieldType` | JSON value | Struct field |
 | --- | --- | --- |
@@ -550,7 +550,7 @@ Runtime errors are structured:
 
 ```rust
 match error {
-    rqb::postgres::Error::NotFound => HttpStatus::NotFound,
+    rqb::Error::NotFound => HttpStatus::NotFound,
     e if e.is_unique_violation() => HttpStatus::Conflict,
     e if e.is_foreign_key_violation() => HttpStatus::Conflict,
     e if e.is_constraint("app_users_email_key") => HttpStatus::Conflict,

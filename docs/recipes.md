@@ -133,7 +133,7 @@ let rows = select(users().alias("u"))
         json_agg("orders", [ID.on("o"), STATUS.on("o"), CREATED_AT.on("o")])
             .filter(ID.on("o").is_not_null())
     )
-    .fetch_as::<UserWithOrders>(&db)
+    .fetch_all_as::<UserWithOrders>(&db)
     .await?;
 ```
 
@@ -145,7 +145,7 @@ Root fields deserialize with clean names. Joined flat fields keep a prefix, and 
 let rows = insert(order_items())
     .values(&items)
     .returning([ID, ORDER_ID, PRODUCT_ID])
-    .fetch_as::<OrderItemRow>(&db)
+    .fetch_all_as::<OrderItemRow>(&db)
     .await?;
 ```
 
@@ -171,7 +171,7 @@ let rows = select(orders().alias("o"))
             EVENT_TYPE.on("e").eq("paid"),
         ])),
     ))
-    .fetch_as::<OrderRow>(&db)
+    .fetch_all_as::<OrderRow>(&db)
     .await?;
 ```
 
@@ -186,7 +186,7 @@ let rows = select(users())
             .fields([USER_ID.on("o")])
             .filter(STATUS.on("o").eq("paid")),
     ))
-    .fetch_as::<UserRow>(&db)
+    .fetch_all_as::<UserRow>(&db)
     .await?;
 ```
 
@@ -227,7 +227,7 @@ fn tenant_orders(tenant_id: uuid::Uuid) -> SelectBuilder {
 
 let rows = tenant_orders(current_org)
     .and_where(STATUS.eq("paid"))
-    .fetch_as::<OrderRow>(&db)
+    .fetch_all_as::<OrderRow>(&db)
     .await?;
 ```
 
@@ -282,7 +282,7 @@ let rows = raw_query(
      GROUP BY status",
 )
 .bind("paid")
-.fetch_as::<RawOrderStats>(&db)
+.fetch_all_as::<RawOrderStats>(&db)
 .await?;
 
 let version: String = raw_query("SELECT version()")
@@ -291,7 +291,7 @@ let version: String = raw_query("SELECT version()")
 ```
 
 `raw_query` validates bind counts and converts `?` placeholders to Postgres
-placeholders. Use `??` for a literal question mark. `fetch_as` maps by returned
+placeholders. Use `??` for a literal question mark. `fetch_all_as` maps by returned
 column names, not rqb field metadata, so cast and alias raw expressions in SQL.
 For exact numeric or custom domain values, cast to `text` unless lossy floating
 point output is intentionally acceptable.
@@ -306,7 +306,7 @@ let latest = select(orders())
     .distinct_on([USER_ID])
     .order_by(USER_ID.asc())
     .order_by(CREATED_AT.desc())
-    .fetch_as::<OrderRow>(&db)
+    .fetch_all_as::<OrderRow>(&db)
     .await?;
 ```
 
@@ -323,7 +323,7 @@ let jobs = select(job_queue())
     .limit(100)
     .for_update()
     .skip_locked()
-    .fetch_as::<Job>(&tx)
+    .fetch_all_as::<Job>(&tx)
     .await?;
 
 for job in &jobs {
@@ -342,7 +342,7 @@ Use `FOR UPDATE SKIP LOCKED` inside a transaction when multiple workers claim ro
 ## Transaction With Retry On Serialization Failure
 
 ```rust
-async fn run_serializable(db: &Db) -> Result<(), rqb::postgres::Error> {
+async fn run_serializable(db: &Db) -> Result<(), rqb::Error> {
     for attempt in 0..3 {
         let result = async {
             let tx = db.begin().serializable().await?;
@@ -401,6 +401,6 @@ mod schema {
 
 let rows = select(schema::order_search_view::dataset())
     .fields([schema::order_search_view::ID, schema::order_search_view::EMAIL])
-    .fetch_as::<serde_json::Value>(&db)
+    .fetch_all_as::<serde_json::Value>(&db)
     .await?;
 ```

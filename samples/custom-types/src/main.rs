@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             withdrawals::WALLET_ADDRESS,
         ])
         .filter(withdrawals::AMOUNT.gte("9007199254740993"))
-        .fetch_as::<Withdrawal>(&db)
+        .fetch_all_as::<Withdrawal>(&db)
         .await?;
     for row in &rows {
         println!(

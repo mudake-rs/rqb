@@ -922,7 +922,7 @@ fn renders_conflict_targets_actions_and_filters() {
         .set("status", OrderStatus::Paid)
         .on_conflict(["id", "userId"])
         .do_update(["status"])
-        .filter(field("status").ne(OrderStatus::Cancelled))
+        .conflict_filter(field("status").ne(OrderStatus::Cancelled))
         .build_pg()
         .unwrap();
     assert!(composite

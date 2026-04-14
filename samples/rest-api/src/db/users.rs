@@ -95,7 +95,7 @@ impl UserService {
     pub async fn list(
         exec: &impl PgExecutor,
         query: UserListQuery,
-    ) -> rqb::postgres::Result<Page<User>> {
+    ) -> rqb::Result<Page<User>> {
         // Optional query params stay as Option<T> until they reach the builder; no match/apply
         // boilerplate is needed for common filters.
         let page = select(users::dataset())
@@ -112,7 +112,7 @@ impl UserService {
     pub async fn get_with_orders(
         exec: &impl PgExecutor,
         id: Uuid,
-    ) -> rqb::postgres::Result<UserWithOrders> {
+    ) -> rqb::Result<UserWithOrders> {
         let user = users::table().alias("u");
         let order = orders::table().alias("o");
         // Generated Relation helpers keep joined fields ergonomic: `user.id()` is qualified as
@@ -136,7 +136,7 @@ impl UserService {
             .await
     }
 
-    pub async fn create(exec: &impl PgExecutor, user: CreateUser) -> rqb::postgres::Result<User> {
+    pub async fn create(exec: &impl PgExecutor, user: CreateUser) -> rqb::Result<User> {
         let id = Uuid::new_v4();
         let row = NewUser {
             id,
@@ -158,7 +158,7 @@ impl UserService {
         exec: &impl PgExecutor,
         id: Uuid,
         patch: UserPatch,
-    ) -> rqb::postgres::Result<User> {
+    ) -> rqb::Result<User> {
         // `set_from` skips None fields through serde and default returning gives the updated DTO.
         update(users::dataset())
             .set_from(&patch)

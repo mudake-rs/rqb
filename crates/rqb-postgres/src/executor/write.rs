@@ -24,7 +24,7 @@ pub trait ExecuteWritePostgres {
     async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
     where
         T: DeserializeOwned;
-    async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+    async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned;
 }
@@ -62,7 +62,7 @@ macro_rules! impl_execute_write {
                 query_optional_as(exec, self.returning_all_if_empty().build_pg()?).await
             }
 
-            async fn fetch_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
+            async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
             where
                 T: DeserializeOwned,
             {

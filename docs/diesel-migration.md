@@ -6,7 +6,7 @@ For a longer application-level comparison with full examples, see [ergonomics.md
 
 | Diesel | rqb |
 | --- | --- |
-| `table.filter(status.eq("paid")).load::<Order>(&conn)` | `select(orders()).filter(STATUS.eq("paid")).fetch_as::<Order>(&db).await?` |
+| `table.filter(status.eq("paid")).load::<Order>(&conn)` | `select(orders()).filter(STATUS.eq("paid")).fetch_all_as::<Order>(&db).await?` |
 | table default selection / `all_columns` | omitted `.fields(...)` selects all selectable root dataset fields |
 | `orders::table.find(id).first::<Order>(&conn)` | `select(orders()).filter(ID.eq(id)).fetch_one_as::<Order>(&db).await?` |
 | `insert_into(orders).values(&new_order).get_result(&conn)` | `insert(orders()).value(&new_order).fetch_one_as::<Order>(&db).await?` |
@@ -31,7 +31,7 @@ No mandatory `.fields(...)` for normal reads. Diesel lets `users::table.load::<U
 ```rust
 let users = select(users())
     .filter(STATUS.eq("active"))
-    .fetch_as::<User>(&db)
+    .fetch_all_as::<User>(&db)
     .await?;
 ```
 

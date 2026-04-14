@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let paid = select(orders::dataset())
         .filter(orders::STATUS.eq(OrderStatus::Paid))
-        .fetch_as::<serde_json::Value>(&db)
+        .fetch_all_as::<serde_json::Value>(&db)
         .await?;
     println!(
         "paid orders: {}",
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .left_join(&order, user.id().eq_col(order.user_id()))
         .fields([user.id().alias("id"), user.email().alias("email")])
         .filter(order.status().eq(OrderStatus::Paid))
-        .fetch_as::<serde_json::Value>(&db)
+        .fetch_all_as::<serde_json::Value>(&db)
         .await?;
     println!(
         "joined users: {}",
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let exact = select(withdrawals::dataset())
         .fields([withdrawals::ID, withdrawals::AMOUNT])
         .filter(withdrawals::AMOUNT.gt("9007199254740993"))
-        .fetch_as::<serde_json::Value>(&db)
+        .fetch_all_as::<serde_json::Value>(&db)
         .await?;
     println!(
         "exact domain rows: {}",

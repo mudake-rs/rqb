@@ -134,10 +134,8 @@ Done:
   ergonomic value.
 - Facade-level `rqb::Error` and `rqb::Result<T>` are the normal application
   error path.
-
-Remaining P0 work:
-
-- Show retryable error handling and constraint mapping in docs and samples.
+- Retryable transaction handling and named constraint mapping are shown in docs
+  and `samples/error-handling`.
 
 ### Docs And Samples
 

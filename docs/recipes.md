@@ -431,7 +431,44 @@ async fn run_serializable(db: &Db) -> Result<(), rqb::Error> {
 }
 ```
 
-`is_retryable()` covers serialization failures, deadlocks, and connection-level failures. Use `error.code()` when you need to distinguish SQLSTATE `40001` from `40P01`.
+Retry the whole transaction, not only the failed statement. PostgreSQL aborts
+the current transaction after a serialization failure or deadlock, so a retry
+must reopen a fresh transaction and replay the work. `is_retryable()` covers
+serialization failures, deadlocks, and connection-level failures. Use
+`error.code()` when you need to distinguish SQLSTATE `40001` from `40P01`.
+
+## Constraint Mapping
+
+Use named constraints when an app-level error has business meaning:
+
+```rust
+#[derive(Debug, thiserror::Error)]
+enum AppError {
+    #[error("email is already taken")]
+    EmailTaken,
+    #[error("organization does not exist")]
+    MissingOrganization,
+    #[error(transparent)]
+    Db(#[from] rqb::Error),
+}
+
+insert(app_users())
+    .value(&new_user)
+    .execute(&db)
+    .await
+    .on_constraint("app_users_email_key", |_| AppError::EmailTaken)?;
+
+insert(app_users())
+    .value(&new_user)
+    .execute(&db)
+    .await
+    .on_constraint("app_users_organization_id_fkey", |_| {
+        AppError::MissingOrganization
+    })?;
+```
+
+`on_constraint` only maps the exact named constraint. Other database errors pass
+through as `AppError::Db`, which keeps unrelated failures visible.
 
 ## Raw SQL Escape Hatch
 

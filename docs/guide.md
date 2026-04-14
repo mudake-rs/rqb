@@ -220,7 +220,24 @@ insert(orders())
     .value(&new_order)
     .on_conflict(ID)
     .do_update([STATUS, METADATA])
-    .filter(STATUS.ne("cancelled"));
+    .conflict_filter(STATUS.ne("cancelled"));
+```
+
+For custom upsert assignments, pass write assignments explicitly. `excluded(...)`
+is only valid inside `ON CONFLICT DO UPDATE` assignments:
+
+```rust
+insert(order_counters())
+    .set(ID, id)
+    .set(TOTAL_CENTS, total)
+    .on_conflict(ID)
+    .index_where(DELETED_AT.is_null())
+    .do_update_set([
+        set_expr(TOTAL_CENTS, excluded(TOTAL_CENTS)),
+        set_default(UPDATED_AT),
+    ])
+    .conflict_filter(DELETED_AT.is_null())
+    .returning([ID, TOTAL_CENTS]);
 ```
 
 Insert from select:
@@ -250,6 +267,16 @@ update(orders())
 
 Use `.set_null(field)` when an update needs to assign SQL `NULL` without spelling `Value::Null`. Use `.set_default(field)` for SQL `DEFAULT`. Use `.set_expr(field, expr)` for server-owned computed assignments; rqb validates the expression type and casts the top-level expression to the target field type.
 
+`UPDATE ... FROM` adds extra datasets to the write scope:
+
+```rust
+update(orders().alias("o"))
+    .from(users().alias("u"))
+    .set_col(orders::USER_ID, users::ID.on("u"))
+    .filter(orders::USER_ID.on("o").eq_col(users::ID.on("u")))
+    .returning([orders::ID.on("o").alias("id")]);
+```
+
 Partial update:
 
 ```rust
@@ -276,6 +303,17 @@ delete(orders())
 ```
 
 `DELETE` without a filter is rejected during validation. Use an explicit predicate so broad deletes are visible in code review.
+
+`DELETE ... USING` works the same way when the delete predicate needs another
+source:
+
+```rust
+delete(events().alias("e"))
+    .using(orders().alias("o"))
+    .filter(events::ORDER_ID.on("e").eq_col(orders::ID.on("o")))
+    .execute(&db)
+    .await?;
+```
 
 ## Joins
 

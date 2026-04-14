@@ -12,6 +12,7 @@ pub fn delete(dataset: impl Into<Dataset>) -> DeleteBuilder {
 #[must_use]
 pub struct DeleteQuery {
     pub dataset: Dataset,
+    pub using: Vec<Dataset>,
     pub filter: Option<Expr>,
     pub returning: ReturningMode,
 }
@@ -51,10 +52,16 @@ impl DeleteBuilder {
         Self {
             query: DeleteQuery {
                 dataset: dataset.into(),
+                using: Vec::new(),
                 filter: None,
                 returning: ReturningMode::none(),
             },
         }
+    }
+
+    pub fn using(mut self, dataset: impl Into<Dataset>) -> Self {
+        self.query.using.push(dataset.into());
+        self
     }
 
     write_filter_methods!();

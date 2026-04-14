@@ -5,8 +5,9 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy, SearchRequest,
     SelectColumn, SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg,
-    case_when, cast, coalesce, count, count_distinct, delete, exists, field, func, insert,
-    json_agg, max, min, not_exists, raw, raw_expr, raw_query, select, string_agg, sum, update,
+    case_when, cast, coalesce, count, count_distinct, delete, excluded, exists, field, func,
+    insert, json_agg, max, min, not_exists, raw, raw_expr, raw_query, select, set_default,
+    set_expr, string_agg, sum, update,
 };
 use serde::Serialize;
 use tokio_postgres::{Row, types::ToSql};
@@ -909,7 +910,7 @@ fn renders_insert_values_returning_and_upsert() {
     assert!(built.sql.contains("$1::text::uuid"));
     assert!(built.sql.contains("$2::text::uuid"));
     assert!(built.sql.contains("$3::text::\"public\".\"order_status\""));
-    assert!(built.sql.contains("ON CONFLICT (\"id\") DO UPDATE SET \"status\" = EXCLUDED.\"status\", \"total_cents\" = EXCLUDED.\"total_cents\""));
+    assert!(built.sql.contains("ON CONFLICT (\"id\") DO UPDATE SET \"status\" = CAST(EXCLUDED.\"status\" AS \"public\".\"order_status\"), \"total_cents\" = CAST(EXCLUDED.\"total_cents\" AS bigint)"));
     let expected_returning = format!(
         "RETURNING {}, \"status\"::text AS \"status\"",
         uuid_projection("\"id\"", "id", false)
@@ -1029,9 +1030,24 @@ fn renders_conflict_targets_actions_and_filters() {
         .conflict_filter(field("status").ne(OrderStatus::Cancelled))
         .build_pg()
         .unwrap();
-    assert!(composite
-        .sql
-        .contains("ON CONFLICT (\"id\", \"user_id\") DO UPDATE SET \"status\" = EXCLUDED.\"status\" WHERE \"status\" <> $4::text::\"public\".\"order_status\""));
+    assert!(composite.sql.contains("ON CONFLICT (\"id\", \"user_id\") DO UPDATE SET \"status\" = CAST(EXCLUDED.\"status\" AS \"public\".\"order_status\") WHERE \"status\" <> $4::text::\"public\".\"order_status\""));
+
+    let partial_custom = insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .set("userId", "10000000-0000-0000-0000-000000000001")
+        .set("status", OrderStatus::Paid)
+        .set("totalCents", 15_900)
+        .on_conflict("id")
+        .index_where(field("status").ne(OrderStatus::Cancelled))
+        .do_update_set([
+            set_expr("totalCents", excluded("totalCents")),
+            set_default("createdAt"),
+        ])
+        .conflict_filter(field("status").ne(OrderStatus::Refunded))
+        .build_pg()
+        .unwrap();
+
+    assert!(partial_custom.sql.contains("ON CONFLICT (\"id\") WHERE \"status\" <> $5::text::\"public\".\"order_status\" DO UPDATE SET \"total_cents\" = CAST(EXCLUDED.\"total_cents\" AS bigint), \"created_at\" = DEFAULT WHERE \"status\" <> $6::text::\"public\".\"order_status\""));
 }
 
 #[test]
@@ -1065,6 +1081,37 @@ fn renders_update_raw_column_and_delete() {
         uuid_projection("\"id\"", "id", false)
     );
     assert_eq!(delete.sql, expected_delete);
+}
+
+#[test]
+fn renders_update_from_and_delete_using() {
+    let update = update(writable_orders().alias("o"))
+        .from(users_table().alias("u"))
+        .set_col("userId", field("u.id"))
+        .filter(field("o.userId").eq_col(field("u.id")))
+        .returning([field("o.id").alias("id"), field("o.userId").alias("userId")])
+        .build_pg()
+        .unwrap();
+
+    assert!(update.sql.starts_with(
+        "UPDATE \"orders\" AS \"o\" SET \"user_id\" = \"u\".\"id\" FROM \"app_users\" AS \"u\""
+    ));
+    assert!(
+        update
+            .sql
+            .contains("WHERE \"o\".\"user_id\" = \"u\".\"id\"")
+    );
+
+    let delete = delete(writable_orders().alias("o"))
+        .using(users_table().alias("u"))
+        .filter(field("o.userId").eq_col(field("u.id")))
+        .returning(field("o.id").alias("id"))
+        .build_pg()
+        .unwrap();
+
+    assert!(delete.sql.starts_with(
+        "DELETE FROM \"orders\" AS \"o\" USING \"app_users\" AS \"u\" WHERE \"o\".\"user_id\" = \"u\".\"id\""
+    ));
 }
 
 #[test]

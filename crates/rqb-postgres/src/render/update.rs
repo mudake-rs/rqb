@@ -20,6 +20,16 @@ impl Renderer {
             self.render_write_value(&assignment.value, assignment.field.ty)?;
         }
 
+        if !validated.from.is_empty() {
+            self.sql.push_str(" FROM ");
+            for (idx, dataset) in validated.from.iter().enumerate() {
+                if idx > 0 {
+                    self.sql.push_str(", ");
+                }
+                self.render_source(&dataset.source);
+            }
+        }
+
         if let Some(expr) = &validated.filter {
             self.sql.push_str(" WHERE ");
             self.render_expr(expr)?;

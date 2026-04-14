@@ -14,7 +14,10 @@ use super::expr::validate_expr;
 use super::operators::count_raw_placeholders;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
-use super::sql_expr::{collect_sql_expr_fields, validate_select_item, validate_write_sql_expr};
+use super::sql_expr::{
+    collect_sql_expr_fields, validate_conflict_sql_expr, validate_select_item,
+    validate_write_sql_expr,
+};
 use super::value_type::{
     enum_type_for_array, enum_type_for_field, require_enum_array, require_enum_scalar,
     validate_column_operator, validate_value_for_field_type,
@@ -36,7 +39,7 @@ impl ValidatedInsert {
         } = query;
 
         validate_write_source(&dataset)?;
-        let scope = WriteScope::new(&dataset);
+        let scope = WriteScope::new(&dataset)?;
 
         let rows = raw_rows
             .iter()
@@ -105,12 +108,13 @@ impl ValidatedUpdate {
         let UpdateQuery {
             dataset,
             assignments: raw_assignments,
+            from,
             filter: raw_filter,
             returning: raw_returning,
         } = query;
 
         validate_write_source(&dataset)?;
-        let scope = WriteScope::new(&dataset);
+        let scope = WriteScope::with_sources(&dataset, &from)?;
         if raw_assignments.is_empty() {
             return Err(Error::EmptyUpdate);
         }
@@ -123,6 +127,7 @@ impl ValidatedUpdate {
         Ok(Self {
             dataset,
             assignments,
+            from,
             filter,
             returning,
         })
@@ -133,12 +138,13 @@ impl ValidatedDelete {
     pub fn new(query: DeleteQuery) -> Result<Self> {
         let DeleteQuery {
             dataset,
+            using,
             filter: raw_filter,
             returning: raw_returning,
         } = query;
 
         validate_write_source(&dataset)?;
-        let scope = WriteScope::new(&dataset);
+        let scope = WriteScope::with_sources(&dataset, &using)?;
         let Some(expr) = &raw_filter else {
             return Err(Error::DeleteWithoutFilter);
         };
@@ -146,6 +152,7 @@ impl ValidatedDelete {
         let returning = resolve_returning(&scope, &raw_returning)?;
         Ok(Self {
             dataset,
+            using,
             filter,
             returning,
         })
@@ -154,6 +161,7 @@ impl ValidatedDelete {
 
 struct WriteScope<'a> {
     dataset: &'a Dataset,
+    target_scope: QueryScope,
     query_scope: QueryScope,
 }
 
@@ -164,11 +172,16 @@ enum WriteExprContext {
 }
 
 impl<'a> WriteScope<'a> {
-    fn new(dataset: &'a Dataset) -> Self {
-        Self {
+    fn new(dataset: &'a Dataset) -> Result<Self> {
+        Self::with_sources(dataset, &[])
+    }
+
+    fn with_sources(dataset: &'a Dataset, sources: &[Dataset]) -> Result<Self> {
+        Ok(Self {
             dataset,
-            query_scope: QueryScope::from_dataset(dataset),
-        }
+            target_scope: QueryScope::from_dataset(dataset),
+            query_scope: QueryScope::from_datasets(dataset, sources)?,
+        })
     }
 
     fn validate_filter(&self, expr: &Expr) -> Result<ValidatedExpr> {
@@ -177,13 +190,22 @@ impl<'a> WriteScope<'a> {
 
     fn resolve_field(&self, field_ref: &FieldRef) -> Result<ResolvedField> {
         let field = resolve_field_in_scope(&self.query_scope, field_ref)?;
-        if field.is_json_path() {
-            return Err(Error::NotSelectable {
-                field: field.display_name(),
-            });
-        }
-        Ok(field)
+        validate_write_field_ref(field)
     }
+
+    fn resolve_target_field(&self, field_ref: &FieldRef) -> Result<ResolvedField> {
+        let field = resolve_field_in_scope(&self.target_scope, field_ref)?;
+        validate_write_field_ref(field)
+    }
+}
+
+fn validate_write_field_ref(field: ResolvedField) -> Result<ResolvedField> {
+    if field.is_json_path() {
+        return Err(Error::NotSelectable {
+            field: field.display_name(),
+        });
+    }
+    Ok(field)
 }
 
 fn validate_write_source(dataset: &Dataset) -> Result<()> {
@@ -201,7 +223,7 @@ fn validate_assignments(
     assignments
         .iter()
         .map(|assignment| {
-            let field = scope.resolve_field(&assignment.field)?;
+            let field = scope.resolve_target_field(&assignment.field)?;
             let value = match &assignment.value {
                 WriteValue::Value(value) => {
                     validate_write_value(&field, value)?;
@@ -472,29 +494,85 @@ fn validate_conflict(
     conflict: &ConflictClause,
 ) -> Result<ValidatedConflictClause> {
     let target = match &conflict.target {
-        ConflictTarget::Columns(fields) => ValidatedConflictTarget::Columns(
-            fields
+        ConflictTarget::Columns { fields, predicate } => {
+            let fields = fields
                 .iter()
-                .map(|field| scope.resolve_field(field))
-                .collect::<Result<Vec<_>>>()?,
-        ),
+                .map(|field| scope.resolve_target_field(field))
+                .collect::<Result<Vec<_>>>()?;
+            let predicate = predicate
+                .as_deref()
+                .map(|expr| validate_expr(&scope.target_scope, expr, ExprContext::Filter))
+                .transpose()?
+                .map(Box::new);
+            ValidatedConflictTarget::Columns { fields, predicate }
+        }
         ConflictTarget::Constraint(constraint) => {
             ValidatedConflictTarget::Constraint(constraint.clone())
         }
     };
     let action = match &conflict.action {
         ConflictAction::DoNothing => ValidatedConflictAction::DoNothing,
-        ConflictAction::DoUpdate { fields, filter } => {
-            let fields = fields
-                .iter()
-                .map(|field| scope.resolve_field(field))
-                .collect::<Result<Vec<_>>>()?;
+        ConflictAction::DoUpdate {
+            assignments,
+            filter,
+        } => {
+            let assignments = validate_conflict_assignments(scope, assignments)?;
             let filter = filter
                 .as_ref()
                 .map(|expr| scope.validate_filter(expr))
                 .transpose()?;
-            ValidatedConflictAction::DoUpdate { fields, filter }
+            ValidatedConflictAction::DoUpdate {
+                assignments,
+                filter,
+            }
         }
     };
     Ok(ValidatedConflictClause { target, action })
+}
+
+fn validate_conflict_assignments(
+    scope: &WriteScope<'_>,
+    assignments: &[WriteAssignment],
+) -> Result<Vec<ValidatedAssignment>> {
+    if assignments.is_empty() {
+        return Err(Error::InvalidValue {
+            field: scope.dataset.api_name.clone(),
+            operator: "on_conflict".to_owned(),
+            message: "DO UPDATE requires at least one assignment".to_owned(),
+        });
+    }
+    assignments
+        .iter()
+        .map(|assignment| {
+            let field = scope.resolve_target_field(&assignment.field)?;
+            let value = match &assignment.value {
+                WriteValue::Value(value) => {
+                    validate_write_value(&field, value)?;
+                    ValidatedWriteValue::Value(value.clone())
+                }
+                WriteValue::Raw(raw) => {
+                    let placeholders = count_raw_placeholders(&raw.sql);
+                    if placeholders != raw.binds.len() {
+                        return Err(Error::RawBindMismatch {
+                            placeholders,
+                            binds: raw.binds.len(),
+                        });
+                    }
+                    ValidatedWriteValue::Raw(raw.clone())
+                }
+                WriteValue::Column(source) => {
+                    let source = scope.resolve_field(source)?;
+                    validate_column_operator(&field, ColumnOperator::Equals, &source)?;
+                    ValidatedWriteValue::Column(source)
+                }
+                WriteValue::Expr(expr) => {
+                    let expr = validate_conflict_sql_expr(&scope.target_scope, expr)?;
+                    validate_write_expr_type(&field, &expr)?;
+                    ValidatedWriteValue::Expr(expr)
+                }
+                WriteValue::Default => ValidatedWriteValue::Default,
+            };
+            Ok(ValidatedAssignment { field, value })
+        })
+        .collect()
 }

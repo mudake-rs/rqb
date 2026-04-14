@@ -327,6 +327,22 @@ let row = update(users())
     .await?;
 ```
 
+Custom upserts can use `excluded(...)`, `DEFAULT`, and partial-index conflict
+predicates without raw SQL:
+
+```rust
+insert(order_counters())
+    .set(ID, id)
+    .set(TOTAL_CENTS, total)
+    .on_conflict(ID)
+    .index_where(DELETED_AT.is_null())
+    .do_update_set([
+        set_expr(TOTAL_CENTS, excluded(TOTAL_CENTS)),
+        set_default(UPDATED_AT),
+    ])
+    .returning([ID, TOTAL_CENTS]);
+```
+
 Partial updates:
 
 ```rust

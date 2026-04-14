@@ -16,6 +16,7 @@ use super::{
 enum SqlExprContext {
     Select,
     Write,
+    ConflictUpdate,
 }
 
 pub(super) fn validate_select_item(
@@ -41,6 +42,13 @@ pub(super) fn validate_write_sql_expr(
     validate_sql_expr_in_context(scope, expr, SqlExprContext::Write)
 }
 
+pub(super) fn validate_conflict_sql_expr(
+    scope: &QueryScope,
+    expr: &SqlExpr,
+) -> Result<ValidatedSqlExpr> {
+    validate_sql_expr_in_context(scope, expr, SqlExprContext::ConflictUpdate)
+}
+
 fn validate_sql_expr_in_context(
     scope: &QueryScope,
     expr: &SqlExpr,
@@ -51,6 +59,19 @@ fn validate_sql_expr_in_context(
             let field = resolve_field_in_scope(scope, field_ref)?;
             validate_sql_expr_field(&field, context)?;
             ValidatedSqlExpr::Field(field)
+        }
+        SqlExpr::Excluded(field_ref) => {
+            if context != SqlExprContext::ConflictUpdate {
+                return Err(Error::InvalidValue {
+                    field: "excluded".to_owned(),
+                    operator: "expression".to_owned(),
+                    message: "EXCLUDED fields are only valid in ON CONFLICT DO UPDATE assignments"
+                        .to_owned(),
+                });
+            }
+            let field = resolve_field_in_scope(scope, field_ref)?;
+            validate_sql_expr_field(&field, context)?;
+            ValidatedSqlExpr::Excluded(field)
         }
         SqlExpr::Value(value) => {
             let ty = value_type(value).ok_or_else(|| Error::UnknownExpressionType {
@@ -135,7 +156,9 @@ fn validate_sql_expr_in_context(
 pub(super) fn collect_sql_expr_fields(expr: &ValidatedSqlExpr, output: &mut Vec<ResolvedField>) {
     match expr {
         ValidatedSqlExpr::Field(field) => push_unique_field(output, field.clone()),
-        ValidatedSqlExpr::Value { .. } | ValidatedSqlExpr::Raw { .. } => {}
+        ValidatedSqlExpr::Excluded(_)
+        | ValidatedSqlExpr::Value { .. }
+        | ValidatedSqlExpr::Raw { .. } => {}
         ValidatedSqlExpr::Function { args, .. } | ValidatedSqlExpr::Coalesce { args, .. } => {
             for arg in args {
                 collect_sql_expr_fields(arg, output);

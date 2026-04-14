@@ -82,14 +82,33 @@ impl Renderer {
 
     pub(super) fn render_write_target(&mut self, source: &Source) {
         match source {
-            Source::Table { schema, name, .. } | Source::View { schema, name, .. } => {
+            Source::Table {
+                schema,
+                name,
+                alias,
+            }
+            | Source::View {
+                schema,
+                name,
+                alias,
+            } => {
                 if let Some(schema) = schema {
                     write_quoted_ident(&mut self.sql, schema);
                     self.sql.push('.');
                 }
                 write_quoted_ident(&mut self.sql, name);
+                if let Some(alias) = alias {
+                    self.sql.push_str(" AS ");
+                    write_quoted_ident(&mut self.sql, alias);
+                }
             }
-            Source::Cte { name, .. } => write_quoted_ident(&mut self.sql, name),
+            Source::Cte { name, alias } => {
+                write_quoted_ident(&mut self.sql, name);
+                if let Some(alias) = alias {
+                    self.sql.push_str(" AS ");
+                    write_quoted_ident(&mut self.sql, alias);
+                }
+            }
             Source::Raw { alias, .. } => {
                 self.cacheable = false;
                 write_quoted_ident(&mut self.sql, alias);

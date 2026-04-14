@@ -28,8 +28,9 @@ Current public capabilities:
   JSONB keys and array matching, text search, ranges, networks, and column
   comparisons.
 - INSERT/UPDATE/DELETE with serde-backed values, raw assignments, column
-  assignments, `RETURNING`, `ON CONFLICT`, `INSERT ... SELECT`, and required
-  DELETE filters.
+  assignments, expression assignments, `RETURNING` expressions, `ON CONFLICT`,
+  custom conflict assignments, `UPDATE ... FROM`, `DELETE ... USING`,
+  `INSERT ... SELECT`, and required DELETE filters.
 - Raw top-level SQL through `raw_query`, with bind count validation, `?`
   placeholder rendering, `??` escaping, raw row mapping, scalar fetch helpers,
   and statement-cache bypass.
@@ -174,6 +175,9 @@ assignment expressions are validated against the target field type and rendered
 with an explicit top-level cast to the target Postgres type. `INSERT`
 expressions cannot reference target fields because `VALUES` rows do not have a
 current target row; `UPDATE` expressions can reference the row being updated.
+Conflict assignments can additionally reference `EXCLUDED.field`. `UPDATE FROM`
+and `DELETE USING` add extra datasets to the write scope while assignment
+targets stay resolved against the write target.
 Validated write models do not keep the original write AST.
 
 ### Execution Surface Is Wider Than The Conceptual Model

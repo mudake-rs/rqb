@@ -2,7 +2,8 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
     SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast, coalesce, count, cte,
-    delete, exists, field, func, insert, not_exists, raw, raw_query, select, sum, update,
+    delete, excluded, exists, field, func, insert, not_exists, raw, raw_query, select, set_default,
+    set_expr, sum, update,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -836,6 +837,13 @@ async fn executes_insert_update_delete_and_upsert() -> TestResult {
         payload: serde_json::Value,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct EventOrderRow {
+        id: String,
+        order_id: String,
+    }
+
     let event_id = "50000000-0000-0000-0000-000000009901";
     let default_returning_event_id = "50000000-0000-0000-0000-000000009906";
     let order_id = "30000000-0000-0000-0000-000000000001";
@@ -928,12 +936,59 @@ async fn executes_insert_update_delete_and_upsert() -> TestResult {
     assert_eq!(expression_updated.event_type_lower, "rqb-updated");
     assert_eq!(expression_updated.payload, serde_json::json!({}));
 
-    let deleted: EventRow = delete(events_table::dataset())
-        .filter(events_table::ID.eq(event_id))
+    let custom_upserted: EventRow = insert(events_table::dataset())
+        .set(events_table::ID, event_id)
+        .set(events_table::ORDER_ID, order_id)
+        .set(events_table::EVENT_TYPE, "rqb-custom-upsert")
+        .set(
+            events_table::PAYLOAD,
+            serde_json::json!({ "ignored": true }),
+        )
+        .on_conflict(events_table::ID)
+        .do_update_set([
+            set_expr(events_table::EVENT_TYPE, excluded(events_table::EVENT_TYPE)),
+            set_default(events_table::PAYLOAD),
+        ])
         .returning([
             events_table::ID,
             events_table::EVENT_TYPE,
             events_table::PAYLOAD,
+        ])
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(custom_upserted.event_type, "rqb-custom-upsert");
+    assert_eq!(custom_upserted.payload, serde_json::json!({}));
+
+    let update_from: EventOrderRow = update(events_table::dataset().alias("e"))
+        .from(orders_table::dataset().alias("o"))
+        .set_col(events_table::ORDER_ID, orders_table::ID.on("o"))
+        .filter(events_table::ID.on("e").eq(event_id))
+        .filter(
+            events_table::ORDER_ID
+                .on("e")
+                .eq_col(orders_table::ID.on("o")),
+        )
+        .returning([
+            events_table::ID.on("e").alias("id"),
+            events_table::ORDER_ID.on("e").alias("orderId"),
+        ])
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(update_from.id, event_id);
+    assert_eq!(update_from.order_id, order_id);
+
+    let deleted: EventRow = delete(events_table::dataset().alias("e"))
+        .using(orders_table::dataset().alias("o"))
+        .filter(events_table::ID.on("e").eq(event_id))
+        .filter(
+            events_table::ORDER_ID
+                .on("e")
+                .eq_col(orders_table::ID.on("o")),
+        )
+        .returning([
+            events_table::ID.on("e").alias("id"),
+            events_table::EVENT_TYPE.on("e").alias("eventType"),
+            events_table::PAYLOAD.on("e").alias("payload"),
         ])
         .fetch_one_as(&client)
         .await?;

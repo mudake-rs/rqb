@@ -1,9 +1,12 @@
 use crate::expr::Expr;
 use crate::field::FieldRef;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ConflictTarget {
-    Columns(Vec<FieldRef>),
+    Columns {
+        fields: Vec<FieldRef>,
+        predicate: Option<Box<Expr>>,
+    },
     Constraint(String),
 }
 
@@ -12,7 +15,7 @@ pub enum ConflictTarget {
 pub enum ConflictAction {
     DoNothing,
     DoUpdate {
-        fields: Vec<FieldRef>,
+        assignments: Vec<super::WriteAssignment>,
         filter: Option<Expr>,
     },
 }

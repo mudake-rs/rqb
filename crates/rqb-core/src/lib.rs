@@ -39,7 +39,7 @@ pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
 pub use sql_expr::{
     CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, IntoSqlExpr, SelectItem, SqlExpr,
-    case_when, cast, coalesce, func, raw_expr,
+    case_when, cast, coalesce, excluded, func, raw_expr,
 };
 pub use types::{
     DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,
@@ -57,7 +57,8 @@ pub use value::Value;
 pub use write::{
     ConflictAction, ConflictClause, ConflictTarget, DeleteBuilder, DeleteQuery, InsertBuilder,
     InsertConflictBuilder, InsertQuery, IntoFieldRefs, ReturningMode, UpdateBuilder, UpdateQuery,
-    WriteAssignment, WriteValue, delete, insert, update,
+    WriteAssignment, WriteValue, delete, insert, set, set_col, set_default, set_expr, set_raw,
+    update,
 };
 
 pub mod prelude {
@@ -71,8 +72,9 @@ pub mod prelude {
         SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr, Sort, SortDir, SqlExpr,
         SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder,
         UpdateQuery, Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg,
-        case_when, cast, coalesce, count, count_distinct, count_field, cte, delete, exists, field,
-        func, insert, json_agg, json_agg_nullable, max, max_agg, min, min_agg, not, not_exists,
-        raw, raw_expr, raw_query, select, string_agg, sum, update,
+        case_when, cast, coalesce, count, count_distinct, count_field, cte, delete, excluded,
+        exists, field, func, insert, json_agg, json_agg_nullable, max, max_agg, min, min_agg, not,
+        not_exists, raw, raw_expr, raw_query, select, set, set_col, set_default, set_expr, set_raw,
+        string_agg, sum, update,
     };
 }

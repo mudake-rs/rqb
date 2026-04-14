@@ -140,7 +140,10 @@ impl InsertBuilder {
     pub fn on_conflict(self, fields: impl IntoFieldRefs) -> InsertConflictBuilder {
         InsertConflictBuilder {
             builder: self,
-            target: ConflictTarget::Columns(fields.into_field_refs()),
+            target: ConflictTarget::Columns {
+                fields: fields.into_field_refs(),
+                predicate: None,
+            },
         }
     }
 
@@ -183,11 +186,39 @@ pub struct InsertConflictBuilder {
 }
 
 impl InsertConflictBuilder {
-    pub fn do_update(mut self, fields: impl IntoFieldRefs) -> InsertBuilder {
+    pub fn index_where(mut self, expr: impl Into<Expr>) -> Self {
+        if let ConflictTarget::Columns { predicate, .. } = &mut self.target {
+            *predicate = match predicate.take() {
+                Some(existing) => Some(Box::new(existing.and(expr))),
+                None => Some(Box::new(expr.into())),
+            };
+        } else {
+            self.builder.errors.push(Error::InvalidValue {
+                field: "conflict".to_owned(),
+                operator: "index_where".to_owned(),
+                message: "index_where can only be used with column conflict targets".to_owned(),
+            });
+        }
+        self
+    }
+
+    pub fn do_update(self, fields: impl IntoFieldRefs) -> InsertBuilder {
+        let assignments = fields
+            .into_field_refs()
+            .into_iter()
+            .map(|field| WriteAssignment::expr(field.clone(), crate::sql_expr::excluded(field)))
+            .collect::<Vec<_>>();
+        self.do_update_set(assignments)
+    }
+
+    pub fn do_update_set<I>(mut self, assignments: I) -> InsertBuilder
+    where
+        I: IntoIterator<Item = WriteAssignment>,
+    {
         self.builder.query.conflict = Some(ConflictClause {
             target: self.target,
             action: ConflictAction::DoUpdate {
-                fields: fields.into_field_refs(),
+                assignments: assignments.into_iter().collect(),
                 filter: None,
             },
         });

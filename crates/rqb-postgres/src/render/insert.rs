@@ -52,7 +52,7 @@ impl Renderer {
     fn render_conflict(&mut self, conflict: &ValidatedConflictClause) -> Result<()> {
         self.sql.push_str(" ON CONFLICT ");
         match &conflict.target {
-            ValidatedConflictTarget::Columns(fields) => {
+            ValidatedConflictTarget::Columns { fields, predicate } => {
                 self.sql.push('(');
                 for (idx, field) in fields.iter().enumerate() {
                     if idx > 0 {
@@ -61,6 +61,10 @@ impl Renderer {
                     write_quoted_ident(&mut self.sql, &field.db_name);
                 }
                 self.sql.push(')');
+                if let Some(predicate) = predicate {
+                    self.sql.push_str(" WHERE ");
+                    self.render_expr(predicate)?;
+                }
             }
             ValidatedConflictTarget::Constraint(constraint) => {
                 self.sql.push_str("ON CONSTRAINT ");
@@ -70,15 +74,18 @@ impl Renderer {
 
         match &conflict.action {
             ValidatedConflictAction::DoNothing => self.sql.push_str(" DO NOTHING"),
-            ValidatedConflictAction::DoUpdate { fields, filter } => {
+            ValidatedConflictAction::DoUpdate {
+                assignments,
+                filter,
+            } => {
                 self.sql.push_str(" DO UPDATE SET ");
-                for (idx, field) in fields.iter().enumerate() {
+                for (idx, assignment) in assignments.iter().enumerate() {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    write_quoted_ident(&mut self.sql, &field.db_name);
-                    self.sql.push_str(" = EXCLUDED.");
-                    write_quoted_ident(&mut self.sql, &field.db_name);
+                    write_quoted_ident(&mut self.sql, &assignment.field.db_name);
+                    self.sql.push_str(" = ");
+                    self.render_write_value(&assignment.value, assignment.field.ty)?;
                 }
                 if let Some(filter) = filter {
                     self.sql.push_str(" WHERE ");

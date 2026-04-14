@@ -40,6 +40,7 @@ pub struct ValidatedSelectItem {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValidatedSqlExpr {
     Field(ResolvedField),
+    Excluded(ResolvedField),
     Value {
         value: Value,
         ty: FieldType,
@@ -71,7 +72,7 @@ pub enum ValidatedSqlExpr {
 impl ValidatedSqlExpr {
     pub fn ty(&self) -> FieldType {
         match self {
-            Self::Field(field) => field.ty,
+            Self::Field(field) | Self::Excluded(field) => field.ty,
             Self::Value { ty, .. }
             | Self::Raw { ty, .. }
             | Self::Function { ty, .. }
@@ -310,7 +311,10 @@ pub struct ValidatedConflictClause {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValidatedConflictTarget {
-    Columns(Vec<ResolvedField>),
+    Columns {
+        fields: Vec<ResolvedField>,
+        predicate: Option<Box<ValidatedExpr>>,
+    },
     Constraint(String),
 }
 
@@ -319,7 +323,7 @@ pub enum ValidatedConflictTarget {
 pub enum ValidatedConflictAction {
     DoNothing,
     DoUpdate {
-        fields: Vec<ResolvedField>,
+        assignments: Vec<ValidatedAssignment>,
         filter: Option<ValidatedExpr>,
     },
 }
@@ -338,6 +342,7 @@ pub struct ValidatedInsert {
 pub struct ValidatedUpdate {
     pub dataset: Dataset,
     pub assignments: Vec<ValidatedAssignment>,
+    pub from: Vec<Dataset>,
     pub filter: Option<ValidatedExpr>,
     pub returning: Vec<ValidatedReturningItem>,
 }
@@ -345,6 +350,7 @@ pub struct ValidatedUpdate {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedDelete {
     pub dataset: Dataset,
+    pub using: Vec<Dataset>,
     pub filter: ValidatedExpr,
     pub returning: Vec<ValidatedReturningItem>,
 }

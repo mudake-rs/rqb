@@ -3,7 +3,7 @@ use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType,
     IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr,
     Sort, SubqueryOperator, TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce,
-    count, count_field, field, insert, max, min, string_agg, sum,
+    count, count_field, excluded, field, insert, max, min, set_default, set_expr, string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -1102,6 +1102,40 @@ fn accepts_write_expressions_defaults_and_returning_expressions() {
 }
 
 #[test]
+fn accepts_advanced_write_sources_and_conflict_assignments() {
+    let update = crate::update(orders_dataset().alias("o"))
+        .from(users_dataset().alias("u"))
+        .set_col("userId", field("u.id"))
+        .filter(field("o.userId").eq_col(field("u.id")))
+        .build()
+        .unwrap();
+    let validated = ValidatedUpdate::new(update).unwrap();
+    assert_eq!(validated.from.len(), 1);
+
+    let delete = crate::delete(orders_dataset().alias("o"))
+        .using(users_dataset().alias("u"))
+        .filter(field("o.userId").eq_col(field("u.id")))
+        .build();
+    let validated = ValidatedDelete::new(delete).unwrap();
+    assert_eq!(validated.using.len(), 1);
+
+    let insert = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .set("score", 10)
+        .on_conflict("id")
+        .index_where(field("active").eq(true))
+        .do_update_set([
+            set_expr("score", excluded("score")),
+            set_default("properties"),
+        ])
+        .conflict_filter(field("active").eq(true))
+        .build()
+        .unwrap();
+    let validated = ValidatedInsert::new(insert).unwrap();
+    assert!(validated.conflict.is_some());
+}
+
+#[test]
 fn rejects_insert_expressions_that_reference_target_fields() {
     let insert = insert(dataset())
         .set("id", "10000000-0000-0000-0000-000000000001")
@@ -1113,6 +1147,48 @@ fn rejects_insert_expressions_that_reference_target_fields() {
 
     assert!(
         matches!(err, Error::InvalidValue { field, message, .. } if field == "name" && message == "insert expressions cannot reference target fields")
+    );
+}
+
+#[test]
+fn rejects_excluded_outside_conflict_update_assignments() {
+    let update = crate::update(dataset())
+        .set_expr("score", excluded("score"))
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+
+    let err = ValidatedUpdate::new(update).unwrap_err();
+
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "excluded" && message == "EXCLUDED fields are only valid in ON CONFLICT DO UPDATE assignments")
+    );
+}
+
+#[test]
+fn rejects_invalid_conflict_assignment_shapes() {
+    let empty_update = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .on_conflict("id")
+        .do_update_set([])
+        .build()
+        .unwrap();
+
+    let err = ValidatedInsert::new(empty_update).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "assets" && message == "DO UPDATE requires at least one assignment")
+    );
+
+    let index_where_on_constraint = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .on_conflict_constraint("assets_pkey")
+        .index_where(field("active").eq(true))
+        .do_nothing()
+        .build()
+        .unwrap_err();
+
+    assert!(
+        matches!(index_where_on_constraint, Error::InvalidValue { field, message, .. } if field == "conflict" && message == "index_where can only be used with column conflict targets")
     );
 }
 

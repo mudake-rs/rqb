@@ -4,6 +4,7 @@ use crate::field::ResolvedField;
 use crate::types::{ElemType, EnumType, FieldType, TypeFamily, TypeSpec, ValueRepr};
 use crate::value::Value;
 
+use super::sql_expr::compatible_type;
 use super::value_guard::reject_non_finite_numbers;
 
 pub(super) fn enum_type_for_field(field: &ResolvedField) -> Option<EnumType> {
@@ -63,11 +64,7 @@ pub(super) fn validate_column_operator(
     operator: ColumnOperator,
     right: &ResolvedField,
 ) -> Result<()> {
-    let compatible = if left.ty == right.ty {
-        true
-    } else {
-        left.ty.is_numeric() && right.ty.is_numeric()
-    };
+    let compatible = left.ty == right.ty || compatible_type(left.ty, right.ty).is_some();
 
     if compatible {
         return Ok(());
@@ -133,8 +130,8 @@ fn require_value_for_field_type(
             field,
             operator,
             value,
-            "number or numeric string",
-            |value| value.is_number() || matches!(value, Value::String(_)),
+            "integer or numeric string",
+            is_exact_numeric_value,
         ),
         FieldType::Bool => require_value_shape(field, operator, value, "bool", |value| {
             matches!(value, Value::Bool(_))
@@ -227,8 +224,8 @@ fn require_value_for_type_spec(
                 field,
                 operator,
                 value,
-                "number or numeric string",
-                |value| value.is_number() || matches!(value, Value::String(_)),
+                "integer or numeric string",
+                is_exact_numeric_value,
             ),
             TypeFamily::Bool => require_value_shape(field, operator, value, "bool", |value| {
                 matches!(value, Value::Bool(_))
@@ -343,6 +340,14 @@ fn looks_like_decimal(value: &str) -> bool {
     idx == bytes.len()
 }
 
+fn is_exact_numeric_value(value: &Value) -> bool {
+    match value {
+        Value::I64(_) => true,
+        Value::String(value) => looks_like_decimal(value),
+        _ => false,
+    }
+}
+
 fn consume_digits(bytes: &[u8], idx: &mut usize) -> usize {
     let start = *idx;
     while *idx < bytes.len() && bytes[*idx].is_ascii_digit() {
@@ -373,8 +378,8 @@ pub(super) fn require_value_for_elem_type(
             field,
             operator,
             value,
-            "number or numeric string",
-            |value| value.is_number() || matches!(value, Value::String(_)),
+            "integer or numeric string",
+            is_exact_numeric_value,
         ),
         ElemType::Bool => require_value_shape(field, operator, value, "bool", |value| {
             matches!(value, Value::Bool(_))

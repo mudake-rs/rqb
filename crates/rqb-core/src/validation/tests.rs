@@ -520,6 +520,129 @@ fn rejects_expression_select_items_with_incompatible_branch_types() {
 }
 
 #[test]
+fn rejects_implicit_float_in_exact_numeric_field_values() {
+    let numeric_filter = crate::select(dataset())
+        .filter(field("amount").eq(19.99))
+        .build();
+    let err = ValidatedSelect::new(numeric_filter).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "amount" && message == "expected integer or numeric string, got f64")
+    );
+
+    let numeric_array =
+        Dataset::table("metrics").field(Field::new("amounts", FieldType::Array(ElemType::Numeric)));
+    let array_filter = crate::select(numeric_array)
+        .filter(field("amounts").contains_all([Value::from("1.25"), Value::from(2.5)]))
+        .build();
+    let err = ValidatedSelect::new(array_filter).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "amounts" && message == "expected integer or numeric string, got f64")
+    );
+
+    let custom_filter = crate::select(dataset())
+        .filter(field("uintAmount").eq(19.99))
+        .build();
+    let err = ValidatedSelect::new(custom_filter).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "uintAmount" && message == "expected integer or decimal string, got f64")
+    );
+}
+
+#[test]
+fn rejects_implicit_float_in_exact_numeric_expressions() {
+    let coalesce_query = crate::select(dataset())
+        .select_expr(coalesce([field("amount").expr(), 0.5.into_sql_expr()]).alias("amount"))
+        .build();
+    let err = ValidatedSelect::new(coalesce_query).unwrap_err();
+    assert!(
+        matches!(err, Error::IncompatibleExpressionTypes { expression, left_type, right_type }
+            if expression == "coalesce" && left_type == "numeric" && right_type == "float")
+    );
+
+    let case_query = crate::select(dataset())
+        .select_expr(
+            case_when(field("active").eq(true))
+                .then(field("amount").expr())
+                .otherwise(0.5)
+                .alias("amount"),
+        )
+        .build();
+    let err = ValidatedSelect::new(case_query).unwrap_err();
+    assert!(
+        matches!(err, Error::IncompatibleExpressionTypes { expression, left_type, right_type }
+            if expression == "case" && left_type == "numeric" && right_type == "float")
+    );
+
+    let greatest_query = crate::select(dataset())
+        .select_expr(greatest([field("amount").expr(), 0.5.into_sql_expr()]).alias("amount"))
+        .build();
+    let err = ValidatedSelect::new(greatest_query).unwrap_err();
+    assert!(
+        matches!(err, Error::IncompatibleExpressionTypes { expression, left_type, right_type }
+            if expression == "greatest" && left_type == "numeric" && right_type == "float")
+    );
+
+    let nullif_query = crate::select(dataset())
+        .select_expr(nullif(field("amount"), 0.5).alias("amount"))
+        .build();
+    let err = ValidatedSelect::new(nullif_query).unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidValue { field, operator, message }
+            if field == "nullif"
+                && operator == "function"
+                && message.contains("arguments have incompatible types `numeric` and `float`"))
+    );
+}
+
+#[test]
+fn preserves_exact_numeric_expression_types() {
+    let query = crate::select(dataset())
+        .select_expr(coalesce([field("amount").expr(), 0.into_sql_expr()]).alias("safeAmount"))
+        .select_expr(coalesce([field("uintAmount").expr(), 0.into_sql_expr()]).alias("safeUint"))
+        .select_expr(greatest([field("score").expr(), 0.into_sql_expr()]).alias("scoreFloor"))
+        .select_expr(greatest([field("score").expr(), 0.5.into_sql_expr()]).alias("floatScore"))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+    let columns = validated
+        .columns
+        .iter()
+        .map(|column| (column.alias(), column.ty()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        columns,
+        vec![
+            ("safeAmount".to_owned(), FieldType::Numeric),
+            ("safeUint".to_owned(), FieldType::Custom(&UINT_256)),
+            ("scoreFloor".to_owned(), FieldType::BigInt),
+            ("floatScore".to_owned(), FieldType::Float),
+        ]
+    );
+}
+
+#[test]
+fn validates_column_comparison_compatibility_conservatively() {
+    let text_family = crate::select(dataset())
+        .filter(field("name").eq_col(field("displayName")))
+        .build();
+    ValidatedSelect::new(text_family).unwrap();
+
+    let metrics = Dataset::table("metrics").fields([
+        Field::new("amount", FieldType::Numeric),
+        Field::new("ratio", FieldType::Float),
+    ]);
+    let exact_vs_float = crate::select(metrics)
+        .filter(field("amount").eq_col(field("ratio")))
+        .build();
+    let err = ValidatedSelect::new(exact_vs_float).unwrap_err();
+    assert!(
+        matches!(err, Error::IncompatibleColumnTypes { left, left_type, right, right_type, .. }
+            if left == "amount" && left_type == "numeric" && right == "ratio" && right_type == "float")
+    );
+}
+
+#[test]
 fn rejects_json_path_sorting() {
     let query = crate::select(dataset())
         .order_by(Sort::asc("properties.score"))
@@ -1827,6 +1950,37 @@ fn accepts_supported_aggregate_field_types() {
         .build();
 
     ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn aggregate_output_types_preserve_exact_numeric_semantics() {
+    let query = crate::select(dataset())
+        .agg(sum("score", "scoreSum"))
+        .agg(avg("score", "scoreAvg"))
+        .agg(sum("amount", "amountSum"))
+        .agg(avg("amount", "amountAvg"))
+        .agg(sum("uintAmount", "uintSum"))
+        .agg(avg("uintAmount", "uintAvg"))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+    let columns = validated
+        .columns
+        .iter()
+        .map(|column| (column.alias(), column.ty()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        columns,
+        vec![
+            ("scoreSum".to_owned(), FieldType::BigInt),
+            ("scoreAvg".to_owned(), FieldType::Numeric),
+            ("amountSum".to_owned(), FieldType::Numeric),
+            ("amountAvg".to_owned(), FieldType::Numeric),
+            ("uintSum".to_owned(), FieldType::Numeric),
+            ("uintAvg".to_owned(), FieldType::Numeric),
+        ]
+    );
 }
 
 #[test]

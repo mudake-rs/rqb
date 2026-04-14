@@ -334,28 +334,21 @@ fn renders_known_fields_on_unfielded_dataset_without_descriptor() {
 }
 
 #[test]
-fn renders_numeric_float_special_values_as_postgres_literals() {
+fn rejects_float_values_for_exact_numeric_fields_before_rendering() {
     let amounts = Dataset::table("amounts").fields([Field::new("amount", FieldType::Numeric)]);
-    let built = select(amounts)
-        .filter(all([
-            field("amount").gte(f64::INFINITY),
-            field("amount").lte(f64::NEG_INFINITY),
-            field("amount").ne(f64::NAN),
-        ]))
+    let err = select(amounts)
+        .filter(field("amount").gte(19.99))
         .build_rows_pg()
-        .unwrap();
+        .unwrap_err();
 
-    assert_eq!(
-        built.params,
-        vec![
-            BindParam::Text("Infinity".to_owned()),
-            BindParam::Text("-Infinity".to_owned()),
-            BindParam::Text("NaN".to_owned())
-        ]
+    assert!(
+        matches!(
+            err,
+            Error::Core(rqb_core::Error::InvalidValue { ref field, ref message, .. })
+                if field == "amount" && message == "expected integer or numeric string, got f64"
+        ),
+        "{err}"
     );
-    assert!(built.sql.contains("$1::text::numeric"), "{}", built.sql);
-    assert!(built.sql.contains("$2::text::numeric"), "{}", built.sql);
-    assert!(built.sql.contains("$3::text::numeric"), "{}", built.sql);
 }
 
 #[test]
@@ -1489,7 +1482,7 @@ fn renders_group_by_and_aggregates() {
         .build_rows_pg()
         .unwrap();
 
-    assert!(built.sql.starts_with("SELECT \"status\", COUNT(*) AS \"count\", SUM(\"total_cents\")::double precision AS \"total\", AVG(\"total_cents\")::double precision AS \"average\", COUNT(DISTINCT \"email\") AS \"uniqueEmails\", string_agg(\"email\", ',') AS \"emails\" FROM \"order_search_view\""));
+    assert!(built.sql.starts_with("SELECT \"status\", COUNT(*) AS \"count\", SUM(\"total_cents\")::text AS \"total\", AVG(\"total_cents\")::text AS \"average\", COUNT(DISTINCT \"email\") AS \"uniqueEmails\", string_agg(\"email\", ',') AS \"emails\" FROM \"order_search_view\""));
     assert!(
         built
             .sql
@@ -1515,11 +1508,74 @@ fn renders_filter_for_non_json_aggregates() {
         built.sql
     );
     assert!(
-        built.sql.contains("(SUM(\"total_cents\") FILTER (WHERE \"status\" = $2))::double precision AS \"paidTotal\""),
+        built.sql.contains(
+            "(SUM(\"total_cents\") FILTER (WHERE \"status\" = $2))::text AS \"paidTotal\""
+        ),
         "{}",
         built.sql
     );
     assert_eq!(built.params, vec!["paid".into(), "paid".into()]);
+}
+
+#[test]
+fn renders_exact_numeric_aggregate_output_types() {
+    let built = select(typed_values())
+        .agg(sum("a", "sumInt"))
+        .agg(avg("a", "avgInt"))
+        .agg(sum("b", "sumBigInt"))
+        .agg(avg("amount", "avgAmount"))
+        .agg(sum("uintAmount", "sumUint"))
+        .agg(avg("ratio", "avgRatio"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built.sql.contains("SUM(\"a\") AS \"sumInt\""),
+        "{}",
+        built.sql
+    );
+    assert!(
+        built.sql.contains("AVG(\"a\")::text AS \"avgInt\""),
+        "{}",
+        built.sql
+    );
+    assert!(
+        built.sql.contains("SUM(\"b\")::text AS \"sumBigInt\""),
+        "{}",
+        built.sql
+    );
+    assert!(
+        built.sql.contains("AVG(\"amount\")::text AS \"avgAmount\""),
+        "{}",
+        built.sql
+    );
+    assert!(
+        built
+            .sql
+            .contains("SUM(\"uint_amount\"::numeric)::text AS \"sumUint\""),
+        "{}",
+        built.sql
+    );
+    assert!(
+        built.sql.contains("AVG(\"ratio\") AS \"avgRatio\""),
+        "{}",
+        built.sql
+    );
+    assert_eq!(
+        built
+            .columns
+            .iter()
+            .map(SelectColumn::ty)
+            .collect::<Vec<_>>(),
+        [
+            FieldType::BigInt,
+            FieldType::Numeric,
+            FieldType::Numeric,
+            FieldType::Numeric,
+            FieldType::Numeric,
+            FieldType::Float,
+        ]
+    );
 }
 
 #[test]

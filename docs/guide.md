@@ -582,10 +582,10 @@ let rows = select(Dataset::table("app_users").alias("u").fields([ID, EMAIL]))
 
 When aggregates are present and `.group_by(...)` is omitted, rqb groups by selected fields. Aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `json_agg`, and `string_agg`.
 
-Pre-beta caveat: `sum` and `avg` are being tightened to preserve exact numeric
-output for `numeric` and numeric-like domains. See
-[`docs/numeric-policy.md`](numeric-policy.md) and
-[`docs/roadmap.md`](roadmap.md).
+`sum` and `avg` preserve exact numeric output. For integer, bigint, `numeric`,
+and decimal-string domain inputs, deserialize aggregate results as `String`
+unless the output type is known to fit an integer. Use an explicit cast or
+`raw_query` when lossy `float8` output is intentional.
 
 `json_agg` defaults to `[]` for empty aggregate results. Use `json_agg_nullable` when a SQL `NULL` result is part of the API contract.
 Prefer inline aggregate modifiers such as `json_agg(...).filter(...)` and `array_agg(...).order_by(...)`. Alias-based modifiers such as `filter_agg` and `order_within` remain available and validate the aggregate alias; typos fail at build time instead of being ignored.

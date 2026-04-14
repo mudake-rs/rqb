@@ -4,7 +4,7 @@ use crate::sql_expr::{
     BuiltinFunction, FunctionNameStyle, JsonAccessPath, SelectItem, SqlExpr, WindowFunction,
     WindowSpec,
 };
-use crate::types::{FieldType, TypeFamily};
+use crate::types::{FieldType, TypeFamily, TypeSpec};
 use crate::value::Value;
 
 use super::expr::validate_expr;
@@ -619,15 +619,46 @@ pub(super) fn compatible_type(left: FieldType, right: FieldType) -> Option<Field
         return Some(FieldType::Text);
     }
     if left.is_numeric() && right.is_numeric() {
-        return Some(if left == FieldType::Float || right == FieldType::Float {
-            FieldType::Float
-        } else if left == FieldType::Numeric || right == FieldType::Numeric {
-            FieldType::Numeric
-        } else {
-            FieldType::BigInt
-        });
+        return compatible_numeric_type(left, right);
     }
     None
+}
+
+fn compatible_numeric_type(left: FieldType, right: FieldType) -> Option<FieldType> {
+    if left == FieldType::Float || right == FieldType::Float {
+        return match (left, right) {
+            (FieldType::Float, FieldType::Integer | FieldType::BigInt)
+            | (FieldType::Integer | FieldType::BigInt, FieldType::Float) => Some(FieldType::Float),
+            _ => None,
+        };
+    }
+
+    match (numeric_custom_type(left), numeric_custom_type(right)) {
+        (Some(type_spec), None) if is_builtin_exact_integer(right) => {
+            return Some(FieldType::Custom(type_spec));
+        }
+        (None, Some(type_spec)) if is_builtin_exact_integer(left) => {
+            return Some(FieldType::Custom(type_spec));
+        }
+        (Some(_), Some(_)) => return None,
+        _ => {}
+    }
+
+    if left == FieldType::Numeric || right == FieldType::Numeric {
+        return Some(FieldType::Numeric);
+    }
+    Some(FieldType::BigInt)
+}
+
+fn numeric_custom_type(ty: FieldType) -> Option<&'static TypeSpec> {
+    match ty {
+        FieldType::Custom(type_spec) if type_spec.family == TypeFamily::Numeric => Some(type_spec),
+        _ => None,
+    }
+}
+
+fn is_builtin_exact_integer(ty: FieldType) -> bool {
+    matches!(ty, FieldType::Integer | FieldType::BigInt)
 }
 
 fn value_type(value: &Value) -> Option<FieldType> {

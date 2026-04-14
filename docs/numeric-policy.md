@@ -22,13 +22,12 @@ The user-facing rule is:
 RATIO.eq(0.75)       // Float: OK
 PRICE.eq("19.99")   // Numeric: OK, exact
 PRICE.eq(1999)      // Numeric: OK, exact integer
-PRICE.eq(19.99)     // Avoid: f64 already lost decimal intent before rqb sees it
+PRICE.eq(19.99)     // Rejected: f64 already lost decimal intent before rqb sees it
 ```
 
-Current code still accepts `F64` for `FieldType::Numeric` in some builder paths.
-That is a pre-release compatibility hole, not the target API. Before beta, exact
-numeric fields should reject implicit float values or require an explicit cast /
-escape hatch.
+Exact numeric fields reject implicit `f64` values. If lossy floating-point
+behavior is intentional, use a `Float` field or an explicit cast / raw SQL escape
+hatch.
 
 ## Why Not BigDecimal By Default?
 
@@ -93,8 +92,7 @@ The target promotion rules are conservative:
 - `Custom decimal-string domain + Float -> reject`
 - text families can coerce to text where Postgres semantics are still clear
 
-The current code still has open promotion work tracked in
-`local/type-coercion-audit.md`.
+The expression validator follows these rules for server-owned expressions.
 
 ## Aggregates
 
@@ -110,8 +108,9 @@ Target aggregate behavior:
 | decimal-string custom domain | exact string-backed numeric output | exact string-backed numeric output |
 | `Float` | `Float` | `Float` |
 
-Current code still casts `sum` / `avg` to `double precision`. That is tracked as
-a high-priority pre-beta bug because it violates the exact numeric policy.
+The renderer casts exact aggregate outputs to text for serde mapping, so
+`SUM(numeric)` and `AVG(bigint)` can deserialize into `String` without a decimal
+crate or precision loss.
 
 ## Raw SQL
 

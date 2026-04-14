@@ -1,6 +1,6 @@
 use crate::expr::{Expr, Sort};
 use crate::field::{FieldRef, ResolvedField};
-use crate::types::FieldType;
+use crate::types::{FieldType, TypeFamily};
 
 #[derive(Clone, Debug, PartialEq)]
 #[must_use]
@@ -114,8 +114,8 @@ impl Aggregate {
 #[must_use]
 pub enum AggregateType {
     Count,
-    Sum,
-    Avg,
+    Sum(FieldType),
+    Avg(FieldType),
     Min(FieldType),
     Max(FieldType),
     Json,
@@ -151,11 +151,34 @@ impl AggregateType {
     pub fn field_type(&self) -> FieldType {
         match self {
             Self::Count => FieldType::BigInt,
-            Self::Sum | Self::Avg => FieldType::Float,
+            Self::Sum(ty) | Self::Avg(ty) => *ty,
             Self::Min(ty) | Self::Max(ty) => *ty,
             Self::Json => FieldType::Jsonb,
             Self::String => FieldType::Text,
         }
+    }
+}
+
+pub(crate) fn sum_output_type(input: FieldType) -> FieldType {
+    match input {
+        FieldType::Integer => FieldType::BigInt,
+        FieldType::BigInt | FieldType::Numeric => FieldType::Numeric,
+        FieldType::Float => FieldType::Float,
+        FieldType::Custom(type_spec) if type_spec.family == TypeFamily::Numeric => {
+            FieldType::Numeric
+        }
+        _ => FieldType::Float,
+    }
+}
+
+pub(crate) fn avg_output_type(input: FieldType) -> FieldType {
+    match input {
+        FieldType::Float => FieldType::Float,
+        FieldType::Integer | FieldType::BigInt | FieldType::Numeric => FieldType::Numeric,
+        FieldType::Custom(type_spec) if type_spec.family == TypeFamily::Numeric => {
+            FieldType::Numeric
+        }
+        _ => FieldType::Float,
     }
 }
 

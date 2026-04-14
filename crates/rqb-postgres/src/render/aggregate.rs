@@ -1,4 +1,4 @@
-use rqb_core::{ValidatedAggregate, ValidatedExpr};
+use rqb_core::{FieldType, ResolvedField, TypeFamily, ValidatedAggregate, ValidatedExpr};
 
 use crate::Result;
 use crate::helpers::{quote_literal, write_quoted_ident};
@@ -36,36 +36,26 @@ impl Renderer {
                 alias,
                 filter,
             } => {
-                if filter.is_some() {
-                    self.sql.push('(');
-                }
-                self.sql.push_str("SUM(");
-                self.render_column_name(field);
-                self.sql.push(')');
-                self.render_aggregate_filter(filter)?;
-                if filter.is_some() {
-                    self.sql.push(')');
-                }
-                self.sql.push_str("::double precision AS ");
-                write_quoted_ident(&mut self.sql, alias);
+                self.render_scalar_aggregate(
+                    "SUM",
+                    field,
+                    alias,
+                    filter,
+                    aggregate.aggregate_type().field_type(),
+                )?;
             }
             ValidatedAggregate::Avg {
                 field,
                 alias,
                 filter,
             } => {
-                if filter.is_some() {
-                    self.sql.push('(');
-                }
-                self.sql.push_str("AVG(");
-                self.render_column_name(field);
-                self.sql.push(')');
-                self.render_aggregate_filter(filter)?;
-                if filter.is_some() {
-                    self.sql.push(')');
-                }
-                self.sql.push_str("::double precision AS ");
-                write_quoted_ident(&mut self.sql, alias);
+                self.render_scalar_aggregate(
+                    "AVG",
+                    field,
+                    alias,
+                    filter,
+                    aggregate.aggregate_type().field_type(),
+                )?;
             }
             ValidatedAggregate::Min {
                 field,
@@ -224,5 +214,42 @@ impl Renderer {
             self.sql.push(')');
         }
         Ok(())
+    }
+
+    fn render_scalar_aggregate(
+        &mut self,
+        function: &str,
+        field: &ResolvedField,
+        alias: &str,
+        filter: &Option<ValidatedExpr>,
+        output_type: FieldType,
+    ) -> Result<()> {
+        let selection_cast = postgres_selection_cast(output_type);
+        let wrap_for_cast = filter.is_some() && selection_cast.is_some();
+        if wrap_for_cast {
+            self.sql.push('(');
+        }
+        self.sql.push_str(function);
+        self.sql.push('(');
+        self.render_scalar_aggregate_argument(field);
+        self.sql.push(')');
+        self.render_aggregate_filter(filter)?;
+        if wrap_for_cast {
+            self.sql.push(')');
+        }
+        if let Some(cast) = selection_cast {
+            self.sql.push_str(cast);
+        }
+        self.sql.push_str(" AS ");
+        write_quoted_ident(&mut self.sql, alias);
+        Ok(())
+    }
+
+    fn render_scalar_aggregate_argument(&mut self, field: &ResolvedField) {
+        self.render_column_name(field);
+        if matches!(field.ty, FieldType::Custom(type_spec) if type_spec.family == TypeFamily::Numeric)
+        {
+            self.sql.push_str("::numeric");
+        }
     }
 }

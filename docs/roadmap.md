@@ -68,20 +68,19 @@ Done:
   values and typed nulls.
 - `Numeric` and decimal-string custom domains bind and select through text so
   precision is not lost.
+- Exact numeric fields reject implicit `f64` values.
+- Expression promotion rejects `Numeric + Float` and preserves custom numeric
+  domains for integer fallback values.
+- `sum` and `avg` preserve exact output for integer, bigint, numeric, and
+  decimal-string domain inputs.
+- `u64` inputs convert to `I64` when they fit and to decimal strings when they
+  do not, avoiding f64 precision loss.
 - The public numeric policy is documented in `docs/numeric-policy.md`.
 
 Remaining P0 work:
 
-- Reject implicit `Numeric + Float` and `Float -> Numeric` promotion. Users must
-  cast explicitly when they want lossy behavior.
-- Preserve custom numeric domain identity during expression promotion where the
-  result is still that domain.
-- Make `sum` and `avg` preserve exact output for `Integer`, `BigInt`, `Numeric`,
-  and decimal-string domains.
-- Add ergonomic checked support for unsigned inputs without pretending all
-  `u64` values fit into Postgres `int8`.
-- Expand numeric tests across validation, rendering, integration, expressions,
-  aggregates, arrays, domains, and raw SQL guidance.
+- Keep adding numeric regression tests when new expression, operator, aggregate,
+  write, and custom type paths are added.
 
 ### API Naming And Facade Cleanup
 

@@ -81,10 +81,10 @@ fn aggregate_to_json(row: &Row, alias: &str, ty: &AggregateType) -> Result<JsonV
         AggregateType::Count => read_scalar(row, alias, |value: i64| {
             JsonValue::Number(Number::from(value))
         }),
-        AggregateType::Sum | AggregateType::Avg => read_scalar(row, alias, f64_to_json),
-        AggregateType::Min(field_type) | AggregateType::Max(field_type) => {
-            field_to_json(row, alias, *field_type)
-        }
+        AggregateType::Sum(field_type)
+        | AggregateType::Avg(field_type)
+        | AggregateType::Min(field_type)
+        | AggregateType::Max(field_type) => field_to_json(row, alias, *field_type),
         AggregateType::Json => read_scalar(row, alias, |value| value),
         AggregateType::String => read_scalar(row, alias, JsonValue::String),
     }

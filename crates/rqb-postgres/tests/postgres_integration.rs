@@ -330,6 +330,21 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
     assert_eq!(row.amount, inserted);
     assert_eq!(row.amount_history, vec!["42", inserted]);
 
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct WithdrawalTotals {
+        total_amount: String,
+    }
+
+    let totals: WithdrawalTotals = select(withdrawals_table::dataset())
+        .agg(sum(withdrawals_table::AMOUNT, "totalAmount"))
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(
+        totals.total_amount,
+        "115792089237316195423570985008687907853270885385566038138769929686814364207867"
+    );
+
     Ok(())
 }
 
@@ -1498,7 +1513,7 @@ async fn fetch_all_as_deserializes_fields_json_arrays_and_aggregates() -> TestRe
     struct StatusRollup {
         status: order_search::OrderStatus,
         count: i64,
-        total: f64,
+        total: String,
     }
 
     let rollups: Vec<StatusRollup> = select(order_search::dataset())
@@ -1514,7 +1529,7 @@ async fn fetch_all_as_deserializes_fields_json_arrays_and_aggregates() -> TestRe
         .find(|rollup| rollup.status == order_search::OrderStatus::Paid)
         .expect("paid rollup should exist");
     assert_eq!(paid.count, 3);
-    assert_eq!(paid.total, 33_800.0);
+    assert_eq!(paid.total, "33800");
 
     #[derive(Debug, Deserialize)]
     struct UserOrders {

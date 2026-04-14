@@ -29,7 +29,7 @@ struct OrderSummary {
 struct OrderStats {
     status: OrderStatus,
     orders: i64,
-    total_cents: f64,
+    total_cents: String,
 }
 
 #[tokio::main]

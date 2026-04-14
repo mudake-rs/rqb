@@ -776,6 +776,78 @@ fn renders_generic_and_raw_expression_select_items() {
 }
 
 #[test]
+fn renders_json_access_expression_select_items() {
+    let built = select(orders())
+        .select_expr(field("metadata").json("customer").alias("customer"))
+        .select_expr(
+            field("metadata")
+                .json("customer")
+                .json_text("email")
+                .alias("customerEmail"),
+        )
+        .select_expr(field("metadata").json_index(0).alias("firstItem"))
+        .select_expr(field("metadata").json_index_text(-1).alias("lastItemText"))
+        .select_expr(
+            field("metadata")
+                .json_path(["customer", "email"])
+                .alias("customerEmailJson"),
+        )
+        .select_expr(
+            field("metadata")
+                .json_path_text(["customer", "email"])
+                .alias("customerEmailText"),
+        )
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .starts_with("SELECT (\"metadata\" -> $1) AS \"customer\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("((\"metadata\" -> $2) ->> $3) AS \"customerEmail\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("(\"metadata\" -> $4::bigint::int) AS \"firstItem\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("(\"metadata\" ->> $5::bigint::int) AS \"lastItemText\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("(\"metadata\" #> ARRAY[$6, $7]::text[]) AS \"customerEmailJson\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("(\"metadata\" #>> ARRAY[$8, $9]::text[]) AS \"customerEmailText\"")
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("customer".to_owned()),
+            Value::String("customer".to_owned()),
+            Value::String("email".to_owned()),
+            Value::I64(0),
+            Value::I64(-1),
+            Value::String("customer".to_owned()),
+            Value::String("email".to_owned()),
+            Value::String("customer".to_owned()),
+            Value::String("email".to_owned()),
+        ]
+    );
+    assert!(built.cacheable);
+}
+
+#[test]
 fn renders_schema_qualified_sources_and_explicit_offset() {
     let dataset = Dataset::from(rqb_core::Source::table("orders").schema("archive"))
         .fields([Field::new("id", FieldType::Uuid)]);

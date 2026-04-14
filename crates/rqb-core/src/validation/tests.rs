@@ -203,6 +203,86 @@ fn validates_builtin_function_expression_types() {
 }
 
 #[test]
+fn validates_json_access_expression_types() {
+    let query = crate::select(dataset())
+        .select_expr(field("properties").json("customer").alias("customer"))
+        .select_expr(
+            field("properties")
+                .json("customer")
+                .json_text("email")
+                .alias("customerEmail"),
+        )
+        .select_expr(field("properties").json_index(0).alias("firstItem"))
+        .select_expr(
+            field("properties")
+                .json_path(["customer", "email"])
+                .alias("customerEmailJson"),
+        )
+        .select_expr(
+            field("properties")
+                .json_path_text(["customer", "email"])
+                .alias("customerEmailText"),
+        )
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+
+    let columns = validated
+        .columns
+        .iter()
+        .map(crate::SelectColumn::alias)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        columns,
+        [
+            "customer",
+            "customerEmail",
+            "firstItem",
+            "customerEmailJson",
+            "customerEmailText",
+        ]
+    );
+    assert_eq!(validated.select_items[0].ty, FieldType::Jsonb);
+    assert_eq!(validated.select_items[1].ty, FieldType::Text);
+    assert_eq!(validated.select_items[2].ty, FieldType::Jsonb);
+    assert_eq!(validated.select_items[3].ty, FieldType::Jsonb);
+    assert_eq!(validated.select_items[4].ty, FieldType::Text);
+}
+
+#[test]
+fn rejects_invalid_json_access_expressions() {
+    let non_json = crate::select(dataset())
+        .select_expr(field("name").json_text("kind").alias("bad"))
+        .build();
+    let err = ValidatedSelect::new(non_json).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "json" && operator == "expression" && message.contains("expected jsonb")
+    ));
+
+    let empty_path = crate::select(dataset())
+        .select_expr(
+            field("properties")
+                .json_path(Vec::<String>::new())
+                .alias("bad"),
+        )
+        .build();
+    let err = ValidatedSelect::new(empty_path).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "json" && operator == "expression" && message.contains("non-empty JSON path")
+    ));
+}
+
+#[test]
 fn rejects_builtin_function_expression_type_mismatches() {
     let bad_lower = crate::select(dataset())
         .select_expr(lower(field("score")).alias("bad"))

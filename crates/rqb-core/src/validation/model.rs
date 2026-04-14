@@ -5,7 +5,7 @@ use crate::field::ResolvedField;
 use crate::query::SetOperator;
 use crate::raw::RawSql;
 use crate::request::RowLock;
-use crate::sql_expr::FunctionNameStyle;
+use crate::sql_expr::{FunctionNameStyle, JsonAccessPath};
 use crate::types::FieldType;
 use crate::value::Value;
 
@@ -99,6 +99,12 @@ pub enum ValidatedSqlExpr {
         ty: FieldType,
         name_style: FunctionNameStyle,
     },
+    JsonAccess {
+        expr: Box<ValidatedSqlExpr>,
+        path: JsonAccessPath,
+        text: bool,
+        ty: FieldType,
+    },
     Coalesce {
         args: Vec<ValidatedSqlExpr>,
         ty: FieldType,
@@ -121,6 +127,7 @@ impl ValidatedSqlExpr {
             Self::Value { ty, .. }
             | Self::Raw { ty, .. }
             | Self::Function { ty, .. }
+            | Self::JsonAccess { ty, .. }
             | Self::Coalesce { ty, .. }
             | Self::Case { ty, .. }
             | Self::Cast { ty, .. } => *ty,

@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use crate::field::ResolvedField;
-use crate::sql_expr::{BuiltinFunction, FunctionNameStyle, SelectItem, SqlExpr};
+use crate::sql_expr::{BuiltinFunction, FunctionNameStyle, JsonAccessPath, SelectItem, SqlExpr};
 use crate::types::{FieldType, TypeFamily};
 use crate::value::Value;
 
@@ -104,6 +104,30 @@ fn validate_sql_expr_in_context(
         SqlExpr::BuiltinFunction { function, args } => {
             validate_builtin_function(scope, *function, args, context)?
         }
+        SqlExpr::JsonAccess { expr, path, text } => {
+            let expr = validate_sql_expr_in_context(scope, expr, context)?;
+            validate_json_access_path(path)?;
+            if !expr.ty().is_jsonb() {
+                return Err(Error::InvalidValue {
+                    field: "json".to_owned(),
+                    operator: "expression".to_owned(),
+                    message: format!(
+                        "expected jsonb expression, got `{}`",
+                        expr.ty().display_name()
+                    ),
+                });
+            }
+            ValidatedSqlExpr::JsonAccess {
+                expr: Box::new(expr),
+                path: path.clone(),
+                text: *text,
+                ty: if *text {
+                    FieldType::Text
+                } else {
+                    FieldType::Jsonb
+                },
+            }
+        }
         SqlExpr::Coalesce(args) => {
             if args.is_empty() {
                 return Err(Error::UnknownExpressionType {
@@ -168,6 +192,7 @@ pub(super) fn collect_sql_expr_fields(expr: &ValidatedSqlExpr, output: &mut Vec<
                 collect_sql_expr_fields(arg, output);
             }
         }
+        ValidatedSqlExpr::JsonAccess { expr, .. } => collect_sql_expr_fields(expr, output),
         ValidatedSqlExpr::Case {
             branches,
             otherwise,
@@ -301,6 +326,17 @@ fn validate_builtin_function_signature(
             )
         }
     }
+}
+
+fn validate_json_access_path(path: &JsonAccessPath) -> Result<()> {
+    if matches!(path, JsonAccessPath::Path(segments) if segments.is_empty()) {
+        return Err(Error::InvalidValue {
+            field: "json".to_owned(),
+            operator: "expression".to_owned(),
+            message: "expected non-empty JSON path".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 fn require_arity(

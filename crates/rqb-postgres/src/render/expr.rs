@@ -1,4 +1,6 @@
-use rqb_core::{FunctionNameStyle, LogicalOp, ValidatedExpr, ValidatedSqlExpr};
+use rqb_core::{
+    FieldType, FunctionNameStyle, JsonAccessPath, LogicalOp, ValidatedExpr, ValidatedSqlExpr, Value,
+};
 
 use crate::Result;
 use crate::helpers::write_quoted_ident;
@@ -63,6 +65,9 @@ impl Renderer {
                 self.render_sql_expr_list(args)?;
                 self.sql.push(')');
             }
+            ValidatedSqlExpr::JsonAccess {
+                expr, path, text, ..
+            } => self.render_json_access(expr, path, *text)?,
             ValidatedSqlExpr::Coalesce { args, .. } => {
                 self.sql.push_str("COALESCE(");
                 self.render_sql_expr_list(args)?;
@@ -92,6 +97,32 @@ impl Renderer {
                 self.sql.push(')');
             }
         }
+        Ok(())
+    }
+
+    fn render_json_access(
+        &mut self,
+        expr: &ValidatedSqlExpr,
+        path: &JsonAccessPath,
+        text: bool,
+    ) -> Result<()> {
+        self.sql.push('(');
+        self.render_sql_expr(expr)?;
+        match path {
+            JsonAccessPath::Key(key) => {
+                self.sql.push_str(if text { " ->> " } else { " -> " });
+                self.push_owned_param(Value::String(key.clone()));
+            }
+            JsonAccessPath::Index(index) => {
+                self.sql.push_str(if text { " ->> " } else { " -> " });
+                self.push_typed_param(&Value::I64(i64::from(*index)), FieldType::Integer);
+            }
+            JsonAccessPath::Path(path) => {
+                self.sql.push_str(if text { " #>> " } else { " #> " });
+                self.render_json_path(path);
+            }
+        }
+        self.sql.push(')');
         Ok(())
     }
 

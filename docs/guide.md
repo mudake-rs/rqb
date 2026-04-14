@@ -229,6 +229,23 @@ insert(orders()).value(&new_order);
 insert(orders()).values(&new_orders);
 ```
 
+By default, the derive maps a Rust field name to the generated uppercase field
+constant with the same name: `user_id` maps to `USER_ID`. Use
+`#[rqb(field = orders::USER_ID)]` when the DTO field name differs from the SQL
+field, and `#[rqb(skip)]` for request-only fields that must not be written:
+
+```rust
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = orders)]
+struct CreateOrder {
+    #[rqb(field = orders::USER_ID)]
+    customer_id: uuid::Uuid,
+    status: String,
+    #[rqb(skip)]
+    request_id: String,
+}
+```
+
 Upsert:
 
 ```rust
@@ -310,6 +327,9 @@ For patch DTOs, put `skip_none` on the `#[rqb(...)]` attribute to skip `Option::
 fields. Without it, `None` means an explicit SQL `NULL` assignment.
 `#[rqb(json)]` is only needed for structured JSONB payload fields such as
 `OrderMetadata`; `serde_json::Value` fields convert directly.
+
+Use `#[rqb(field = orders::STATUS)]` on a field when the patch DTO uses a
+different Rust name than the generated field constant.
 
 ### DELETE
 

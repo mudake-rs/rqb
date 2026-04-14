@@ -67,6 +67,15 @@ struct NewMetric {
     ratio: f64,
 }
 
+#[derive(WriteRecord)]
+#[rqb(fields = users)]
+struct RenamedUserInput {
+    #[rqb(field = users::EMAIL)]
+    login_email: String,
+    #[rqb(skip)]
+    request_id: String,
+}
+
 #[test]
 fn write_record_derive_maps_fields_directly() {
     let row = NewUser {
@@ -162,6 +171,20 @@ fn write_record_derive_maps_optional_json_and_bytes_to_sql_null() {
             ),
             (users::AVATAR, Value::Bytes(vec![4, 5, 6])),
         ]
+    );
+}
+
+#[test]
+fn write_record_derive_supports_field_override_and_skip() {
+    let input = RenamedUserInput {
+        login_email: "ada@example.com".to_owned(),
+        request_id: "req-1".to_owned(),
+    };
+
+    assert_eq!(input.request_id, "req-1");
+    assert_eq!(
+        input.write_fields().unwrap(),
+        vec![(users::EMAIL, Value::from("ada@example.com"))]
     );
 }
 

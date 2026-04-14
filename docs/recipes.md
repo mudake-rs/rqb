@@ -107,6 +107,20 @@ before `set_from` builds assignments. Without it, `None` becomes an explicit SQL
 `NULL`, which is useful for intentional nulling but wrong for most patch DTOs.
 Use `.set_null(field)` for explicit SQL `NULL` assignments.
 
+When a request field name differs from the generated SQL field constant, use an
+explicit field mapping:
+
+```rust
+#[derive(serde::Deserialize, rqb::WriteRecord)]
+#[rqb(fields = users, skip_none)]
+struct PatchUser {
+    #[rqb(field = users::EMAIL)]
+    login: Option<String>,
+    #[rqb(skip)]
+    request_id: String,
+}
+```
+
 ## Upsert Create Or Update
 
 ```rust

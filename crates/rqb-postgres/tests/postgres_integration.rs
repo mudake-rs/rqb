@@ -1,9 +1,9 @@
 use pretty_assertions::assert_eq;
 use rqb_core::{
-    Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
-    SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast, coalesce, count, cte,
-    delete, excluded, exists, field, insert, lower, not_exists, raw, raw_query, select,
-    set_default, set_expr, sum, union, union_all, update, upper,
+    Dataset, DbEnum, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy,
+    SearchRequest, SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast,
+    coalesce, count, cte, delete, excluded, exists, field, insert, lower, not_exists, raw,
+    raw_query, select, set_default, set_expr, sum, union, union_all, update, upper,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -472,6 +472,8 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
     struct ExpressionRow {
         email: String,
         label: String,
+        campaign: String,
+        score_text: String,
         #[serde(rename = "statusLabel")]
         status_label: String,
         #[serde(rename = "totalText")]
@@ -482,6 +484,16 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
         .select([order_search::EMAIL])
         .select_expr(
             coalesce([order_search::CHANNEL.expr(), order_search::EMAIL.expr()]).alias("label"),
+        )
+        .select_expr(
+            order_search::METADATA
+                .json_text("campaign")
+                .alias("campaign"),
+        )
+        .select_expr(
+            order_search::METADATA
+                .json_path_text(["score"])
+                .alias("score_text"),
         )
         .select_expr(
             case_when(order_search::STATUS.eq(order_search::OrderStatus::Paid))
@@ -497,6 +509,8 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].email, "ada@example.com");
     assert_eq!(rows[0].label, "web");
+    assert_eq!(rows[0].campaign, "spring");
+    assert_eq!(rows[0].score_text, "92");
     assert_eq!(rows[0].status_label, "settled");
     assert_eq!(rows[0].total_text, "15900");
     Ok(())

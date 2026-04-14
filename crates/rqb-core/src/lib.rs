@@ -44,8 +44,9 @@ pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
 pub use sql_expr::{
     BuiltinFunction, CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, FunctionNameStyle,
-    IntoSqlExpr, SelectItem, SqlExpr, case_when, cast, coalesce, date_trunc, excluded, func,
-    gen_random_uuid, greatest, least, length, lower, now, nullif, raw_expr, trim, upper,
+    IntoSqlExpr, JsonAccessPath, SelectItem, SqlExpr, case_when, cast, coalesce, date_trunc,
+    excluded, func, gen_random_uuid, greatest, least, length, lower, now, nullif, raw_expr, trim,
+    upper,
 };
 pub use types::{
     DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,

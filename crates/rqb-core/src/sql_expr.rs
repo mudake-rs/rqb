@@ -23,6 +23,11 @@ pub enum SqlExpr {
         function: BuiltinFunction,
         args: Vec<SqlExpr>,
     },
+    JsonAccess {
+        expr: Box<SqlExpr>,
+        path: JsonAccessPath,
+        text: bool,
+    },
     Coalesce(Vec<SqlExpr>),
     Case {
         branches: Vec<CaseBranch>,
@@ -71,6 +76,13 @@ pub enum FunctionNameStyle {
     Raw,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum JsonAccessPath {
+    Key(String),
+    Index(i32),
+    Path(Vec<String>),
+}
+
 impl SqlExpr {
     pub fn alias(self, alias: impl Into<String>) -> SelectItem {
         SelectItem {
@@ -83,6 +95,52 @@ impl SqlExpr {
         Self::Cast {
             expr: Box::new(self),
             ty,
+        }
+    }
+
+    pub fn json(self, key: impl Into<String>) -> Self {
+        self.json_access(JsonAccessPath::Key(key.into()), false)
+    }
+
+    pub fn json_text(self, key: impl Into<String>) -> Self {
+        self.json_access(JsonAccessPath::Key(key.into()), true)
+    }
+
+    pub fn json_index(self, index: i32) -> Self {
+        self.json_access(JsonAccessPath::Index(index), false)
+    }
+
+    pub fn json_index_text(self, index: i32) -> Self {
+        self.json_access(JsonAccessPath::Index(index), true)
+    }
+
+    pub fn json_path<I, S>(self, path: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.json_access(
+            JsonAccessPath::Path(path.into_iter().map(Into::into).collect()),
+            false,
+        )
+    }
+
+    pub fn json_path_text<I, S>(self, path: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.json_access(
+            JsonAccessPath::Path(path.into_iter().map(Into::into).collect()),
+            true,
+        )
+    }
+
+    fn json_access(self, path: JsonAccessPath, text: bool) -> Self {
+        Self::JsonAccess {
+            expr: Box::new(self),
+            path,
+            text,
         }
     }
 }
@@ -159,6 +217,52 @@ impl CaseBuilder {
 
 pub trait IntoSqlExpr {
     fn into_sql_expr(self) -> SqlExpr;
+
+    fn json(self, key: impl Into<String>) -> SqlExpr
+    where
+        Self: Sized,
+    {
+        self.into_sql_expr().json(key)
+    }
+
+    fn json_text(self, key: impl Into<String>) -> SqlExpr
+    where
+        Self: Sized,
+    {
+        self.into_sql_expr().json_text(key)
+    }
+
+    fn json_index(self, index: i32) -> SqlExpr
+    where
+        Self: Sized,
+    {
+        self.into_sql_expr().json_index(index)
+    }
+
+    fn json_index_text(self, index: i32) -> SqlExpr
+    where
+        Self: Sized,
+    {
+        self.into_sql_expr().json_index_text(index)
+    }
+
+    fn json_path<I, S>(self, path: I) -> SqlExpr
+    where
+        Self: Sized,
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.into_sql_expr().json_path(path)
+    }
+
+    fn json_path_text<I, S>(self, path: I) -> SqlExpr
+    where
+        Self: Sized,
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.into_sql_expr().json_path_text(path)
+    }
 }
 
 impl IntoSqlExpr for SqlExpr {

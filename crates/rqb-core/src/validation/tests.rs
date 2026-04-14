@@ -664,7 +664,7 @@ fn lowers_user_predicates_to_concrete_validated_shapes() {
     let query = crate::select(dataset())
         .filter(crate::all([
             field("name").contains("ada"),
-            field("network").contains("10.1.2.0/24"),
+            field("network").covers("10.1.2.0/24"),
             field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
             field("score").between(1, 10),
             field("state").is_in(["active", "archived"]),
@@ -786,12 +786,34 @@ fn accepts_native_postgres_type_values_and_operators() {
             field("displayName").eq("Ada"),
             field("payload").eq(Value::bytes([0xde, 0xad])),
             field("ipAddr").contained_by("10.0.0.0/8"),
-            field("network").contains("10.1.2.0/24"),
+            field("network").covers("10.1.2.0/24"),
             field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
         ]))
         .build();
 
     ValidatedSelect::new(query).unwrap();
+}
+
+#[test]
+fn rejects_text_contains_on_range_and_network_fields() {
+    for (field_name, field_type) in [("network", "cidr"), ("activeWindow", "tstzrange")] {
+        let query = crate::select(dataset())
+            .filter(field(field_name).contains("10.1.2.0/24"))
+            .build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+
+        assert!(
+            matches!(
+                err,
+                Error::UnsupportedOperator {
+                    ref field,
+                    ref operator,
+                    field_type: ref actual_type,
+                } if field == field_name && operator == "contains" && actual_type == field_type
+            ),
+            "{err}"
+        );
+    }
 }
 
 #[test]
@@ -944,8 +966,8 @@ fn rejects_json_path_on_non_jsonb_fields() {
 fn deserializes_api_request_without_runtime_generics() {
     let request: crate::SearchRequest = serde_json::from_value(serde_json::json!({
         "fields": ["id", "name"],
-        "sort": [{ "field": "name", "dir": "ASC" }],
-        "query": {
+        "sort": [{ "field": "name", "dir": "asc" }],
+        "filter": {
             "logical": "or",
             "predicates": [
                 { "field": "name", "operator": "contains", "value": "hero" },
@@ -1316,7 +1338,7 @@ fn accepts_exact_decimal_strings_for_custom_numeric_domain_arrays() {
     let query = crate::select(dataset())
         .filter(crate::all([
             field("uintAmounts").contains_all(["900719925474099312345678901234567890"]),
-            field("uintAmounts").has(42_i64),
+            field("uintAmounts").contains_element(42_i64),
         ]))
         .build();
 
@@ -1326,7 +1348,7 @@ fn accepts_exact_decimal_strings_for_custom_numeric_domain_arrays() {
 #[test]
 fn validates_custom_numeric_domains_from_json_requests() {
     let request: crate::SearchRequest = serde_json::from_value(serde_json::json!({
-        "query": {
+        "filter": {
             "field": "uintAmount",
             "operator": "gte",
             "value": "900719925474099312345678901234567890"
@@ -1367,7 +1389,7 @@ fn rejects_inexact_values_for_decimal_string_domain_arrays() {
             "expected integer or decimal string, got f64",
         ),
         (
-            field("uintAmounts").has("not-a-number"),
+            field("uintAmounts").contains_element("not-a-number"),
             "expected integer or decimal string, got string",
         ),
     ] {
@@ -1391,7 +1413,7 @@ fn rejects_array_operator_values_that_do_not_match_element_type() {
     );
 
     let query = crate::select(dataset())
-        .filter(field("tags").has(1))
+        .filter(field("tags").contains_element(1))
         .build();
     let err = ValidatedSelect::new(query).unwrap_err();
     assert!(
@@ -1442,7 +1464,7 @@ fn accepts_rust_enum_values_for_enum_fields() {
             field("state").eq(AssetState::Active),
             field("state").gte(AssetState::Active),
             field("state").not_in([AssetState::Archived]),
-            field("stateHistory").has(AssetState::Archived),
+            field("stateHistory").contains_element(AssetState::Archived),
             field("stateHistory").contains_any([AssetState::Active, AssetState::Archived]),
         ]))
         .build();
@@ -1832,7 +1854,7 @@ fn rejects_regex_on_uuid_fields() {
 #[test]
 fn rejects_array_contains_on_non_array_field() {
     let query = crate::select(dataset())
-        .filter(field("name").has("x"))
+        .filter(field("name").contains_element("x"))
         .build();
     let err = ValidatedSelect::new(query).unwrap_err();
     assert!(matches!(err, Error::UnsupportedOperator { .. }));

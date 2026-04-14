@@ -8,14 +8,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request: SearchRequest = serde_json::from_str(
         r#"{
             "fields": ["id", "email", "status", "totalCents"],
-            "query": {
+            "filter": {
                 "logical": "and",
                 "predicates": [
                     { "field": "status", "operator": "equals", "value": "paid" },
                     { "field": "metadata.score", "operator": "gte", "value": 80 }
                 ]
             },
-            "sort": [{ "field": "totalCents", "dir": "DESC" }],
+            "sort": [{ "field": "totalCents", "dir": "desc" }],
             "limit": 10
         }"#,
     )?;

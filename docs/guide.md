@@ -59,7 +59,7 @@ let query = select(orders())
     .fields([ID, STATUS, TOTAL_CENTS])
     .filter(all([
         STATUS.eq("paid"),
-        any([TAGS.has("vip"), METADATA.path("gift").eq(true)]),
+        any([TAGS.contains_element("vip"), METADATA.path("gift").eq(true)]),
         not(TOTAL_CENTS.lt(1000)),
     ]))
     .order_by(CREATED_AT.desc().nulls_last())
@@ -161,8 +161,8 @@ Lock modes: `.for_update()`, `.for_no_key_update()`, `.for_share()`, `.for_key_s
 ```json
 {
   "fields": ["id", "status", "totalCents"],
-  "sort": [{ "field": "createdAt", "dir": "DESC" }],
-  "query": {
+  "sort": [{ "field": "createdAt", "dir": "desc" }],
+  "filter": {
     "logical": "and",
     "predicates": [
       { "field": "status", "operator": "equals", "value": "paid" },
@@ -600,11 +600,11 @@ Prefer inline aggregate modifiers such as `json_agg(...).filter(...)` and `array
 | `between`, `not_between` | range comparison | numeric, temporal, text, enum, numeric JSON paths |
 | `is_in`, `not_in` | `IN (...)`, `NOT IN (...)` | scalar, enum |
 | `in_subquery`, `not_in_subquery` | `IN (SELECT ...)`, `NOT IN (SELECT ...)` | scalar, enum |
-| `contains`, `not_contains`, `starts_with`, `ends_with` | `ILIKE`; range/network containment for `contains` | text, uuid, JSON paths, ranges, inet/cidr |
+| `contains`, `not_contains`, `starts_with`, `ends_with` | `ILIKE` | text, uuid, JSON paths |
 | `not_starts_with`, `not_ends_with` | negated `ILIKE` | text, uuid, JSON paths |
 | `regex`, `not_regex` | `~*`, `!~*` | text, JSON paths |
-| `contained_by`, `overlaps` | `<@` / `&&`; network uses `<<=` / `&&` | ranges, inet/cidr |
-| `has`, `not_has` | element `= ANY(array)` | arrays |
+| `covers`, `not_covers`, `contained_by`, `overlaps` | `@>`, `<@`, `&&`; network uses `>>=`, `<<=`, `&&` | ranges, inet/cidr |
+| `contains_element`, `not_contains_element` | element `= ANY(array)` | arrays |
 | `contains_any`, `contains_all` | `&&`, `@>` | arrays |
 | `is_empty`, `is_not_empty` | `cardinality(...)` | arrays |
 | `elem_match` | JSONB/array containment | arrays, JSONB |

@@ -84,25 +84,36 @@ Remaining P0 work:
 
 ### API Naming And Facade Cleanup
 
-Fix misleading names while the API is still private:
+Done:
 
-- Rename write-builder methods whose names collide with SELECT semantics.
-- Rename overloaded operators where one name hides materially different SQL
-  behavior, especially text containment versus range/network containment.
-- Replace overly generic JSON key names such as `has` / `not_has` with names
-  that describe the Postgres operation.
-- Decide whether `fetch_as` should mean "all rows" or become `fetch_all_as`.
-- Keep the facade explicit. User-facing types should be available from `rqb::*`
-  and `rqb::prelude::*`; internal validated models should not leak through the
-  facade.
+- Write conflict filters use `conflict_filter`, not the general SELECT-style
+  `filter` name.
+- `fetch_all_as`, `fetch_one_as`, and `fetch_optional_as` make cardinality
+  explicit across select, write, and raw execution.
+- `rqb::Error` and `rqb::Result` point at the facade-level Postgres error path;
+  core validation errors are available as `rqb::CoreError`.
+- Text substring matching uses `contains`; range/network containment uses
+  `covers`, `contained_by`, and `overlaps`.
+- Array scalar membership uses `contains_element` and
+  `not_contains_element`.
+- The facade exports are explicit; internal validated models do not leak through
+  `rqb::*`.
+
+Ongoing:
+
+- Keep checking naming when new operators are added.
 
 ### JSON Search API Shape
 
+Done:
+
+- Request JSON uses `filter`, not `query`.
+- Sort directions deserialize as lowercase `asc` / `desc`.
+- JSON SearchRequest remains limited to fields, filter, sort, limit, and offset.
+
 Break and clean the JSON DSL before beta:
 
-- Rename request `query` to `filter` if that is the final user-facing word.
 - Make logical expression shape consistent and easy to produce from clients.
-- Normalize sort direction casing.
 - Keep JSON SearchRequest away from joins, CTEs, raw SQL, computed aliases, and
   arbitrary expressions.
 - Put SearchRequest serde support behind a default-on feature if it materially
@@ -120,11 +131,11 @@ Done:
   `detail()`, and `hint()` are available.
 - Single-variant `is_*` helpers were pruned where they did not carry real
   ergonomic value.
+- Facade-level `rqb::Error` and `rqb::Result<T>` are the normal application
+  error path.
 
 Remaining P0 work:
 
-- Decide the facade-level error path: whether application code should write
-  `rqb::Result<T>` instead of `rqb::postgres::Result<T>`.
 - Show retryable error handling and constraint mapping in docs and samples.
 
 ### Docs And Samples

@@ -149,10 +149,12 @@ ValidatedExpr
 logical composition, while `render::predicate` mechanically renders concrete
 predicate shapes.
 
-`OperatorCategory::ContainsDispatch` is intentionally type-dependent: validation
-lowers `contains` / `notContains` to either text-like `LIKE` predicates or
-range/network containment predicates. The renderer only sees the concrete
-lowered shape.
+Text matching and containment are deliberately separate API concepts. Rust
+methods `contains` / `not_contains` and JSON operators `contains` /
+`notContains` lower only to text-like `LIKE` predicates. Range and network
+containment use Rust methods `covers` / `not_covers`, `contained_by`, and
+`overlaps`, with matching JSON operators `covers`, `notCovers`, `containedBy`,
+and `overlaps`. The renderer only sees the concrete lowered predicate shape.
 
 ### SQL Value Expressions Are Server-Owned
 

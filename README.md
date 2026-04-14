@@ -125,7 +125,7 @@ The trusted query shape stays in Rust, while untrusted client search input is li
 `SearchRequest` is the JSON API surface. It supports:
 
 - `fields`
-- `query`
+- `filter`
 - `sort`
 - `limit`
 - `offset`
@@ -135,8 +135,8 @@ Example HTTP body:
 ```json
 {
   "fields": ["id", "email", "status", "totalCents"],
-  "sort": [{ "field": "createdAt", "dir": "DESC" }],
-  "query": {
+  "sort": [{ "field": "createdAt", "dir": "desc" }],
+  "filter": {
     "logical": "and",
     "predicates": [
       { "field": "status", "operator": "equals", "value": "paid" },

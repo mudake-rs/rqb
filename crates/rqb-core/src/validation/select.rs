@@ -89,7 +89,7 @@ impl ValidatedSelect {
 
         let filter = query
             .request
-            .query
+            .filter
             .as_ref()
             .map(|expr| validate_expr(&scope, expr, ExprContext::Filter))
             .transpose()?;

@@ -272,7 +272,7 @@ fn renders_custom_numeric_domain_arrays_losslessly() {
         .fields(["uintAmounts"])
         .filter(all([
             field("uintAmounts").contains_all(["900719925474099312345678901234567890"]),
-            field("uintAmounts").has(42_i64),
+            field("uintAmounts").contains_element(42_i64),
         ]))
         .build_rows_pg()
         .unwrap();
@@ -571,7 +571,7 @@ fn renders_native_postgres_type_casts_and_operators() {
             field("displayName").eq("ada"),
             field("payload").eq(Value::bytes([0xde, 0xad])),
             field("ipAddr").contained_by("10.0.0.0/8"),
-            field("network").contains("10.1.2.0/24"),
+            field("network").covers("10.1.2.0/24"),
             field("activeWindow").overlaps("[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)"),
             field("localWindow").contained_by("[2026-01-01 00:00:00,2026-04-01 00:00:00)"),
             field("createdAt").eq("2026-02-01T00:00:00Z"),
@@ -603,6 +603,26 @@ fn renders_native_postgres_type_casts_and_operators() {
     assert!(built.sql.contains("\"local_window\" <@ $6::text::tsrange"));
     assert!(built.sql.contains("$7::text::timestamptz"));
     assert_eq!(built.params[1], BindParam::Bytes(vec![0xde, 0xad]));
+}
+
+#[test]
+fn renders_range_and_network_covers_operators() {
+    let built = select(pg_type_examples())
+        .filter(all([
+            field("network").covers("10.1.2.0/24"),
+            field("network").not_covers("10.9.0.0/16"),
+            field("activeWindow").covers("[2026-02-10T00:00:00Z,2026-02-11T00:00:00Z)"),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"network\" >>= $1::text::cidr"));
+    assert!(built.sql.contains("NOT (\"network\" >>= $2::text::cidr)"));
+    assert!(
+        built
+            .sql
+            .contains("\"active_window\" @> $3::text::tstzrange")
+    );
 }
 
 #[test]
@@ -1722,7 +1742,7 @@ fn renders_other_lock_modes_and_nulls_first() {
 #[test]
 fn request_merges_with_existing_filter() {
     let request = SearchRequest {
-        query: Some(field("status").eq("paid")),
+        filter: Some(field("status").eq("paid")),
         limit: Some(5),
         ..SearchRequest::new()
     };
@@ -1830,7 +1850,7 @@ fn replace_filter_keeps_explicit_replace_semantics() {
 #[test]
 fn replace_request_keeps_explicit_replace_semantics() {
     let request = SearchRequest {
-        query: Some(field("status").eq("paid")),
+        filter: Some(field("status").eq("paid")),
         ..SearchRequest::new()
     };
 
@@ -2884,7 +2904,7 @@ fn renders_enum_casts() {
         .filter(all([
             field("status").eq(OrderStatus::Paid),
             field("status").not_in([OrderStatus::Draft, OrderStatus::Cancelled]),
-            field("statusHistory").has(OrderStatus::Paid),
+            field("statusHistory").contains_element(OrderStatus::Paid),
             field("statusHistory").contains_any([OrderStatus::Paid, OrderStatus::Refunded]),
         ]))
         .build_rows_pg()
@@ -2995,7 +3015,7 @@ fn renders_nulls_order() {
 #[test]
 fn renders_array_contains_scalar() {
     let built = select(orders())
-        .filter(field("tags").has("vip"))
+        .filter(field("tags").contains_element("vip"))
         .build_rows_pg()
         .unwrap();
 
@@ -3006,7 +3026,7 @@ fn renders_array_contains_scalar() {
 #[test]
 fn renders_array_not_contains() {
     let built = select(orders())
-        .filter(field("tags").not_has("vip"))
+        .filter(field("tags").not_contains_element("vip"))
         .build_rows_pg()
         .unwrap();
 

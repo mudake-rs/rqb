@@ -205,8 +205,8 @@ rqb treats that as a first-class use case:
 ```json
 {
   "fields": ["id", "status", "totalCents"],
-  "sort": [{ "field": "createdAt", "dir": "DESC" }],
-  "query": {
+  "sort": [{ "field": "createdAt", "dir": "desc" }],
+  "filter": {
     "logical": "and",
     "predicates": [
       { "field": "status", "operator": "equals", "value": "paid" },
@@ -383,7 +383,7 @@ The same predicates can be accepted from a JSON `SearchRequest` if the field all
 
 ```json
 {
-  "query": {
+  "filter": {
     "predicates": [
       { "field": "metadata.campaign", "operator": "equals", "value": "spring" },
       { "field": "metadata.score", "operator": "gte", "value": 80 }

@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 app_users::EMAIL.ends_with("@example.com"),
                 app_users::PROFILE.path("country").eq("NL"),
             ]),
-            not(app_users::TAGS.has("blocked")),
+            not(app_users::TAGS.contains_element("blocked")),
         ]))
         .order_by(app_users::CREATED_AT.desc())
         .fetch_all_as::<UserId>(&db)

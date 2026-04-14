@@ -162,37 +162,45 @@ impl WindowFunctionBuilder {
 #[must_use]
 pub struct OffsetWindowFunctionBuilder {
     function: WindowFunction,
-    args: Vec<SqlExpr>,
+    value: SqlExpr,
+    offset: Option<SqlExpr>,
+    default: Option<SqlExpr>,
 }
 
 impl OffsetWindowFunctionBuilder {
     pub fn offset(mut self, offset: impl IntoSqlExpr) -> Self {
-        if self.args.len() == 1 {
-            self.args.push(offset.into_sql_expr());
-        } else {
-            self.args[1] = offset.into_sql_expr();
-        }
+        self.offset = Some(offset.into_sql_expr());
         self
     }
 
     pub fn default(mut self, value: impl IntoSqlExpr) -> Self {
-        if self.args.len() == 1 {
-            self.args.push(1.into_sql_expr());
-        }
-        if self.args.len() == 2 {
-            self.args.push(value.into_sql_expr());
-        } else {
-            self.args[2] = value.into_sql_expr();
-        }
+        self.default = Some(value.into_sql_expr());
         self
     }
 
     pub fn over(self, spec: WindowSpec) -> SqlExpr {
         SqlExpr::Window {
             function: self.function,
-            args: self.args,
+            args: self.into_args(),
             spec,
         }
+    }
+
+    fn into_args(self) -> Vec<SqlExpr> {
+        let mut args = vec![self.value];
+        match (self.offset, self.default) {
+            (Some(offset), Some(default)) => {
+                args.push(offset);
+                args.push(default);
+            }
+            (Some(offset), None) => args.push(offset),
+            (None, Some(default)) => {
+                args.push(1.into_sql_expr());
+                args.push(default);
+            }
+            (None, None) => {}
+        }
+        args
     }
 }
 
@@ -539,7 +547,9 @@ fn offset_window_function(
 ) -> OffsetWindowFunctionBuilder {
     OffsetWindowFunctionBuilder {
         function,
-        args: vec![expr.into_sql_expr()],
+        value: expr.into_sql_expr(),
+        offset: None,
+        default: None,
     }
 }
 

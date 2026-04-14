@@ -2,8 +2,8 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
     SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast, coalesce, count, cte,
-    delete, excluded, exists, field, func, insert, not_exists, raw, raw_query, select, set_default,
-    set_expr, sum, union, union_all, update,
+    delete, excluded, exists, field, insert, lower, not_exists, raw, raw_query, select,
+    set_default, set_expr, sum, union, union_all, update, upper,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -1020,18 +1020,11 @@ async fn executes_insert_update_delete_and_upsert() -> TestResult {
     assert_eq!(updated.payload["updated"], true);
 
     let expression_updated: EventExpressionRow = update(events_table::dataset())
-        .set_expr(
-            events_table::EVENT_TYPE,
-            func("upper", [events_table::EVENT_TYPE.expr()]).returns(FieldType::Text),
-        )
+        .set_expr(events_table::EVENT_TYPE, upper(events_table::EVENT_TYPE))
         .set_default(events_table::PAYLOAD)
         .filter(events_table::ID.eq(event_id))
         .returning([events_table::EVENT_TYPE, events_table::PAYLOAD])
-        .returning_expr(
-            func("lower", [events_table::EVENT_TYPE.expr()])
-                .returns(FieldType::Text)
-                .alias("eventTypeLower"),
-        )
+        .returning_expr(lower(events_table::EVENT_TYPE).alias("eventTypeLower"))
         .fetch_one_as(&client)
         .await?;
     assert_eq!(expression_updated.event_type, "RQB-UPDATED");

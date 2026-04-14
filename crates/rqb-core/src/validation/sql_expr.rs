@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::field::ResolvedField;
-use crate::sql_expr::{SelectItem, SqlExpr};
-use crate::types::FieldType;
+use crate::sql_expr::{BuiltinFunction, FunctionNameStyle, SelectItem, SqlExpr};
+use crate::types::{FieldType, TypeFamily};
 use crate::value::Value;
 
 use super::expr::validate_expr;
@@ -99,7 +99,11 @@ fn validate_sql_expr_in_context(
             name: name.clone(),
             args: validate_sql_exprs(scope, args, context)?,
             ty: *ty,
+            name_style: FunctionNameStyle::Quoted,
         },
+        SqlExpr::BuiltinFunction { function, args } => {
+            validate_builtin_function(scope, *function, args, context)?
+        }
         SqlExpr::Coalesce(args) => {
             if args.is_empty() {
                 return Err(Error::UnknownExpressionType {
@@ -225,6 +229,129 @@ fn validate_sql_exprs(
         .iter()
         .map(|expr| validate_sql_expr_in_context(scope, expr, context))
         .collect()
+}
+
+fn validate_builtin_function(
+    scope: &QueryScope,
+    function: BuiltinFunction,
+    args: &[SqlExpr],
+    context: SqlExprContext,
+) -> Result<ValidatedSqlExpr> {
+    let args = validate_sql_exprs(scope, args, context)?;
+    let ty = validate_builtin_function_signature(function, &args)?;
+    Ok(ValidatedSqlExpr::Function {
+        name: function.sql_name().to_owned(),
+        args,
+        ty,
+        name_style: FunctionNameStyle::Raw,
+    })
+}
+
+fn validate_builtin_function_signature(
+    function: BuiltinFunction,
+    args: &[ValidatedSqlExpr],
+) -> Result<FieldType> {
+    match function {
+        BuiltinFunction::Lower | BuiltinFunction::Upper | BuiltinFunction::Trim => {
+            require_arity(function, args, 1)?;
+            require_text_arg(function, args[0].ty())?;
+            Ok(FieldType::Text)
+        }
+        BuiltinFunction::Length => {
+            require_arity(function, args, 1)?;
+            require_text_arg(function, args[0].ty())?;
+            Ok(FieldType::Integer)
+        }
+        BuiltinFunction::Now => {
+            require_arity(function, args, 0)?;
+            Ok(FieldType::Timestamptz)
+        }
+        BuiltinFunction::GenRandomUuid => {
+            require_arity(function, args, 0)?;
+            Ok(FieldType::Uuid)
+        }
+        BuiltinFunction::DateTrunc => {
+            require_arity(function, args, 2)?;
+            require_text_arg(function, args[0].ty())?;
+            date_trunc_result_type(function, args[1].ty())
+        }
+        BuiltinFunction::Nullif => {
+            require_arity(function, args, 2)?;
+            compatible_type(args[0].ty(), args[1].ty()).ok_or_else(|| {
+                invalid_function_arg(
+                    function,
+                    format!(
+                        "arguments have incompatible types `{}` and `{}`",
+                        args[0].ty().display_name(),
+                        args[1].ty().display_name()
+                    ),
+                )
+            })?;
+            Ok(args[0].ty())
+        }
+        BuiltinFunction::Greatest | BuiltinFunction::Least => {
+            if args.is_empty() {
+                return Err(Error::UnknownExpressionType {
+                    expression: function.sql_name().to_lowercase(),
+                });
+            }
+            common_expr_type(
+                &function.sql_name().to_lowercase(),
+                args.iter().map(ValidatedSqlExpr::ty),
+            )
+        }
+    }
+}
+
+fn require_arity(
+    function: BuiltinFunction,
+    args: &[ValidatedSqlExpr],
+    expected: usize,
+) -> Result<()> {
+    if args.len() == expected {
+        return Ok(());
+    }
+    Err(invalid_function_arg(
+        function,
+        format!("expected {expected} argument(s), got {}", args.len()),
+    ))
+}
+
+fn require_text_arg(function: BuiltinFunction, ty: FieldType) -> Result<()> {
+    if ty.is_text() {
+        return Ok(());
+    }
+    Err(invalid_function_arg(
+        function,
+        format!("expected text argument, got `{}`", ty.display_name()),
+    ))
+}
+
+fn date_trunc_result_type(function: BuiltinFunction, ty: FieldType) -> Result<FieldType> {
+    match ty {
+        FieldType::Timestamptz => Ok(FieldType::Timestamptz),
+        FieldType::Timestamp | FieldType::Date => Ok(FieldType::Timestamp),
+        FieldType::Custom(type_spec) => match type_spec.family {
+            TypeFamily::Timestamptz => Ok(FieldType::Timestamptz),
+            TypeFamily::Timestamp | TypeFamily::Date => Ok(FieldType::Timestamp),
+            _ => Err(invalid_function_arg(
+                function,
+                format!("expected temporal argument, got `{}`", ty.display_name()),
+            )),
+        },
+        _ => Err(invalid_function_arg(
+            function,
+            format!("expected temporal argument, got `{}`", ty.display_name()),
+        )),
+    }
+}
+
+fn invalid_function_arg(function: BuiltinFunction, message: String) -> Error {
+    Error::InvalidValue {
+        field: function.sql_name().to_lowercase(),
+        operator: "function".to_owned(),
+        message,
+    }
 }
 
 fn validate_sql_expr_field(field: &ResolvedField, context: SqlExprContext) -> Result<()> {

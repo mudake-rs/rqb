@@ -5,9 +5,10 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy, SearchRequest,
     SelectColumn, SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg,
-    case_when, cast, coalesce, count, count_distinct, delete, excluded, exists, field, func,
-    insert, json_agg, max, min, not_exists, raw, raw_expr, raw_query, select, set_default,
-    set_expr, string_agg, sum, union, union_all, update,
+    case_when, cast, coalesce, count, count_distinct, date_trunc, delete, excluded, exists, field,
+    func, gen_random_uuid, greatest, insert, json_agg, least, length, lower, max, min, not_exists,
+    now, nullif, raw, raw_expr, raw_query, select, set_default, set_expr, string_agg, sum, trim,
+    union, union_all, update, upper,
 };
 use serde::Serialize;
 use tokio_postgres::{Row, types::ToSql};
@@ -710,34 +711,66 @@ fn renders_expression_select_items_with_aliases_and_output_metadata() {
 #[test]
 fn renders_generic_and_raw_expression_select_items() {
     let built = select(orders())
-        .select_expr(
-            func("lower", [field("email").expr()])
-                .returns(FieldType::Text)
-                .alias("emailLower"),
-        )
+        .select_expr(lower(field("email")).alias("emailLower"))
+        .select_expr(upper(field("email")).alias("emailUpper"))
+        .select_expr(trim(field("email")).alias("emailTrimmed"))
+        .select_expr(length(field("email")).alias("emailLength"))
         .select_expr(
             func("public.normalize_email", [field("email").expr()])
                 .returns(FieldType::Text)
                 .alias("normalizedEmail"),
         )
-        .select_expr(raw_expr(raw("now()"), FieldType::Timestamptz).alias("seenAt"))
+        .select_expr(now().alias("seenAt"))
+        .select_expr(date_trunc("day", field("createdAt")).alias("createdDay"))
+        .select_expr(gen_random_uuid().alias("generatedId"))
+        .select_expr(nullif(field("email"), "").alias("nullableEmail"))
+        .select_expr(greatest([field("totalCents").expr(), 0.into_sql_expr()]).alias("safeTotal"))
+        .select_expr(
+            least([field("totalCents").expr(), 999_999.into_sql_expr()]).alias("cappedTotal"),
+        )
+        .select_expr(raw_expr(raw("now()"), FieldType::Timestamptz).alias("rawSeenAt"))
         .build_rows_pg()
         .unwrap();
 
     assert!(
         built
             .sql
-            .starts_with("SELECT \"lower\"(\"email\") AS \"emailLower\"")
+            .starts_with("SELECT lower(\"email\") AS \"emailLower\"")
     );
+    assert!(built.sql.contains("upper(\"email\") AS \"emailUpper\""));
+    assert!(built.sql.contains("trim(\"email\") AS \"emailTrimmed\""));
+    assert!(built.sql.contains("length(\"email\") AS \"emailLength\""));
     assert!(
         built
             .sql
             .contains("\"public\".\"normalize_email\"(\"email\") AS \"normalizedEmail\"")
     );
+    assert!(built.sql.contains("now() AS \"seenAt\""));
     assert!(
         built
             .sql
-            .contains(" AS \"seenAt\" FROM \"order_search_view\"")
+            .contains("date_trunc($1, \"created_at\") AS \"createdDay\"")
+    );
+    assert!(built.sql.contains("gen_random_uuid() AS \"generatedId\""));
+    assert!(
+        built
+            .sql
+            .contains("NULLIF(\"email\", $2) AS \"nullableEmail\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("GREATEST(\"total_cents\", $3::bigint) AS \"safeTotal\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("LEAST(\"total_cents\", $4::bigint) AS \"cappedTotal\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains(" AS \"rawSeenAt\" FROM \"order_search_view\"")
     );
     assert!(!built.cacheable);
 }
@@ -1122,8 +1155,7 @@ fn renders_write_expressions_defaults_and_returning_expressions() {
         .set_default("status")
         .set_expr(
             "totalCents",
-            func("greatest", [1000.into_sql_expr(), 2000.into_sql_expr()])
-                .returns(FieldType::BigInt),
+            greatest([1000.into_sql_expr(), 2000.into_sql_expr()]),
         )
         .returning(["id"])
         .returning_expr(field("totalCents").expr().alias("writtenTotal"))
@@ -1135,7 +1167,7 @@ fn renders_write_expressions_defaults_and_returning_expressions() {
     assert!(
         insert
             .sql
-            .contains("CAST(\"greatest\"($3::bigint, $4::bigint) AS bigint)")
+            .contains("CAST(GREATEST($3::bigint, $4::bigint) AS bigint)")
     );
     assert!(insert.sql.contains("RETURNING"));
     assert!(insert.sql.contains("\"total_cents\" AS \"writtenTotal\""));

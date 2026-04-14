@@ -1,4 +1,4 @@
-use rqb_core::{LogicalOp, ValidatedExpr, ValidatedSqlExpr};
+use rqb_core::{FunctionNameStyle, LogicalOp, ValidatedExpr, ValidatedSqlExpr};
 
 use crate::Result;
 use crate::helpers::write_quoted_ident;
@@ -49,8 +49,16 @@ impl Renderer {
             }
             ValidatedSqlExpr::Value { value, ty } => self.push_typed_param(value, *ty),
             ValidatedSqlExpr::Raw { raw, .. } => self.render_raw(raw),
-            ValidatedSqlExpr::Function { name, args, .. } => {
-                write_function_name(&mut self.sql, name);
+            ValidatedSqlExpr::Function {
+                name,
+                args,
+                name_style,
+                ..
+            } => {
+                match name_style {
+                    FunctionNameStyle::Quoted => write_function_name(&mut self.sql, name),
+                    FunctionNameStyle::Raw => self.sql.push_str(name),
+                }
                 self.sql.push('(');
                 self.render_sql_expr_list(args)?;
                 self.sql.push(')');

@@ -156,10 +156,12 @@ Batch inserts use one `INSERT ... VALUES (...), (...)` query.
 ```rust
 let row = update(orders())
     .set_expr(TOTAL_CENTS, coalesce([TOTAL_CENTS.expr(), 0.into_sql_expr()]))
+    .set_expr(UPDATED_AT, now())
     .set_default(METADATA)
     .filter(ID.eq(order_id))
     .returning([ID])
     .returning_expr(cast(TOTAL_CENTS.expr(), FieldType::Text).alias("total_text"))
+    .returning_expr(lower(cast(STATUS.expr(), FieldType::Text)).alias("status_lower"))
     .fetch_one_as::<OrderWriteResult>(&db)
     .await?;
 ```

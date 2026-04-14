@@ -86,6 +86,8 @@ must be aliased because the alias is the serde/result field name:
 struct OrderRow {
     id: uuid::Uuid,
     label: String,
+    email_lower: String,
+    created_day: chrono::DateTime<chrono::Utc>,
     status_label: String,
     total_text: String,
 }
@@ -93,6 +95,8 @@ struct OrderRow {
 let rows = select(orders())
     .select([ID])
     .select_expr(coalesce([DISPLAY_NAME.expr(), EMAIL.expr()]).alias("label"))
+    .select_expr(lower(EMAIL).alias("email_lower"))
+    .select_expr(date_trunc("day", CREATED_AT).alias("created_day"))
     .select_expr(
         case_when(STATUS.eq("paid"))
             .then("settled")
@@ -194,9 +198,9 @@ insert(events())
     .set(ID, event_id)
     .set(EVENT_TYPE, "created")
     .set_default(PAYLOAD)
-    .set_expr(CREATED_AT, raw_expr(raw("now()"), FieldType::Timestamptz))
+    .set_expr(CREATED_AT, now())
     .returning([ID])
-    .returning_expr(func("lower", [EVENT_TYPE.expr()]).returns(FieldType::Text).alias("kind"));
+    .returning_expr(lower(EVENT_TYPE).alias("kind"));
 ```
 
 Insert expressions cannot reference target fields because Postgres `VALUES` rows do not have a current target row. Use `.set(...)`, `.set_default(...)`, functions, or server-owned raw expressions.

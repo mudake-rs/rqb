@@ -19,6 +19,10 @@ pub enum SqlExpr {
         args: Vec<SqlExpr>,
         ty: FieldType,
     },
+    BuiltinFunction {
+        function: BuiltinFunction,
+        args: Vec<SqlExpr>,
+    },
     Coalesce(Vec<SqlExpr>),
     Case {
         branches: Vec<CaseBranch>,
@@ -28,6 +32,43 @@ pub enum SqlExpr {
         expr: Box<SqlExpr>,
         ty: FieldType,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinFunction {
+    Lower,
+    Upper,
+    Trim,
+    Length,
+    Now,
+    DateTrunc,
+    GenRandomUuid,
+    Nullif,
+    Greatest,
+    Least,
+}
+
+impl BuiltinFunction {
+    pub fn sql_name(self) -> &'static str {
+        match self {
+            Self::Lower => "lower",
+            Self::Upper => "upper",
+            Self::Trim => "trim",
+            Self::Length => "length",
+            Self::Now => "now",
+            Self::DateTrunc => "date_trunc",
+            Self::GenRandomUuid => "gen_random_uuid",
+            Self::Nullif => "NULLIF",
+            Self::Greatest => "GREATEST",
+            Self::Least => "LEAST",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FunctionNameStyle {
+    Quoted,
+    Raw,
 }
 
 impl SqlExpr {
@@ -194,6 +235,74 @@ where
         name: name.into(),
         args: args.into_iter().map(IntoSqlExpr::into_sql_expr).collect(),
     }
+}
+
+fn builtin_function<I, E>(function: BuiltinFunction, args: I) -> SqlExpr
+where
+    I: IntoIterator<Item = E>,
+    E: IntoSqlExpr,
+{
+    SqlExpr::BuiltinFunction {
+        function,
+        args: args.into_iter().map(IntoSqlExpr::into_sql_expr).collect(),
+    }
+}
+
+pub fn lower(expr: impl IntoSqlExpr) -> SqlExpr {
+    builtin_function(BuiltinFunction::Lower, [expr.into_sql_expr()])
+}
+
+pub fn upper(expr: impl IntoSqlExpr) -> SqlExpr {
+    builtin_function(BuiltinFunction::Upper, [expr.into_sql_expr()])
+}
+
+pub fn trim(expr: impl IntoSqlExpr) -> SqlExpr {
+    builtin_function(BuiltinFunction::Trim, [expr.into_sql_expr()])
+}
+
+pub fn length(expr: impl IntoSqlExpr) -> SqlExpr {
+    builtin_function(BuiltinFunction::Length, [expr.into_sql_expr()])
+}
+
+pub fn now() -> SqlExpr {
+    builtin_function(BuiltinFunction::Now, std::iter::empty::<SqlExpr>())
+}
+
+pub fn date_trunc(part: impl IntoSqlExpr, source: impl IntoSqlExpr) -> SqlExpr {
+    builtin_function(
+        BuiltinFunction::DateTrunc,
+        [part.into_sql_expr(), source.into_sql_expr()],
+    )
+}
+
+pub fn gen_random_uuid() -> SqlExpr {
+    builtin_function(
+        BuiltinFunction::GenRandomUuid,
+        std::iter::empty::<SqlExpr>(),
+    )
+}
+
+pub fn nullif(left: impl IntoSqlExpr, right: impl IntoSqlExpr) -> SqlExpr {
+    builtin_function(
+        BuiltinFunction::Nullif,
+        [left.into_sql_expr(), right.into_sql_expr()],
+    )
+}
+
+pub fn greatest<I, E>(exprs: I) -> SqlExpr
+where
+    I: IntoIterator<Item = E>,
+    E: IntoSqlExpr,
+{
+    builtin_function(BuiltinFunction::Greatest, exprs)
+}
+
+pub fn least<I, E>(exprs: I) -> SqlExpr
+where
+    I: IntoIterator<Item = E>,
+    E: IntoSqlExpr,
+{
+    builtin_function(BuiltinFunction::Least, exprs)
 }
 
 pub fn raw_expr(raw: RawSql, ty: FieldType) -> SqlExpr {

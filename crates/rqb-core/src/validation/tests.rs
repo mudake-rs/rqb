@@ -3,7 +3,8 @@ use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType,
     IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr,
     Sort, SubqueryOperator, TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce,
-    count, count_field, excluded, field, insert, max, min, set_default, set_expr, string_agg, sum,
+    count, count_field, date_trunc, excluded, field, gen_random_uuid, greatest, insert, least,
+    length, lower, max, min, now, nullif, set_default, set_expr, string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -165,6 +166,78 @@ fn validates_expression_select_items_and_output_columns() {
             .collect::<Vec<_>>(),
         ["id", "label", "stateLabel", "scoreText"]
     );
+}
+
+#[test]
+fn validates_builtin_function_expression_types() {
+    let query = crate::select(dataset())
+        .select_expr(lower(field("displayName")).alias("displayNameLower"))
+        .select_expr(length(field("name")).alias("nameLength"))
+        .select_expr(date_trunc("day", field("createdAt")).alias("createdDay"))
+        .select_expr(now().alias("seenAt"))
+        .select_expr(gen_random_uuid().alias("generatedId"))
+        .select_expr(nullif(field("name"), "").alias("nullableName"))
+        .select_expr(greatest([field("score").expr(), 0.into_sql_expr()]).alias("scoreFloor"))
+        .select_expr(least([field("score").expr(), 100.into_sql_expr()]).alias("scoreCap"))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+
+    assert_eq!(
+        validated
+            .columns
+            .iter()
+            .map(crate::SelectColumn::alias)
+            .collect::<Vec<_>>(),
+        [
+            "displayNameLower",
+            "nameLength",
+            "createdDay",
+            "seenAt",
+            "generatedId",
+            "nullableName",
+            "scoreFloor",
+            "scoreCap",
+        ]
+    );
+}
+
+#[test]
+fn rejects_builtin_function_expression_type_mismatches() {
+    let bad_lower = crate::select(dataset())
+        .select_expr(lower(field("score")).alias("bad"))
+        .build();
+    let err = ValidatedSelect::new(bad_lower).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "lower" && operator == "function" && message.contains("expected text")
+    ));
+
+    let bad_date_trunc = crate::select(dataset())
+        .select_expr(date_trunc("day", field("name")).alias("bad"))
+        .build();
+    let err = ValidatedSelect::new(bad_date_trunc).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "date_trunc" && operator == "function" && message.contains("expected temporal")
+    ));
+
+    let empty_greatest = crate::select(dataset())
+        .select_expr(greatest(Vec::<crate::SqlExpr>::new()).alias("bad"))
+        .build();
+    let err = ValidatedSelect::new(empty_greatest).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::UnknownExpressionType { expression } if expression == "greatest"
+    ));
 }
 
 #[test]

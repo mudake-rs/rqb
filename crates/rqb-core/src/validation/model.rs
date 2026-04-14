@@ -5,6 +5,7 @@ use crate::field::ResolvedField;
 use crate::query::SetOperator;
 use crate::raw::RawSql;
 use crate::request::RowLock;
+use crate::sql_expr::FunctionNameStyle;
 use crate::types::FieldType;
 use crate::value::Value;
 
@@ -96,6 +97,7 @@ pub enum ValidatedSqlExpr {
         name: String,
         args: Vec<ValidatedSqlExpr>,
         ty: FieldType,
+        name_style: FunctionNameStyle,
     },
     Coalesce {
         args: Vec<ValidatedSqlExpr>,

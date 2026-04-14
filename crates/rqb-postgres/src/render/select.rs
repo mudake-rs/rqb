@@ -162,12 +162,15 @@ impl Renderer {
     }
 
     fn render_from_and_joins(&mut self, validated: &ValidatedSelect) -> Result<()> {
-        self.render_source(&validated.dataset.source);
+        self.render_validated_source(&validated.source)?;
         for join in &validated.joins {
             self.sql.push(' ');
             self.sql.push_str(join.kind.as_sql());
             self.sql.push(' ');
-            self.render_source(&join.dataset.source);
+            if join.lateral {
+                self.sql.push_str("LATERAL ");
+            }
+            self.render_validated_source(&join.source)?;
             if let Some(on) = &join.on {
                 self.sql.push_str(" ON ");
                 self.render_expr(on)?;

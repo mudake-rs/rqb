@@ -11,14 +11,16 @@ metadata-constrained fields, filters, sorting, limit, and offset.
 
 Current public capabilities:
 
-- Dataset metadata for tables, views, CTE sources, and raw server-owned sources.
+- Dataset metadata for tables, views, CTE sources, raw server-owned sources,
+  and validated subquery sources.
 - Field metadata for API name, DB name, type, capabilities, JSON path policy,
   text search configuration, enum values, custom domain metadata, and generated
   relation helpers.
-- SELECT queries with default root projection, explicit fields, joins, CTEs,
-  raw sources, subqueries, `EXISTS`, `DISTINCT`, `DISTINCT ON`, grouping,
-  aggregate selection, expression select items, aggregate filters, row locks,
-  sorting, pagination, and JSON `SearchRequest` merge.
+- SELECT queries with default root projection, explicit fields, joins,
+  `LATERAL` joins, CTEs, raw sources, subquery sources, subqueries, `EXISTS`,
+  `DISTINCT`, `DISTINCT ON`, grouping, aggregate selection, expression select
+  items, aggregate filters, row locks, sorting, pagination, and JSON
+  `SearchRequest` merge.
 - Query body composition through `QueryExpr`, including `UNION`, `UNION ALL`,
   `INTERSECT`, and `EXCEPT` with validated output column count, output type
   compatibility, final ordering, limit, and offset.
@@ -176,6 +178,17 @@ the same outer scope rules as subqueries, checks column count, computes compatib
 output column types, and validates final `ORDER BY` against output aliases. The
 renderer can then treat set operations mechanically: render each operand as a
 query body, render the set operator, then render final order/limit/offset.
+
+### Sources Are Metadata Plus Validated SQL Shape
+
+`Dataset` remains the metadata wrapper for anything addressable in `FROM` or
+`JOIN`: table, view, CTE, raw source, and subquery source. The fields on the
+dataset describe what outer filters, sorts, and projections are allowed to use.
+
+Subquery sources validate their `QueryExpr` before rendering and check that the
+declared dataset fields match the query output column count and compatible
+types. Non-lateral subquery sources validate without outer fields; lateral joins
+validate their subquery with the left-side datasets in scope.
 
 ### Write Validation Has A Dedicated Scope
 

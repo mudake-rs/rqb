@@ -28,6 +28,13 @@ struct UserRow {
     email: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LatestStatusRow {
+    email: String,
+    latest_status: rqb_sample_base::OrderStatus,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
@@ -93,6 +100,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     print_users("users from UNION set query", &users_from_set_query);
 
+    let latest_order = select(&order)
+        .fields([order.status()])
+        .filter(order.user_id().eq_col(user.id()))
+        .order_by(order.created_at().desc())
+        .limit(1)
+        .into_source("latest_order")
+        .fields([orders::STATUS]);
+    let latest_status = select(&user)
+        .fields([
+            user.email().alias("email"),
+            orders::STATUS.on("latest_order").alias("latestStatus"),
+        ])
+        .left_join_lateral(latest_order, raw("TRUE"))
+        .fetch_all_as::<LatestStatusRow>(&db)
+        .await?;
+    print_latest_statuses("latest order status per user", &latest_status);
+
     let raw_source = Dataset::raw(
         "SELECT id, email FROM app_users WHERE status = 'active'",
         "active_users",
@@ -123,5 +147,12 @@ fn print_users(label: &str, users: &[UserRow]) {
     println!("{label}: {}", users.len());
     for user in users {
         println!("  {} {}", user.id, user.email);
+    }
+}
+
+fn print_latest_statuses(label: &str, rows: &[LatestStatusRow]) {
+    println!("{label}: {}", rows.len());
+    for row in rows {
+        println!("  {} latest_status={:?}", row.email, row.latest_status);
     }
 }

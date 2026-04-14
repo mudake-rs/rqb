@@ -177,6 +177,9 @@ impl<'a> WriteScope<'a> {
     }
 
     fn with_sources(dataset: &'a Dataset, sources: &[Dataset]) -> Result<Self> {
+        for source in sources {
+            validate_write_from_source(source)?;
+        }
         Ok(Self {
             dataset,
             target_scope: QueryScope::from_dataset(dataset),
@@ -211,7 +214,18 @@ fn validate_write_field_ref(field: ResolvedField) -> Result<ResolvedField> {
 fn validate_write_source(dataset: &Dataset) -> Result<()> {
     match dataset.source {
         Source::Table { .. } | Source::View { .. } => Ok(()),
-        Source::Cte { .. } | Source::Raw { .. } => Err(Error::UnsupportedWriteSource),
+        Source::Cte { .. } | Source::Raw { .. } | Source::Subquery { .. } => {
+            Err(Error::UnsupportedWriteSource)
+        }
+    }
+}
+
+fn validate_write_from_source(dataset: &Dataset) -> Result<()> {
+    match dataset.source {
+        Source::Subquery { .. } => Err(Error::UnsupportedWriteSource),
+        Source::Table { .. } | Source::View { .. } | Source::Cte { .. } | Source::Raw { .. } => {
+            Ok(())
+        }
     }
 }
 

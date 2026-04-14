@@ -3,7 +3,7 @@ use rqb_core::{ValidatedQueryExpr, ValidatedSetQuery};
 use crate::helpers::write_quoted_ident;
 use crate::{BuiltQuery, Result};
 
-use super::{Renderer, SelectProjection};
+use super::{Renderer, SelectProjection, SetRenderMode};
 
 impl Renderer {
     pub(crate) fn render_query_rows(
@@ -45,14 +45,35 @@ impl Renderer {
     ) -> Result<()> {
         match validated {
             ValidatedQueryExpr::Select(select) => self.render_subquery_select(select, projection),
-            ValidatedQueryExpr::Set(set) => self.render_set_query(set, render_top_limit),
+            ValidatedQueryExpr::Set(set) => {
+                self.render_set_query(set, render_top_limit, SetRenderMode::QueryResult)
+            }
         }
     }
 
-    fn render_set_operand(&mut self, validated: &ValidatedQueryExpr) -> Result<()> {
+    pub(super) fn render_query_source(&mut self, validated: &ValidatedQueryExpr) -> Result<()> {
+        self.cacheable &= validated.cacheable();
         match validated {
-            ValidatedQueryExpr::Select(select) => self.render_set_select_arm(select),
-            ValidatedQueryExpr::Set(set) => self.render_set_query(set, true),
+            ValidatedQueryExpr::Select(select) => {
+                self.render_subquery_select(select, SelectProjection::Value)
+            }
+            ValidatedQueryExpr::Set(set) => self.render_set_query(set, true, SetRenderMode::Source),
+        }
+    }
+
+    fn render_set_operand(
+        &mut self,
+        validated: &ValidatedQueryExpr,
+        mode: SetRenderMode,
+    ) -> Result<()> {
+        match validated {
+            ValidatedQueryExpr::Select(select) => match mode {
+                SetRenderMode::QueryResult => self.render_set_select_arm(select),
+                SetRenderMode::Source => {
+                    self.render_subquery_select(select, SelectProjection::Value)
+                }
+            },
+            ValidatedQueryExpr::Set(set) => self.render_set_query(set, true, mode),
         }
     }
 
@@ -60,15 +81,16 @@ impl Renderer {
         &mut self,
         validated: &ValidatedSetQuery,
         render_top_limit: bool,
+        mode: SetRenderMode,
     ) -> Result<()> {
         self.sql.push('(');
-        self.render_set_operand(&validated.left)?;
+        self.render_set_operand(&validated.left, mode)?;
         self.sql.push(')');
         self.sql.push(' ');
         self.sql.push_str(validated.operator.as_sql());
         self.sql.push(' ');
         self.sql.push('(');
-        self.render_set_operand(&validated.right)?;
+        self.render_set_operand(&validated.right, mode)?;
         self.sql.push(')');
         if render_top_limit {
             self.render_set_order(validated);

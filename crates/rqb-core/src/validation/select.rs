@@ -1,5 +1,5 @@
 use crate::aggregate::SelectColumn;
-use crate::dataset::{CteBody, Dataset};
+use crate::dataset::{CteBody, Dataset, Source};
 use crate::error::{Error, Result};
 use crate::field::{FieldRef, ResolvedField};
 use crate::request::SelectQuery;
@@ -15,7 +15,7 @@ use super::sort::validate_sort;
 use super::sql_expr::{collect_sql_expr_fields, validate_select_item};
 use super::{
     ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedJoin, ValidatedSelect,
-    ValidatedSelectItem,
+    ValidatedSelectItem, ValidatedSource,
 };
 
 impl ValidatedSelect {
@@ -28,8 +28,9 @@ impl ValidatedSelect {
             return Err(error.clone());
         }
         let scope = QueryScope::new_with_outer(&query, outer_datasets)?;
+        let source = validate_source(&query.dataset, &[])?;
         let ctes = validate_ctes(&query)?;
-        let joins = validate_joins(&scope, &query)?;
+        let joins = validate_joins(&scope, &query, outer_datasets)?;
 
         let limit_explicit = query.request.limit.is_some();
         let offset_explicit = query.request.offset.is_some();
@@ -104,6 +105,7 @@ impl ValidatedSelect {
             limit_explicit,
             offset_explicit,
             dataset: query.dataset.clone(),
+            source,
             cacheable: query.cacheable,
             distinct: query.distinct,
             lock: query.lock,
@@ -171,28 +173,83 @@ fn validate_ctes(query: &SelectQuery) -> Result<Vec<ValidatedCte>> {
         .collect()
 }
 
-fn validate_joins(scope: &QueryScope, query: &SelectQuery) -> Result<Vec<ValidatedJoin>> {
-    query
-        .joins
-        .iter()
-        .map(|join| {
-            let on = match (&join.on, join.kind.requires_condition()) {
-                (Some(on), _) => Some(validate_expr(scope, on, ExprContext::JoinOn)?),
-                (None, true) => {
-                    return Err(Error::MissingJoinCondition {
-                        kind: join.kind.as_sql().to_owned(),
-                        dataset: join.dataset.api_name.clone(),
-                    });
-                }
-                (None, false) => None,
-            };
-            Ok(ValidatedJoin {
-                kind: join.kind,
-                dataset: join.dataset.clone(),
-                on,
+fn validate_joins(
+    scope: &QueryScope,
+    query: &SelectQuery,
+    outer_datasets: &[Dataset],
+) -> Result<Vec<ValidatedJoin>> {
+    let mut visible = Vec::with_capacity(query.joins.len() + outer_datasets.len() + 1);
+    visible.push(query.dataset.clone());
+    visible.extend_from_slice(outer_datasets);
+
+    let mut joins = Vec::with_capacity(query.joins.len());
+    for join in &query.joins {
+        let source_outer = if join.lateral {
+            visible.as_slice()
+        } else {
+            &[]
+        };
+        let source = validate_source(&join.dataset, source_outer)?;
+        let on = match (&join.on, join.kind.requires_condition()) {
+            (Some(on), _) => Some(validate_expr(scope, on, ExprContext::JoinOn)?),
+            (None, true) => {
+                return Err(Error::MissingJoinCondition {
+                    kind: join.kind.as_sql().to_owned(),
+                    dataset: join.dataset.api_name.clone(),
+                });
+            }
+            (None, false) => None,
+        };
+        joins.push(ValidatedJoin {
+            kind: join.kind,
+            dataset: join.dataset.clone(),
+            source,
+            on,
+            lateral: join.lateral,
+        });
+        visible.push(join.dataset.clone());
+    }
+    Ok(joins)
+}
+
+fn validate_source(dataset: &Dataset, outer_datasets: &[Dataset]) -> Result<ValidatedSource> {
+    match &dataset.source {
+        Source::Subquery { query, alias } => {
+            let query = super::ValidatedQueryExpr::new_with_outer_datasets(
+                (**query).clone(),
+                outer_datasets,
+            )?;
+            validate_subquery_source_columns(dataset, query.columns())?;
+            Ok(ValidatedSource::Subquery {
+                query: Box::new(query),
+                alias: alias.clone(),
             })
-        })
-        .collect()
+        }
+        source => Ok(ValidatedSource::Plain(source.clone())),
+    }
+}
+
+fn validate_subquery_source_columns(dataset: &Dataset, columns: &[SelectColumn]) -> Result<()> {
+    if dataset.fields.len() != columns.len() {
+        return Err(Error::InvalidSourceSelection {
+            source_name: dataset.sql_qualifier().to_owned(),
+            expected: dataset.fields.len(),
+            actual: columns.len(),
+        });
+    }
+    for (idx, (field, column)) in dataset.fields.iter().zip(columns).enumerate() {
+        let source_type = column.ty();
+        if field.ty == source_type {
+            continue;
+        }
+        return Err(Error::IncompatibleSourceColumnType {
+            source_name: dataset.sql_qualifier().to_owned(),
+            column: idx + 1,
+            expected_type: field.ty.display_name().into_owned(),
+            actual_type: source_type.display_name().into_owned(),
+        });
+    }
+    Ok(())
 }
 
 fn resolve_selection(scope: &QueryScope, query: &SelectQuery) -> Result<Vec<ResolvedField>> {

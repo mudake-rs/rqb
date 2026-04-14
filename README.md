@@ -217,6 +217,38 @@ select(source).request(request);
 
 `Dataset::raw` is for static server-owned source SQL with declared fields. For bind values, use `raw("... ? ...").bind(value)` in filters, assignments, or CTE bodies. Use `raw_query("... ? ...").bind(value)` when the whole statement is hand-written SQL and should execute through `&Db`, `&Tx`, or another `&impl PgExecutor`. Use `??` for a literal question mark in raw SQL.
 
+### Subquery Sources
+
+```rust
+let paid_orders = select(orders().alias("o"))
+    .fields([ID.on("o"), USER_ID.on("o")])
+    .filter(STATUS.on("o").eq("paid"))
+    .into_source("paid_orders")
+    .fields([ID, USER_ID]);
+
+let rows = select(paid_orders)
+    .fields([USER_ID])
+    .fetch_all_as::<serde_json::Value>(&db)
+    .await?;
+```
+
+Use `left_join_lateral` when a subquery source references fields from the left
+side of the `FROM` list:
+
+```rust
+let latest_order = select(orders().alias("o"))
+    .fields([STATUS.on("o")])
+    .filter(USER_ID.on("o").eq_col(ID.on("u")))
+    .order_by(CREATED_AT.on("o").desc())
+    .limit(1)
+    .into_source("latest_order")
+    .fields([STATUS]);
+
+select(users().alias("u"))
+    .fields([EMAIL.on("u"), STATUS.on("latest_order").alias("latestStatus")])
+    .left_join_lateral(latest_order, raw("TRUE"));
+```
+
 ### Subqueries
 
 Correlated `EXISTS`:

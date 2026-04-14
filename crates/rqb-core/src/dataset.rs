@@ -5,7 +5,7 @@ use crate::query::{QueryExpr, SetQuery};
 use crate::raw::RawSql;
 use crate::request::SelectQuery;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Source {
     Table {
         schema: Option<String>,
@@ -23,6 +23,10 @@ pub enum Source {
     },
     Raw {
         sql: String,
+        alias: String,
+    },
+    Subquery {
+        query: Box<QueryExpr>,
         alias: String,
     },
 }
@@ -58,12 +62,19 @@ impl Source {
         }
     }
 
+    pub fn subquery(query: impl Into<QueryExpr>, alias: impl Into<String>) -> Self {
+        Self::Subquery {
+            query: Box::new(query.into()),
+            alias: alias.into(),
+        }
+    }
+
     pub fn schema(mut self, schema: impl Into<String>) -> Self {
         match &mut self {
             Self::Table { schema: s, .. } | Self::View { schema: s, .. } => {
                 *s = Some(schema.into())
             }
-            Self::Cte { .. } | Self::Raw { .. } => {}
+            Self::Cte { .. } | Self::Raw { .. } | Self::Subquery { .. } => {}
         }
         self
     }
@@ -73,7 +84,7 @@ impl Source {
             Self::Table { alias: a, .. }
             | Self::View { alias: a, .. }
             | Self::Cte { alias: a, .. } => *a = Some(alias.into()),
-            Self::Raw { alias: a, .. } => *a = alias.into(),
+            Self::Raw { alias: a, .. } | Self::Subquery { alias: a, .. } => *a = alias.into(),
         }
         self
     }
@@ -83,14 +94,14 @@ impl Source {
             Self::Table { alias, .. } | Self::View { alias, .. } | Self::Cte { alias, .. } => {
                 alias.as_deref()
             }
-            Self::Raw { alias, .. } => Some(alias),
+            Self::Raw { alias, .. } | Self::Subquery { alias, .. } => Some(alias),
         }
     }
 
     pub fn base_name(&self) -> &str {
         match self {
             Self::Table { name, .. } | Self::View { name, .. } | Self::Cte { name, .. } => name,
-            Self::Raw { alias, .. } => alias,
+            Self::Raw { alias, .. } | Self::Subquery { alias, .. } => alias,
         }
     }
 
@@ -127,6 +138,11 @@ impl Dataset {
     pub fn raw(sql: impl Into<String>, alias: impl Into<String>) -> Self {
         let alias = alias.into();
         Self::new(alias.clone(), Source::raw(sql, alias))
+    }
+
+    pub fn subquery(query: impl Into<QueryExpr>, alias: impl Into<String>) -> Self {
+        let alias = alias.into();
+        Self::new(alias.clone(), Source::subquery(query, alias))
     }
 
     pub fn cte(name: impl Into<String>) -> Self {
@@ -267,6 +283,7 @@ pub struct Join {
     pub kind: JoinKind,
     pub dataset: Dataset,
     pub on: Option<Expr>,
+    pub lateral: bool,
 }
 
 impl Join {
@@ -275,6 +292,16 @@ impl Join {
             kind,
             dataset: dataset.into(),
             on: Some(on.into()),
+            lateral: false,
+        }
+    }
+
+    pub fn lateral(kind: JoinKind, dataset: impl Into<Dataset>, on: impl Into<Expr>) -> Self {
+        Self {
+            kind,
+            dataset: dataset.into(),
+            on: Some(on.into()),
+            lateral: true,
         }
     }
 
@@ -283,6 +310,16 @@ impl Join {
             kind: JoinKind::Cross,
             dataset: dataset.into(),
             on: None,
+            lateral: false,
+        }
+    }
+
+    pub fn cross_lateral(dataset: impl Into<Dataset>) -> Self {
+        Self {
+            kind: JoinKind::Cross,
+            dataset: dataset.into(),
+            on: None,
+            lateral: true,
         }
     }
 }
@@ -293,7 +330,7 @@ impl From<Source> for Dataset {
             Source::Table { name, .. } | Source::View { name, .. } | Source::Cte { name, .. } => {
                 name.clone()
             }
-            Source::Raw { alias, .. } => alias.clone(),
+            Source::Raw { alias, .. } | Source::Subquery { alias, .. } => alias.clone(),
         };
         Self::new(api_name, source)
     }

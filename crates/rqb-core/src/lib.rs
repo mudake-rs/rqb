@@ -57,7 +57,8 @@ pub use validation::{
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedJoin, ValidatedLikePattern,
     ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedQueryExpr,
     ValidatedReturningItem, ValidatedSelect, ValidatedSelectItem, ValidatedSetQuery,
-    ValidatedSetSort, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
+    ValidatedSetSort, ValidatedSort, ValidatedSource, ValidatedSqlExpr, ValidatedUpdate,
+    ValidatedWriteValue,
 };
 pub use value::Value;
 pub use write::{

@@ -1619,6 +1619,14 @@ fn cache_policy_rejects_unbounded_or_raw_statement_shapes() {
         .unwrap();
     assert!(!raw_filter.cacheable);
 
+    let uncacheable_subquery = select(orders())
+        .fields([field("id")])
+        .cacheable(false)
+        .into_source("order_ids")
+        .fields([Field::new("id", FieldType::Uuid)]);
+    let subquery_source = select(uncacheable_subquery).build_rows_pg().unwrap();
+    assert!(!subquery_source.cacheable);
+
     let single_insert = insert(writable_orders())
         .set("id", "30000000-0000-0000-0000-000000009999")
         .set("userId", "10000000-0000-0000-0000-000000000001")
@@ -2248,6 +2256,174 @@ fn renders_set_query_inside_in_subquery() {
         built.sql
     );
     assert_eq!(built.params, vec!["paid".into(), "draft".into()]);
+}
+
+#[test]
+fn renders_subquery_source_with_outer_filters() {
+    let source = select(orders_table().alias("o"))
+        .fields([field("o.id"), field("o.userId")])
+        .filter(field("o.status").eq("paid"))
+        .into_source("paid_orders")
+        .fields([
+            Field::new("id", FieldType::Uuid),
+            Field::mapped("userId", "user_id", FieldType::Uuid),
+        ]);
+
+    let built = select(source)
+        .fields([field("userId")])
+        .filter(field("userId").eq("10000000-0000-0000-0000-000000000001"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        concat!(
+            "SELECT \"user_id\" AS \"userId\" FROM ",
+            "(SELECT \"o\".\"id\", \"o\".\"user_id\" FROM \"orders\" AS \"o\" WHERE \"o\".\"status\" = $1) AS \"paid_orders\" ",
+            "WHERE \"user_id\" = $2::text::uuid LIMIT 100 OFFSET 0"
+        )
+    );
+    assert_eq!(
+        built.params,
+        vec!["paid".into(), "10000000-0000-0000-0000-000000000001".into()]
+    );
+}
+
+#[test]
+fn renders_set_query_as_subquery_source() {
+    let source = union_all(
+        select(orders_table().alias("paid"))
+            .fields([field("paid.id")])
+            .filter(field("paid.status").eq("paid")),
+        select(orders_table().alias("draft"))
+            .fields([field("draft.id")])
+            .filter(field("draft.status").eq("draft")),
+    )
+    .into_source("order_ids")
+    .fields([Field::new("id", FieldType::Uuid)]);
+
+    let built = select(source)
+        .fields([field("id")])
+        .build_rows_pg()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        concat!(
+            "SELECT \"id\" FROM ",
+            "((SELECT \"paid\".\"id\" FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) ",
+            "UNION ALL ",
+            "(SELECT \"draft\".\"id\" FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)) ",
+            "AS \"order_ids\" LIMIT 100 OFFSET 0"
+        )
+    );
+}
+
+#[test]
+fn renders_lateral_join_subquery_source() {
+    let latest_order = select(orders_table().alias("o"))
+        .fields([field("o.status")])
+        .filter(field("o.userId").eq_col(field("u.id")))
+        .order_by(field("o.createdAt").desc())
+        .limit(1)
+        .into_source("latest_order")
+        .fields([Field::new("status", FieldType::Text)]);
+
+    let built = select(users_table().alias("u"))
+        .fields([
+            field("u.email"),
+            field("latest_order.status").alias("latestStatus"),
+        ])
+        .left_join_lateral(latest_order, raw("TRUE"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built.sql.contains(concat!(
+            "LEFT JOIN LATERAL ",
+            "(SELECT \"o\".\"status\" FROM \"orders\" AS \"o\" ",
+            "WHERE \"o\".\"user_id\" = \"u\".\"id\" ORDER BY \"o\".\"created_at\" DESC LIMIT 1) ",
+            "AS \"latest_order\" ON TRUE"
+        )),
+        "{}",
+        built.sql
+    );
+}
+
+#[test]
+fn rejects_correlated_subquery_source_without_lateral() {
+    let latest_order = Dataset::subquery(
+        select(orders_table().alias("o"))
+            .fields([field("o.status")])
+            .filter(field("o.userId").eq_col(field("u.id")))
+            .limit(1),
+        "latest_order",
+    )
+    .fields([Field::new("status", FieldType::Text)]);
+
+    let err = select(users_table().alias("u"))
+        .fields([field("u.email")])
+        .join(latest_order, raw("TRUE"))
+        .build_rows_pg()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::UnknownField { dataset, field })
+            if dataset == "orders" && field == "u.id"
+    ));
+}
+
+#[test]
+fn rejects_subquery_source_metadata_mismatch() {
+    let source = Dataset::subquery(
+        select(orders_table()).fields([field("id"), field("status")]),
+        "bad_source",
+    )
+    .fields([Field::new("id", FieldType::Uuid)]);
+
+    let err = select(source).build_rows_pg().unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::InvalidSourceSelection {
+            source_name,
+            expected: 1,
+            actual: 2,
+        }) if source_name == "bad_source"
+    ));
+
+    let source = Dataset::subquery(select(orders_table()).fields([field("status")]), "bad_type")
+        .fields([Field::new("id", FieldType::Uuid)]);
+
+    let err = select(source).build_rows_pg().unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::IncompatibleSourceColumnType {
+            source_name,
+            column: 1,
+            expected_type,
+            actual_type,
+        }) if source_name == "bad_type" && expected_type == "uuid" && actual_type == "text"
+    ));
+
+    let source = select(orders_table())
+        .fields([field("status")])
+        .into_source("strict_type")
+        .fields([Field::new("status", FieldType::Citext)]);
+
+    let err = select(source).build_rows_pg().unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::IncompatibleSourceColumnType {
+            source_name,
+            column: 1,
+            expected_type,
+            actual_type,
+        }) if source_name == "strict_type" && expected_type == "citext" && actual_type == "text"
+    ));
 }
 
 #[test]

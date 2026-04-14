@@ -41,6 +41,10 @@ Sources:
 Dataset::table("orders");
 Dataset::view("order_search_view");
 Dataset::raw("SELECT * FROM orders WHERE archived_at IS NULL", "active_orders");
+select(orders())
+    .fields([ID, USER_ID])
+    .into_source("order_ids")
+    .fields([ID, USER_ID]);
 Dataset::cte("recent_orders");
 Dataset::table("orders").alias("o");
 ```
@@ -453,6 +457,43 @@ let query = select(users())
 ```
 
 Subqueries are validated with access to the outer query scope, so correlated references like `ID.on("o")` work. `IN` subqueries must select exactly one column. Subquery expressions are Rust-only and skipped by serde; they are intentionally not part of the JSON request format.
+
+### Subquery Sources And LATERAL
+
+Use `into_source` when the source SQL should still be built and validated by
+rqb. The declared fields describe the subquery output columns.
+
+```rust
+let paid_orders = select(orders().alias("o"))
+    .fields([ID.on("o"), USER_ID.on("o")])
+    .filter(STATUS.on("o").eq("paid"))
+    .into_source("paid_orders")
+    .fields([ID, USER_ID]);
+
+select(paid_orders)
+    .fields([USER_ID])
+    .filter(USER_ID.eq(user_id));
+```
+
+Use `join_lateral`, `left_join_lateral`, or `cross_join_lateral` when the
+subquery source references fields from the left side of the `FROM` list:
+
+```rust
+let latest_order = select(orders().alias("o"))
+    .fields([STATUS.on("o")])
+    .filter(USER_ID.on("o").eq_col(ID.on("u")))
+    .order_by(CREATED_AT.on("o").desc())
+    .limit(1)
+    .into_source("latest_order")
+    .fields([STATUS]);
+
+select(users().alias("u"))
+    .fields([EMAIL.on("u"), STATUS.on("latest_order").alias("latestStatus")])
+    .left_join_lateral(latest_order, raw("TRUE"));
+```
+
+Non-lateral subquery sources are validated without access to outer fields, so an
+accidental correlated reference fails before SQL rendering.
 
 ## Raw SQL
 

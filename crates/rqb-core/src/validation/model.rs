@@ -1,5 +1,5 @@
 use crate::aggregate::{AggregateType, SelectColumn};
-use crate::dataset::{Dataset, JoinKind};
+use crate::dataset::{Dataset, JoinKind, Source};
 use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, SortDir, SubqueryOperator};
 use crate::field::ResolvedField;
 use crate::query::SetOperator;
@@ -11,6 +11,7 @@ use crate::value::Value;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedSelect {
     pub dataset: Dataset,
+    pub source: ValidatedSource,
     pub cacheable: bool,
     pub distinct: bool,
     pub ctes: Vec<ValidatedCte>,
@@ -149,7 +150,18 @@ pub enum ValidatedCteBody {
 pub struct ValidatedJoin {
     pub kind: JoinKind,
     pub dataset: Dataset,
+    pub source: ValidatedSource,
     pub on: Option<ValidatedExpr>,
+    pub lateral: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedSource {
+    Plain(Source),
+    Subquery {
+        query: Box<ValidatedQueryExpr>,
+        alias: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

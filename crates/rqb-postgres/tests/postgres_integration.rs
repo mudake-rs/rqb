@@ -1,8 +1,8 @@
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
-    SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, count, cte, delete, exists, field,
-    insert, not_exists, raw, raw_query, select, sum, update,
+    SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast, coalesce, count, cte,
+    delete, exists, field, insert, not_exists, raw, raw_query, select, sum, update,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -458,6 +458,46 @@ async fn executes_raw_source_with_safe_outer_filtering() -> TestResult {
         vec!["ada@example.com", "grace@example.com", "linus@example.com"]
     );
     assert_count(&client, &built.count, 3).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn maps_expression_select_items_into_structs() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    struct ExpressionRow {
+        email: String,
+        label: String,
+        #[serde(rename = "statusLabel")]
+        status_label: String,
+        #[serde(rename = "totalText")]
+        total_text: String,
+    }
+
+    let rows = select(order_search::dataset())
+        .select([order_search::EMAIL])
+        .select_expr(
+            coalesce([order_search::CHANNEL.expr(), order_search::EMAIL.expr()]).alias("label"),
+        )
+        .select_expr(
+            case_when(order_search::STATUS.eq(order_search::OrderStatus::Paid))
+                .then("settled")
+                .otherwise("open")
+                .alias("statusLabel"),
+        )
+        .select_expr(cast(order_search::TOTAL_CENTS.expr(), FieldType::Text).alias("totalText"))
+        .filter(order_search::EMAIL.eq("ada@example.com"))
+        .fetch_all_as::<ExpressionRow>(&client)
+        .await?;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].email, "ada@example.com");
+    assert_eq!(rows[0].label, "web");
+    assert_eq!(rows[0].status_label, "settled");
+    assert_eq!(rows[0].total_text, "15900");
     Ok(())
 }
 

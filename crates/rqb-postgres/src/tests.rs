@@ -4,9 +4,9 @@ use super::*;
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
-    SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, count,
-    count_distinct, delete, exists, field, insert, json_agg, max, min, not_exists, raw, raw_query,
-    select, string_agg, sum, update,
+    SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, case_when, cast,
+    coalesce, count, count_distinct, delete, exists, field, func, insert, json_agg, max, min,
+    not_exists, raw, raw_expr, raw_query, select, string_agg, sum, update,
 };
 use serde::Serialize;
 use tokio_postgres::{Row, types::ToSql};
@@ -654,6 +654,91 @@ fn select_defaults_to_all_selectable_root_fields() {
     assert!(built.sql.starts_with("SELECT "));
     assert!(!built.sql.contains("SELECT *"));
     assert!(built.sql.contains(" FROM \"order_search_view\" "));
+}
+
+#[test]
+fn renders_expression_select_items_with_aliases_and_output_metadata() {
+    let built = select(orders())
+        .fields(["id"])
+        .select_expr(coalesce([field("name").expr(), field("email").expr()]).alias("label"))
+        .select_expr(
+            case_when(field("status").eq("paid"))
+                .then("settled")
+                .when(field("status").eq("cancelled"))
+                .then("closed")
+                .otherwise("open")
+                .alias("statusLabel"),
+        )
+        .select_expr(cast(field("totalCents").expr(), FieldType::Text).alias("totalText"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.starts_with(
+        "SELECT \"id\", COALESCE(\"name\", \"email\") AS \"label\", CASE WHEN \"status\" = $1 THEN $2"
+    ));
+    assert!(
+        built
+            .sql
+            .contains("WHEN \"status\" = $3 THEN $4 ELSE $5 END AS \"statusLabel\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("CAST(\"total_cents\" AS text) AS \"totalText\"")
+    );
+    assert_eq!(
+        built
+            .columns
+            .iter()
+            .map(SelectColumn::alias)
+            .collect::<Vec<_>>(),
+        ["id", "label", "statusLabel", "totalText"]
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("paid".to_owned()),
+            Value::String("settled".to_owned()),
+            Value::String("cancelled".to_owned()),
+            Value::String("closed".to_owned()),
+            Value::String("open".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn renders_generic_and_raw_expression_select_items() {
+    let built = select(orders())
+        .select_expr(
+            func("lower", [field("email").expr()])
+                .returns(FieldType::Text)
+                .alias("emailLower"),
+        )
+        .select_expr(
+            func("public.normalize_email", [field("email").expr()])
+                .returns(FieldType::Text)
+                .alias("normalizedEmail"),
+        )
+        .select_expr(raw_expr(raw("now()"), FieldType::Timestamptz).alias("seenAt"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .starts_with("SELECT \"lower\"(\"email\") AS \"emailLower\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"public\".\"normalize_email\"(\"email\") AS \"normalizedEmail\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains(" AS \"seenAt\" FROM \"order_search_view\"")
+    );
+    assert!(!built.cacheable);
 }
 
 #[test]

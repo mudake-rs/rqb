@@ -4,6 +4,7 @@ mod resolved;
 
 use crate::expr::{Expr, Sort, SortDir};
 use crate::request::SelectQuery;
+use crate::sql_expr::SqlExpr;
 use crate::types::FieldType;
 use crate::value::Value;
 
@@ -98,6 +99,10 @@ impl Field {
 
     pub fn alias(self, alias: impl Into<String>) -> FieldRef {
         FieldRef::from(self).alias(alias)
+    }
+
+    pub fn expr(self) -> SqlExpr {
+        FieldRef::from(self).expr()
     }
 
     delegate_value_ops!(

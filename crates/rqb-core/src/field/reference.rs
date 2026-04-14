@@ -2,6 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::expr::{ColumnOperator, Expr, Operator, Sort, SortDir, SubqueryOperator};
 use crate::request::SelectQuery;
+use crate::sql_expr::SqlExpr;
 use crate::value::Value;
 
 use super::Field;
@@ -115,6 +116,10 @@ impl FieldRef {
                 None => format!("{}.{}", field.api_name, path.join(".")),
             },
         }
+    }
+
+    pub fn expr(self) -> SqlExpr {
+        SqlExpr::Field(self)
     }
 
     pub fn predicate(self, operator: Operator, value: impl Into<Value>) -> Expr {

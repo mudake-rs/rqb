@@ -15,17 +15,19 @@
 //! `docs/ergonomics.md` for end-to-end examples.
 
 pub use rqb_core::{
-    Aggregate, AggregateType, Capabilities, ColumnOperator, ColumnPredicate, ConflictAction,
-    ConflictClause, ConflictTarget, Cte, CteBody, Dataset, DbEnum, DeleteBuilder, DeleteQuery,
-    ElemType, EnumType, Error as CoreError, ExistsPredicate, Expr, Field, FieldRef, FieldType,
-    InsertBuilder, InsertConflictBuilder, InsertQuery, IntoFieldRefs, Join, JoinKind,
-    JsonPathPolicy, LockMode, LockWait, LogicalExpr, LogicalOp, NullsOrder, Operator, Predicate,
-    RawQuery, RawSql, Relation, Result as CoreResult, ReturningMode, RowLock, SearchRequest,
-    SelectBuilder, SelectColumn, SelectQuery, SelectRepr, Sort, SortDir, Source, SubqueryOperator,
-    SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value,
-    ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg, count, count_distinct,
-    count_field, cte, delete, exists, field, insert, json_agg, json_agg_nullable, max, max_agg,
-    min, min_agg, not, not_exists, raw, raw_query, select, string_agg, sum, update,
+    Aggregate, AggregateType, Capabilities, CaseBranch, CaseBuilder, CaseThenBuilder,
+    ColumnOperator, ColumnPredicate, ConflictAction, ConflictClause, ConflictTarget, Cte, CteBody,
+    Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType, Error as CoreError,
+    ExistsPredicate, Expr, Field, FieldRef, FieldType, FunctionBuilder, InsertBuilder,
+    InsertConflictBuilder, InsertQuery, IntoFieldRefs, IntoSqlExpr, Join, JoinKind, JsonPathPolicy,
+    LockMode, LockWait, LogicalExpr, LogicalOp, NullsOrder, Operator, Predicate, RawQuery, RawSql,
+    Relation, Result as CoreResult, ReturningMode, RowLock, SearchRequest, SelectBuilder,
+    SelectColumn, SelectItem, SelectQuery, SelectRepr, Sort, SortDir, Source, SqlExpr,
+    SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder,
+    UpdateQuery, Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg,
+    case_when, cast, coalesce, count, count_distinct, count_field, cte, delete, exists, field,
+    func, insert, json_agg, json_agg_nullable, max, max_agg, min, min_agg, not, not_exists, raw,
+    raw_expr, raw_query, select, string_agg, sum, update,
 };
 pub use rqb_postgres as postgres;
 #[cfg(feature = "pool")]

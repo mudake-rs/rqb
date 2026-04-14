@@ -12,7 +12,11 @@ use super::operators::count_raw_placeholders;
 use super::resolve::{default_qualifier, resolve_field_in_scope, resolved_from_field};
 use super::scope::{ExprContext, QueryScope};
 use super::sort::validate_sort;
-use super::{ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedJoin, ValidatedSelect};
+use super::sql_expr::{collect_sql_expr_fields, validate_select_item};
+use super::{
+    ValidatedAggregate, ValidatedCte, ValidatedCteBody, ValidatedJoin, ValidatedSelect,
+    ValidatedSelectItem,
+};
 
 impl ValidatedSelect {
     pub fn new(query: SelectQuery) -> Result<Self> {
@@ -37,7 +41,7 @@ impl ValidatedSelect {
             });
         }
 
-        let mut selected_fields = resolve_selection(&scope, &query.request.fields)?;
+        let mut selected_fields = resolve_selection(&scope, &query)?;
         apply_root_output_aliases(&query, &mut selected_fields);
         let distinct_on = resolve_distinct_on(&scope, &query.distinct_on)?;
         let aggregates = query
@@ -45,16 +49,36 @@ impl ValidatedSelect {
             .iter()
             .map(|aggregate| validate_aggregate(&scope, aggregate))
             .collect::<Result<Vec<_>>>()?;
+        let select_items = query
+            .select_items
+            .iter()
+            .map(|item| validate_select_item(&scope, item))
+            .collect::<Result<Vec<_>>>()?;
+        let mut expression_fields = Vec::new();
+        for item in &select_items {
+            collect_sql_expr_fields(&item.expr, &mut expression_fields);
+        }
         let group_by = if !query.group_by.is_empty() {
             resolve_group_by(&scope, &query.group_by)?
         } else if !aggregates.is_empty() {
-            selected_fields.clone()
+            let mut group_by = selected_fields.clone();
+            for field in &expression_fields {
+                if !group_by
+                    .iter()
+                    .any(|existing| same_resolved_field(existing, field))
+                {
+                    group_by.push(field.clone());
+                }
+            }
+            group_by
         } else {
             Vec::new()
         };
         validate_aggregate_aliases(&aggregates)?;
         validate_grouped_selection(&selected_fields, &group_by, &aggregates)?;
-        let columns = select_columns(&selected_fields, &aggregates);
+        validate_grouped_expression_selection(&expression_fields, &group_by, &aggregates)?;
+        let columns = select_columns(&selected_fields, &aggregates, &select_items);
+        validate_output_aliases(&columns)?;
         let sort = query
             .request
             .sort
@@ -89,6 +113,7 @@ impl ValidatedSelect {
             distinct_on,
             group_by,
             aggregates,
+            select_items,
             columns,
             filter,
             having,
@@ -170,8 +195,9 @@ fn validate_joins(scope: &QueryScope, query: &SelectQuery) -> Result<Vec<Validat
         .collect()
 }
 
-fn resolve_selection(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<ResolvedField>> {
-    if fields.is_empty() {
+fn resolve_selection(scope: &QueryScope, query: &SelectQuery) -> Result<Vec<ResolvedField>> {
+    let fields = &query.request.fields;
+    if fields.is_empty() && query.aggregates.is_empty() && query.select_items.is_empty() {
         return scope
             .root()
             .fields
@@ -227,6 +253,7 @@ fn resolve_group_by(scope: &QueryScope, fields: &[FieldRef]) -> Result<Vec<Resol
 fn select_columns(
     selected_fields: &[ResolvedField],
     aggregates: &[ValidatedAggregate],
+    select_items: &[ValidatedSelectItem],
 ) -> Vec<SelectColumn> {
     selected_fields
         .iter()
@@ -236,5 +263,49 @@ fn select_columns(
             alias: aggregate.alias().to_owned(),
             ty: aggregate.aggregate_type(),
         }))
+        .chain(select_items.iter().map(|item| SelectColumn::Expression {
+            alias: item.alias.clone(),
+            ty: item.ty,
+        }))
         .collect()
+}
+
+fn validate_output_aliases(columns: &[SelectColumn]) -> Result<()> {
+    let mut aliases = std::collections::HashSet::with_capacity(columns.len());
+    for column in columns {
+        let alias = column.alias();
+        if !aliases.insert(alias.clone()) {
+            return Err(Error::DuplicateOutputAlias { alias });
+        }
+    }
+    Ok(())
+}
+
+fn validate_grouped_expression_selection(
+    expression_fields: &[ResolvedField],
+    group_by: &[ResolvedField],
+    aggregates: &[ValidatedAggregate],
+) -> Result<()> {
+    if group_by.is_empty() || aggregates.is_empty() {
+        return Ok(());
+    }
+    for field in expression_fields {
+        if !group_by
+            .iter()
+            .any(|group| same_resolved_field(group, field))
+        {
+            return Err(Error::UngroupedField {
+                field: field.display_name(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn same_resolved_field(left: &ResolvedField, right: &ResolvedField) -> bool {
+    left.db_name == right.db_name
+        && left.api_name == right.api_name
+        && left.qualifier == right.qualifier
+        && left.explicit_qualifier == right.explicit_qualifier
+        && left.json_path == right.json_path
 }

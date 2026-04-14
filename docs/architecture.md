@@ -17,10 +17,13 @@ Current public capabilities:
   relation helpers.
 - SELECT queries with default root projection, explicit fields, joins, CTEs,
   raw sources, subqueries, `EXISTS`, `DISTINCT`, `DISTINCT ON`, grouping,
-  aggregate selection, aggregate filters, row locks, sorting, pagination, and
-  JSON `SearchRequest` merge.
+  aggregate selection, expression select items, aggregate filters, row locks,
+  sorting, pagination, and JSON `SearchRequest` merge.
 - Expression trees for predicates, column predicates, logical `and`/`or`/`not`,
   raw server-owned fragments, subquery predicates, and exists predicates.
+- Server-owned SQL value expressions for computed select items, including
+  fields, values, raw fragments, typed function calls, `COALESCE`, searched
+  `CASE`, and casts.
 - Operators for scalar comparisons, null checks, text matching, regex, arrays,
   JSONB keys and array matching, text search, ranges, networks, and column
   comparisons.
@@ -138,6 +141,24 @@ predicate shapes.
 lowers `contains` / `notContains` to either text-like `LIKE` predicates or
 range/network containment predicates. The renderer only sees the concrete
 lowered shape.
+
+### SQL Value Expressions Are Server-Owned
+
+`SqlExpr` is the Rust/server-owned expression layer. It is separate from JSON
+`Expr` on purpose:
+
+```text
+Expr    = metadata-constrained boolean predicates, serde-facing
+SqlExpr = trusted value expressions for SELECT items and future write/query features
+```
+
+Computed select expressions lower into `ValidatedSelectItem` values carrying a
+validated expression, explicit alias, and output type. Row mapping consumes the
+same output metadata, so computed aliases deserialize like ordinary fields.
+
+JSON `SearchRequest` does not see computed select aliases. If an expression must
+be client-addressable, expose it as dataset metadata, usually through a view or
+generated field.
 
 ### Write Validation Has A Dedicated Scope
 

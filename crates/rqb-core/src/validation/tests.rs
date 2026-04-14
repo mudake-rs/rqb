@@ -2,8 +2,8 @@ use super::*;
 use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType, Join,
     JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr, Sort, SubqueryOperator,
-    TypeFamily, TypeSpec, Value, ValueRepr, avg, count, count_field, field, insert, max, min,
-    string_agg, sum,
+    TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce, count, count_field,
+    field, insert, max, min, string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -136,6 +136,104 @@ fn rejects_hidden_selection() {
     let query = crate::select(dataset()).fields(["id", "blobName"]).build();
     let err = ValidatedSelect::new(query).unwrap_err();
     assert!(matches!(err, Error::NotSelectable { .. }));
+}
+
+#[test]
+fn validates_expression_select_items_and_output_columns() {
+    let query = crate::select(dataset())
+        .fields(["id"])
+        .select_expr(coalesce([field("displayName").expr(), field("name").expr()]).alias("label"))
+        .select_expr(
+            case_when(field("state").eq("active"))
+                .then("live")
+                .when(field("state").eq("archived"))
+                .then("old")
+                .otherwise("other")
+                .alias("stateLabel"),
+        )
+        .select_expr(cast(field("score").expr(), FieldType::Text).alias("scoreText"))
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+
+    assert_eq!(validated.select_items.len(), 3);
+    assert_eq!(
+        validated
+            .columns
+            .iter()
+            .map(crate::SelectColumn::alias)
+            .collect::<Vec<_>>(),
+        ["id", "label", "stateLabel", "scoreText"]
+    );
+}
+
+#[test]
+fn rejects_expression_select_items_that_leak_hidden_fields() {
+    let query = crate::select(dataset())
+        .select_expr(coalesce([field("blobName").expr(), field("name").expr()]).alias("label"))
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+
+    assert!(matches!(err, Error::NotSelectable { field } if field == "blobName"));
+}
+
+#[test]
+fn rejects_case_conditions_that_leak_hidden_fields() {
+    let query = crate::select(dataset())
+        .select_expr(
+            case_when(field("blobName").eq("secret"))
+                .then("yes")
+                .otherwise("no")
+                .alias("derived"),
+        )
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+
+    assert!(matches!(err, Error::NotSelectable { field } if field == "blobName"));
+}
+
+#[test]
+fn rejects_duplicate_output_aliases_across_fields_aggregates_and_expressions() {
+    let field_duplicate = crate::select(dataset())
+        .fields(["id"])
+        .select_expr(field("name").expr().alias("id"))
+        .build();
+    let err = ValidatedSelect::new(field_duplicate).unwrap_err();
+    assert!(matches!(err, Error::DuplicateOutputAlias { alias } if alias == "id"));
+
+    let aggregate_duplicate = crate::select(dataset())
+        .agg(count("total"))
+        .select_expr(field("name").expr().alias("total"))
+        .build();
+    let err = ValidatedSelect::new(aggregate_duplicate).unwrap_err();
+    assert!(matches!(err, Error::DuplicateOutputAlias { alias } if alias == "total"));
+
+    let expression_duplicate = crate::select(dataset())
+        .select_expr(field("name").expr().alias("label"))
+        .select_expr(field("displayName").expr().alias("label"))
+        .build();
+    let err = ValidatedSelect::new(expression_duplicate).unwrap_err();
+    assert!(matches!(err, Error::DuplicateOutputAlias { alias } if alias == "label"));
+}
+
+#[test]
+fn rejects_expression_select_items_with_incompatible_branch_types() {
+    let query = crate::select(dataset())
+        .select_expr(
+            case_when(field("active").eq(true))
+                .then("yes")
+                .otherwise(0)
+                .alias("activeLabel"),
+        )
+        .build();
+
+    let err = ValidatedSelect::new(query).unwrap_err();
+
+    assert!(
+        matches!(err, Error::IncompatibleExpressionTypes { expression, .. } if expression == "case")
+    );
 }
 
 #[test]

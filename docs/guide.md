@@ -74,6 +74,37 @@ let rows = select(orders())
 
 Use `.fields([...])` when the response should be narrower, when selecting qualified columns from a join, when building a one-column `IN (subquery)`, or when returning `serde_json::Value` from a client-selected field list.
 
+Use `.select_expr(...)` for server-owned computed columns. Computed expressions
+must be aliased because the alias is the serde/result field name:
+
+```rust
+#[derive(serde::Deserialize)]
+struct OrderRow {
+    id: uuid::Uuid,
+    label: String,
+    status_label: String,
+    total_text: String,
+}
+
+let rows = select(orders())
+    .select([ID])
+    .select_expr(coalesce([DISPLAY_NAME.expr(), EMAIL.expr()]).alias("label"))
+    .select_expr(
+        case_when(STATUS.eq("paid"))
+            .then("settled")
+            .otherwise("open")
+            .alias("status_label"),
+    )
+    .select_expr(cast(TOTAL_CENTS.expr(), FieldType::Text).alias("total_text"))
+    .fetch_all_as::<OrderRow>(&db)
+    .await?;
+```
+
+`.select_expr(...)` is Rust-only query shape. JSON `SearchRequest` can still
+select, sort, and filter only dataset-declared fields; it cannot reference a
+computed alias such as `label` unless that alias is exposed through dataset
+metadata, for example by a view.
+
 `.filter(expr)` and `.and_where(expr)` AND-compose with the current filter. `.or_where(expr)` OR-composes with it. Use `.replace_filter(expr)` when replacement is intentional. `.filter_if(condition, expr)` is useful for already-normalized params. `.filter_option(value, |value| ...)` handles optional values without unwraps.
 
 `.request(search_request)` merges JSON search input into the current builder. Server-side filters are preserved and combined with the request filter using `AND`; request fields, sort, limit, and offset replace those parts when present. Use `.replace_request(search_request)` only when replacement is intended.

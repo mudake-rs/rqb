@@ -20,6 +20,7 @@ pub fn update(dataset: impl Into<Dataset>) -> UpdateBuilder {
 pub struct UpdateQuery {
     pub dataset: Dataset,
     pub assignments: Vec<WriteAssignment>,
+    pub from: Vec<Dataset>,
     pub filter: Option<Expr>,
     pub returning: ReturningMode,
 }
@@ -61,6 +62,7 @@ impl UpdateBuilder {
             query: UpdateQuery {
                 dataset: dataset.into(),
                 assignments: Vec::new(),
+                from: Vec::new(),
                 filter: None,
                 returning: ReturningMode::none(),
             },
@@ -117,6 +119,11 @@ impl UpdateBuilder {
         self.query
             .assignments
             .push(WriteAssignment::column(field, source));
+        self
+    }
+
+    pub fn from(mut self, dataset: impl Into<Dataset>) -> Self {
+        self.query.from.push(dataset.into());
         self
     }
 

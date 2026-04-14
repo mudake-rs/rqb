@@ -24,6 +24,20 @@ impl QueryScope {
         }
     }
 
+    pub(super) fn from_datasets(root: &Dataset, datasets: &[Dataset]) -> Result<Self> {
+        let mut scoped = Vec::with_capacity(datasets.len() + 1);
+        scoped.push(ScopedDataset {
+            dataset: root.clone(),
+        });
+        scoped.extend(
+            datasets
+                .iter()
+                .cloned()
+                .map(|dataset| ScopedDataset { dataset }),
+        );
+        Self::from_scoped(scoped)
+    }
+
     pub(super) fn new_with_outer(query: &SelectQuery, outer_datasets: &[Dataset]) -> Result<Self> {
         let mut datasets = Vec::with_capacity(query.joins.len() + outer_datasets.len() + 1);
         datasets.push(ScopedDataset {
@@ -39,6 +53,10 @@ impl QueryScope {
                 .map(|dataset| ScopedDataset { dataset }),
         );
 
+        Self::from_scoped(datasets)
+    }
+
+    fn from_scoped(datasets: Vec<ScopedDataset>) -> Result<Self> {
         let has_joins = datasets.len() > 1;
         if has_joins {
             let mut qualifiers = BTreeSet::new();

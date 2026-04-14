@@ -166,6 +166,47 @@ let row = update(orders())
 
 Use `.set_expr(...)` for server-owned computed assignments, `.set_default(...)` for SQL `DEFAULT`, and `.returning_expr(...)` when a write should return a computed column. `INSERT` expressions cannot reference target fields; `UPDATE` expressions can reference the row being updated.
 
+## Custom Upsert Assignments
+
+```rust
+let row = insert(order_counters())
+    .set(ID, id)
+    .set(TOTAL_CENTS, total)
+    .on_conflict(ID)
+    .do_update_set([
+        set_expr(TOTAL_CENTS, excluded(TOTAL_CENTS)),
+        set_default(UPDATED_AT),
+    ])
+    .conflict_filter(DELETED_AT.is_null())
+    .returning([ID, TOTAL_CENTS])
+    .fetch_one_as::<CounterRow>(&db)
+    .await?;
+```
+
+Use `.do_update([FIELD])` for the common `field = EXCLUDED.field` case. Use
+`.do_update_set([...])` when the conflict action needs expressions, `DEFAULT`,
+or a different assignment list. Add `.index_where(...)` before `.do_update_set`
+when targeting a partial unique index.
+
+## UPDATE FROM / DELETE USING
+
+```rust
+update(orders().alias("o"))
+    .from(users().alias("u"))
+    .set_col(orders::USER_ID, users::ID.on("u"))
+    .filter(orders::USER_ID.on("o").eq_col(users::ID.on("u")))
+    .execute(&db)
+    .await?;
+
+delete(events().alias("e"))
+    .using(orders().alias("o"))
+    .filter(events::ORDER_ID.on("e").eq_col(orders::ID.on("o")))
+    .execute(&db)
+    .await?;
+```
+
+Extra sources participate in validation, so ambiguous fields must be qualified.
+
 ## Conditional Filters
 
 ```rust

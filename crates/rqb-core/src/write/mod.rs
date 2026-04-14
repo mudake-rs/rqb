@@ -103,6 +103,26 @@ impl Default for ReturningMode {
     }
 }
 
+pub fn set(field: impl Into<FieldRef>, value: impl Into<Value>) -> WriteAssignment {
+    WriteAssignment::value(field, value)
+}
+
+pub fn set_expr(field: impl Into<FieldRef>, expr: impl IntoSqlExpr) -> WriteAssignment {
+    WriteAssignment::expr(field, expr)
+}
+
+pub fn set_default(field: impl Into<FieldRef>) -> WriteAssignment {
+    WriteAssignment::default(field)
+}
+
+pub fn set_col(field: impl Into<FieldRef>, source: impl Into<FieldRef>) -> WriteAssignment {
+    WriteAssignment::column(field, source)
+}
+
+pub fn set_raw(field: impl Into<FieldRef>, raw: RawSql) -> WriteAssignment {
+    WriteAssignment::raw(field, raw)
+}
+
 macro_rules! write_filter_methods {
     () => {
         pub fn filter(self, expr: impl Into<Expr>) -> Self {

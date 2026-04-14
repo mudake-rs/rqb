@@ -43,6 +43,10 @@ impl Renderer {
     pub(super) fn render_sql_expr(&mut self, expr: &ValidatedSqlExpr) -> Result<()> {
         match expr {
             ValidatedSqlExpr::Field(field) => self.render_column_name(field),
+            ValidatedSqlExpr::Excluded(field) => {
+                self.sql.push_str("EXCLUDED.");
+                write_quoted_ident(&mut self.sql, &field.db_name);
+            }
             ValidatedSqlExpr::Value { value, ty } => self.push_typed_param(value, *ty),
             ValidatedSqlExpr::Raw { raw, .. } => self.render_raw(raw),
             ValidatedSqlExpr::Function { name, args, .. } => {

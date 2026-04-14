@@ -8,6 +8,7 @@ use crate::value::Value;
 #[must_use]
 pub enum SqlExpr {
     Field(FieldRef),
+    Excluded(FieldRef),
     Value(Value),
     Raw {
         raw: RawSql,
@@ -197,6 +198,10 @@ where
 
 pub fn raw_expr(raw: RawSql, ty: FieldType) -> SqlExpr {
     SqlExpr::Raw { raw, ty }
+}
+
+pub fn excluded(field: impl Into<FieldRef>) -> SqlExpr {
+    SqlExpr::Excluded(field.into())
 }
 
 pub fn case_when(condition: impl Into<Expr>) -> CaseThenBuilder {

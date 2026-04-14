@@ -114,6 +114,9 @@ pub enum Error {
     #[error("aggregate alias `{alias}` is used more than once")]
     DuplicateAggregateAlias { alias: String },
 
+    #[error("selected output alias `{alias}` is used more than once")]
+    DuplicateOutputAlias { alias: String },
+
     #[error("unknown aggregate alias `{alias}`")]
     UnknownAggregateAlias { alias: String },
 
@@ -125,6 +128,21 @@ pub enum Error {
         aggregate: String,
         field: String,
         field_type: String,
+    },
+
+    #[error("select expression alias must not be empty")]
+    EmptyExpressionAlias,
+
+    #[error("expression `{expression}` has no inferable output type")]
+    UnknownExpressionType { expression: String },
+
+    #[error(
+        "expression `{expression}` mixes incompatible output types `{left_type}` and `{right_type}`"
+    )]
+    IncompatibleExpressionTypes {
+        expression: String,
+        left_type: String,
+        right_type: String,
     },
 
     #[error("subquery must select {expected} column(s), but selects {actual}")]

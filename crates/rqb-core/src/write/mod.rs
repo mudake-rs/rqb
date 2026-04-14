@@ -1,5 +1,6 @@
 use crate::field::{Field, FieldRef};
 use crate::raw::RawSql;
+use crate::sql_expr::{IntoSqlExpr, SelectItem, SqlExpr};
 use crate::value::Value;
 
 pub trait IntoFieldRefs {
@@ -58,16 +59,47 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[must_use]
-pub enum ReturningMode {
+pub(crate) enum ReturningFields {
     None,
     All,
     Fields(Vec<FieldRef>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+#[must_use]
+pub struct ReturningMode {
+    pub(crate) fields: ReturningFields,
+    pub(crate) expressions: Vec<SelectItem>,
+}
+
 impl ReturningMode {
+    pub fn none() -> Self {
+        Self {
+            fields: ReturningFields::None,
+            expressions: Vec::new(),
+        }
+    }
+
     pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
+        matches!(self.fields, ReturningFields::None) && self.expressions.is_empty()
+    }
+
+    pub fn set_fields(&mut self, fields: impl IntoFieldRefs) {
+        self.fields = ReturningFields::Fields(fields.into_field_refs());
+    }
+
+    pub fn set_all(&mut self) {
+        self.fields = ReturningFields::All;
+    }
+
+    pub fn push_expr(&mut self, item: SelectItem) {
+        self.expressions.push(item);
+    }
+}
+
+impl Default for ReturningMode {
+    fn default() -> Self {
+        Self::none()
     }
 }
 
@@ -121,18 +153,23 @@ macro_rules! write_filter_methods {
 macro_rules! returning_method {
     () => {
         pub fn returning(mut self, fields: impl IntoFieldRefs) -> Self {
-            self.query.returning = ReturningMode::Fields(fields.into_field_refs());
+            self.query.returning.set_fields(fields);
             self
         }
 
         pub fn returning_all(mut self) -> Self {
-            self.query.returning = ReturningMode::All;
+            self.query.returning.set_all();
+            self
+        }
+
+        pub fn returning_expr(mut self, item: SelectItem) -> Self {
+            self.query.returning.push_expr(item);
             self
         }
 
         pub fn returning_all_if_empty(mut self) -> Self {
             if self.query.returning.is_none() {
-                self.query.returning = ReturningMode::All;
+                self.query.returning.set_all();
             }
             self
         }
@@ -177,6 +214,20 @@ impl WriteAssignment {
             value: WriteValue::Column(source.into()),
         }
     }
+
+    pub fn expr(field: impl Into<FieldRef>, expr: impl IntoSqlExpr) -> Self {
+        Self {
+            field: field.into(),
+            value: WriteValue::Expr(expr.into_sql_expr()),
+        }
+    }
+
+    pub fn default(field: impl Into<FieldRef>) -> Self {
+        Self {
+            field: field.into(),
+            value: WriteValue::Default,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -184,6 +235,8 @@ pub enum WriteValue {
     Value(Value),
     Raw(RawSql),
     Column(FieldRef),
+    Expr(SqlExpr),
+    Default,
 }
 
 mod conflict;

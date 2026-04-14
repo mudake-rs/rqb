@@ -96,7 +96,10 @@ impl Renderer {
 
     fn render_selection(&mut self, validated: &ValidatedSelect) -> Result<()> {
         self.columns.clone_from(&validated.columns);
-        if validated.selected_fields.is_empty() && validated.aggregates.is_empty() {
+        if validated.selected_fields.is_empty()
+            && validated.aggregates.is_empty()
+            && validated.select_items.is_empty()
+        {
             self.sql.push('*');
             return Ok(());
         }
@@ -116,11 +119,21 @@ impl Renderer {
             self.render_aggregate(aggregate)?;
             wrote = true;
         }
+        for item in &validated.select_items {
+            if wrote {
+                self.sql.push_str(", ");
+            }
+            self.render_selected_expr(item)?;
+            wrote = true;
+        }
         Ok(())
     }
 
     fn render_subquery_value_projection(&mut self, validated: &ValidatedSelect) -> Result<()> {
-        if validated.selected_fields.is_empty() && validated.aggregates.is_empty() {
+        if validated.selected_fields.is_empty()
+            && validated.aggregates.is_empty()
+            && validated.select_items.is_empty()
+        {
             self.sql.push('*');
             return Ok(());
         }
@@ -138,6 +151,13 @@ impl Renderer {
                 self.sql.push_str(", ");
             }
             self.render_aggregate(aggregate)?;
+            wrote = true;
+        }
+        for item in &validated.select_items {
+            if wrote {
+                self.sql.push_str(", ");
+            }
+            self.render_selected_expr(item)?;
             wrote = true;
         }
         Ok(())

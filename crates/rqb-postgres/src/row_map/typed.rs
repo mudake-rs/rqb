@@ -17,6 +17,7 @@ pub fn row_to_json(row: &Row, columns: &[SelectColumn]) -> Result<JsonValue> {
         let value = match column {
             SelectColumn::Field(field) => field_to_json(row, &alias, field.ty)?,
             SelectColumn::Aggregate { ty, .. } => aggregate_to_json(row, &alias, ty)?,
+            SelectColumn::Expression { ty, .. } => field_to_json(row, &alias, *ty)?,
         };
         object.insert(alias, value);
     }

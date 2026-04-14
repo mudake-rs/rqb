@@ -4,6 +4,7 @@ use crate::error::Error;
 use crate::expr::{Expr, Sort, SortDir};
 use crate::field::FieldRef;
 use crate::request::{LockMode, RowLock, SearchRequest, SelectQuery};
+use crate::sql_expr::SelectItem;
 
 pub fn select(dataset: impl Into<Dataset>) -> SelectBuilder {
     SelectBuilder::new(dataset)
@@ -116,6 +117,19 @@ impl SelectBuilder {
         F: Into<FieldRef>,
     {
         self.query.request.fields = fields.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn select<I, F>(self, fields: I) -> Self
+    where
+        I: IntoIterator<Item = F>,
+        F: Into<FieldRef>,
+    {
+        self.fields(fields)
+    }
+
+    pub fn select_expr(mut self, item: SelectItem) -> Self {
+        self.query.select_items.push(item);
         self
     }
 

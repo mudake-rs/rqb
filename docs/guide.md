@@ -74,6 +74,37 @@ let rows = select(orders())
 
 Use `.fields([...])` when the response should be narrower, when selecting qualified columns from a join, when building a one-column `IN (subquery)`, or when returning `serde_json::Value` from a client-selected field list.
 
+Use `.select_expr(...)` for server-owned computed columns. Computed expressions
+must be aliased because the alias is the serde/result field name:
+
+```rust
+#[derive(serde::Deserialize)]
+struct OrderRow {
+    id: uuid::Uuid,
+    label: String,
+    status_label: String,
+    total_text: String,
+}
+
+let rows = select(orders())
+    .select([ID])
+    .select_expr(coalesce([DISPLAY_NAME.expr(), EMAIL.expr()]).alias("label"))
+    .select_expr(
+        case_when(STATUS.eq("paid"))
+            .then("settled")
+            .otherwise("open")
+            .alias("status_label"),
+    )
+    .select_expr(cast(TOTAL_CENTS.expr(), FieldType::Text).alias("total_text"))
+    .fetch_all_as::<OrderRow>(&db)
+    .await?;
+```
+
+`.select_expr(...)` is Rust-only query shape. JSON `SearchRequest` can still
+select, sort, and filter only dataset-declared fields; it cannot reference a
+computed alias such as `label` unless that alias is exposed through dataset
+metadata, for example by a view.
+
 `.filter(expr)` and `.and_where(expr)` AND-compose with the current filter. `.or_where(expr)` OR-composes with it. Use `.replace_filter(expr)` when replacement is intentional. `.filter_if(condition, expr)` is useful for already-normalized params. `.filter_option(value, |value| ...)` handles optional values without unwraps.
 
 `.request(search_request)` merges JSON search input into the current builder. Server-side filters are preserved and combined with the request filter using `AND`; request fields, sort, limit, and offset replace those parts when present. Use `.replace_request(search_request)` only when replacement is intended.
@@ -152,6 +183,20 @@ insert(orders())
 
 Write `fetch_*` methods return all selectable fields by default. Add `.returning([ID, STATUS])` when you want a narrower projection, or use `.execute()` when no rows should be returned.
 
+`INSERT` also accepts server-owned expressions and SQL defaults:
+
+```rust
+insert(events())
+    .set(ID, event_id)
+    .set(EVENT_TYPE, "created")
+    .set_default(PAYLOAD)
+    .set_expr(CREATED_AT, raw_expr(raw("now()"), FieldType::Timestamptz))
+    .returning([ID])
+    .returning_expr(func("lower", [EVENT_TYPE.expr()]).returns(FieldType::Text).alias("kind"));
+```
+
+Insert expressions cannot reference target fields because Postgres `VALUES` rows do not have a current target row. Use `.set(...)`, `.set_default(...)`, functions, or server-owned raw expressions.
+
 Struct inserts use serde:
 
 ```rust
@@ -193,14 +238,17 @@ insert(orders())
 ```rust
 update(orders())
     .set(STATUS, "paid")
+    .set_default(METADATA)
+    .set_expr(TOTAL_CENTS, coalesce([TOTAL_CENTS.expr(), 0.into_sql_expr()]))
     .set_raw(CREATED_AT, raw("now()"))
     .set_col(USER_ID, field("backup_user_id"))
     .filter(ID.eq(order_id))
+    .returning_expr(cast(TOTAL_CENTS.expr(), FieldType::Text).alias("total_text"))
     .fetch_optional_as::<Order>(&db)
     .await?;
 ```
 
-Use `.set_null(field)` when an update needs to assign SQL `NULL` without spelling `Value::Null`.
+Use `.set_null(field)` when an update needs to assign SQL `NULL` without spelling `Value::Null`. Use `.set_default(field)` for SQL `DEFAULT`. Use `.set_expr(field, expr)` for server-owned computed assignments; rqb validates the expression type and casts the top-level expression to the target field type.
 
 Partial update:
 

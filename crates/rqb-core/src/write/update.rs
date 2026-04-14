@@ -6,6 +6,7 @@ use crate::expr::Expr;
 use crate::field::FieldRef;
 use crate::raw::RawSql;
 use crate::serde_bridge::fields_from_serializable;
+use crate::sql_expr::{IntoSqlExpr, SelectItem};
 use crate::value::Value;
 
 use super::{IntoFieldRefs, ReturningMode, WriteAssignment};
@@ -25,18 +26,23 @@ pub struct UpdateQuery {
 
 impl UpdateQuery {
     pub fn returning(mut self, fields: impl IntoFieldRefs) -> Self {
-        self.returning = ReturningMode::Fields(fields.into_field_refs());
+        self.returning.set_fields(fields);
         self
     }
 
     pub fn returning_all(mut self) -> Self {
-        self.returning = ReturningMode::All;
+        self.returning.set_all();
+        self
+    }
+
+    pub fn returning_expr(mut self, item: SelectItem) -> Self {
+        self.returning.push_expr(item);
         self
     }
 
     pub fn returning_all_if_empty(mut self) -> Self {
         if self.returning.is_none() {
-            self.returning = ReturningMode::All;
+            self.returning.set_all();
         }
         self
     }
@@ -56,7 +62,7 @@ impl UpdateBuilder {
                 dataset: dataset.into(),
                 assignments: Vec::new(),
                 filter: None,
-                returning: ReturningMode::None,
+                returning: ReturningMode::none(),
             },
             errors: Vec::new(),
         }
@@ -66,6 +72,18 @@ impl UpdateBuilder {
         self.query
             .assignments
             .push(WriteAssignment::value(field, value));
+        self
+    }
+
+    pub fn set_expr(mut self, field: impl Into<FieldRef>, expr: impl IntoSqlExpr) -> Self {
+        self.query
+            .assignments
+            .push(WriteAssignment::expr(field, expr));
+        self
+    }
+
+    pub fn set_default(mut self, field: impl Into<FieldRef>) -> Self {
+        self.query.assignments.push(WriteAssignment::default(field));
         self
     }
 

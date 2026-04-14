@@ -17,10 +17,13 @@ Current public capabilities:
   relation helpers.
 - SELECT queries with default root projection, explicit fields, joins, CTEs,
   raw sources, subqueries, `EXISTS`, `DISTINCT`, `DISTINCT ON`, grouping,
-  aggregate selection, aggregate filters, row locks, sorting, pagination, and
-  JSON `SearchRequest` merge.
+  aggregate selection, expression select items, aggregate filters, row locks,
+  sorting, pagination, and JSON `SearchRequest` merge.
 - Expression trees for predicates, column predicates, logical `and`/`or`/`not`,
   raw server-owned fragments, subquery predicates, and exists predicates.
+- Server-owned SQL value expressions for computed select items, including
+  fields, values, raw fragments, typed function calls, `COALESCE`, searched
+  `CASE`, and casts.
 - Operators for scalar comparisons, null checks, text matching, regex, arrays,
   JSONB keys and array matching, text search, ranges, networks, and column
   comparisons.
@@ -139,6 +142,25 @@ lowers `contains` / `notContains` to either text-like `LIKE` predicates or
 range/network containment predicates. The renderer only sees the concrete
 lowered shape.
 
+### SQL Value Expressions Are Server-Owned
+
+`SqlExpr` is the Rust/server-owned expression layer. It is separate from JSON
+`Expr` on purpose:
+
+```text
+Expr    = metadata-constrained boolean predicates, serde-facing
+SqlExpr = trusted value expressions for SELECT items, write assignments, and RETURNING items
+```
+
+Computed select and returning expressions lower into `ValidatedSelectItem`
+values carrying a validated expression, explicit alias, and output type. Row
+mapping consumes the same output metadata, so computed aliases deserialize like
+ordinary fields.
+
+JSON `SearchRequest` does not see computed select aliases. If an expression must
+be client-addressable, expose it as dataset metadata, usually through a view or
+generated field.
+
 ### Write Validation Has A Dedicated Scope
 
 Write validation now uses a `WriteScope` over one writable dataset. It still
@@ -147,8 +169,12 @@ throwaway `SelectQuery` values just to validate assignments, filters, or
 `RETURNING`.
 
 Validated write structs contain the writable dataset and render-ready resolved
-fields, assignments, conflict clauses, filters, and returning fields. They do
-not keep the original write AST.
+fields, assignments, conflict clauses, filters, and returning items. Write
+assignment expressions are validated against the target field type and rendered
+with an explicit top-level cast to the target Postgres type. `INSERT`
+expressions cannot reference target fields because `VALUES` rows do not have a
+current target row; `UPDATE` expressions can reference the row being updated.
+Validated write models do not keep the original write AST.
 
 ### Execution Surface Is Wider Than The Conceptual Model
 

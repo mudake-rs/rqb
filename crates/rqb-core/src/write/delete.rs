@@ -1,5 +1,6 @@
 use crate::dataset::Dataset;
 use crate::expr::Expr;
+use crate::sql_expr::SelectItem;
 
 use super::{IntoFieldRefs, ReturningMode};
 
@@ -17,18 +18,23 @@ pub struct DeleteQuery {
 
 impl DeleteQuery {
     pub fn returning(mut self, fields: impl IntoFieldRefs) -> Self {
-        self.returning = ReturningMode::Fields(fields.into_field_refs());
+        self.returning.set_fields(fields);
         self
     }
 
     pub fn returning_all(mut self) -> Self {
-        self.returning = ReturningMode::All;
+        self.returning.set_all();
+        self
+    }
+
+    pub fn returning_expr(mut self, item: SelectItem) -> Self {
+        self.returning.push_expr(item);
         self
     }
 
     pub fn returning_all_if_empty(mut self) -> Self {
         if self.returning.is_none() {
-            self.returning = ReturningMode::All;
+            self.returning.set_all();
         }
         self
     }
@@ -46,7 +52,7 @@ impl DeleteBuilder {
             query: DeleteQuery {
                 dataset: dataset.into(),
                 filter: None,
-                returning: ReturningMode::None,
+                returning: ReturningMode::none(),
             },
         }
     }

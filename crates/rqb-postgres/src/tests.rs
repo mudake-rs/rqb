@@ -3,10 +3,10 @@ use std::sync::Mutex;
 use super::*;
 use pretty_assertions::assert_eq;
 use rqb_core::{
-    Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
-    SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, count,
-    count_distinct, delete, exists, field, insert, json_agg, max, min, not_exists, raw, raw_query,
-    select, string_agg, sum, update,
+    Dataset, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy, SearchRequest,
+    SelectColumn, SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg,
+    case_when, cast, coalesce, count, count_distinct, delete, exists, field, func, insert,
+    json_agg, max, min, not_exists, raw, raw_expr, raw_query, select, string_agg, sum, update,
 };
 use serde::Serialize;
 use tokio_postgres::{Row, types::ToSql};
@@ -657,6 +657,91 @@ fn select_defaults_to_all_selectable_root_fields() {
 }
 
 #[test]
+fn renders_expression_select_items_with_aliases_and_output_metadata() {
+    let built = select(orders())
+        .fields(["id"])
+        .select_expr(coalesce([field("name").expr(), field("email").expr()]).alias("label"))
+        .select_expr(
+            case_when(field("status").eq("paid"))
+                .then("settled")
+                .when(field("status").eq("cancelled"))
+                .then("closed")
+                .otherwise("open")
+                .alias("statusLabel"),
+        )
+        .select_expr(cast(field("totalCents").expr(), FieldType::Text).alias("totalText"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.starts_with(
+        "SELECT \"id\", COALESCE(\"name\", \"email\") AS \"label\", CASE WHEN \"status\" = $1 THEN $2"
+    ));
+    assert!(
+        built
+            .sql
+            .contains("WHEN \"status\" = $3 THEN $4 ELSE $5 END AS \"statusLabel\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("CAST(\"total_cents\" AS text) AS \"totalText\"")
+    );
+    assert_eq!(
+        built
+            .columns
+            .iter()
+            .map(SelectColumn::alias)
+            .collect::<Vec<_>>(),
+        ["id", "label", "statusLabel", "totalText"]
+    );
+    assert_eq!(
+        built.params,
+        vec![
+            Value::String("paid".to_owned()),
+            Value::String("settled".to_owned()),
+            Value::String("cancelled".to_owned()),
+            Value::String("closed".to_owned()),
+            Value::String("open".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn renders_generic_and_raw_expression_select_items() {
+    let built = select(orders())
+        .select_expr(
+            func("lower", [field("email").expr()])
+                .returns(FieldType::Text)
+                .alias("emailLower"),
+        )
+        .select_expr(
+            func("public.normalize_email", [field("email").expr()])
+                .returns(FieldType::Text)
+                .alias("normalizedEmail"),
+        )
+        .select_expr(raw_expr(raw("now()"), FieldType::Timestamptz).alias("seenAt"))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built
+            .sql
+            .starts_with("SELECT \"lower\"(\"email\") AS \"emailLower\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("\"public\".\"normalize_email\"(\"email\") AS \"normalizedEmail\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains(" AS \"seenAt\" FROM \"order_search_view\"")
+    );
+    assert!(!built.cacheable);
+}
+
+#[test]
 fn renders_schema_qualified_sources_and_explicit_offset() {
     let dataset = Dataset::from(rqb_core::Source::table("orders").schema("archive"))
         .fields([Field::new("id", FieldType::Uuid)]);
@@ -892,6 +977,25 @@ fn renders_insert_from_select() {
             .contains("WHERE \"status\" = $1::text::\"public\".\"order_status\"")
     );
     assert!(built.sql.ends_with("ON CONFLICT (\"id\") DO NOTHING"));
+
+    let expression_source = select(writable_orders())
+        .fields(["id", "userId", "status"])
+        .select_expr(cast(field("totalCents").expr(), FieldType::BigInt).alias("totalCents"))
+        .build();
+
+    let built = insert(writable_orders())
+        .from_select(expression_source)
+        .build_pg()
+        .unwrap();
+
+    assert!(built.sql.starts_with(
+        "INSERT INTO \"orders\" (\"id\", \"user_id\", \"status\", \"total_cents\") SELECT"
+    ));
+    assert!(
+        built
+            .sql
+            .contains("CAST(\"total_cents\" AS bigint) AS \"totalCents\"")
+    );
 }
 
 #[test]
@@ -961,6 +1065,55 @@ fn renders_update_raw_column_and_delete() {
         uuid_projection("\"id\"", "id", false)
     );
     assert_eq!(delete.sql, expected_delete);
+}
+
+#[test]
+fn renders_write_expressions_defaults_and_returning_expressions() {
+    let insert = insert(writable_orders())
+        .set("id", "30000000-0000-0000-0000-000000009999")
+        .set("userId", "10000000-0000-0000-0000-000000000001")
+        .set_default("status")
+        .set_expr(
+            "totalCents",
+            func("greatest", [1000.into_sql_expr(), 2000.into_sql_expr()])
+                .returns(FieldType::BigInt),
+        )
+        .returning(["id"])
+        .returning_expr(field("totalCents").expr().alias("writtenTotal"))
+        .build_pg()
+        .unwrap();
+
+    assert!(insert.sql.contains("\"status\", \"total_cents\") VALUES"));
+    assert!(insert.sql.contains("DEFAULT"));
+    assert!(
+        insert
+            .sql
+            .contains("CAST(\"greatest\"($3::bigint, $4::bigint) AS bigint)")
+    );
+    assert!(insert.sql.contains("RETURNING"));
+    assert!(insert.sql.contains("\"total_cents\" AS \"writtenTotal\""));
+    assert_eq!(insert.columns.len(), 2);
+
+    let update = update(writable_orders())
+        .set_expr(
+            "totalCents",
+            coalesce([field("totalCents").expr(), 0.into_sql_expr()]),
+        )
+        .set_default("createdAt")
+        .filter(field("id").eq("30000000-0000-0000-0000-000000009999"))
+        .returning_expr(cast(field("totalCents").expr(), FieldType::Text).alias("totalText"))
+        .build_pg()
+        .unwrap();
+
+    assert!(update.sql.starts_with(
+        "UPDATE \"orders\" SET \"total_cents\" = CAST(COALESCE(\"total_cents\", $1::bigint) AS bigint), \"created_at\" = DEFAULT"
+    ));
+    assert!(
+        update
+            .sql
+            .contains("RETURNING CAST(\"total_cents\" AS text) AS \"totalText\"")
+    );
+    assert_eq!(update.columns.len(), 1);
 }
 
 #[test]

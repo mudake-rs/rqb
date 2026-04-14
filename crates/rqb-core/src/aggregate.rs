@@ -127,13 +127,14 @@ pub enum AggregateType {
 pub enum SelectColumn {
     Field(ResolvedField),
     Aggregate { alias: String, ty: AggregateType },
+    Expression { alias: String, ty: FieldType },
 }
 
 impl SelectColumn {
     pub fn alias(&self) -> String {
         match self {
             Self::Field(field) => field.output_alias(),
-            Self::Aggregate { alias, .. } => alias.clone(),
+            Self::Aggregate { alias, .. } | Self::Expression { alias, .. } => alias.clone(),
         }
     }
 }

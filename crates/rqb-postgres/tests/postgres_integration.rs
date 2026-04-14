@@ -1,8 +1,8 @@
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest,
-    SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, count, cte, delete, exists, field,
-    insert, not_exists, raw, raw_query, select, sum, update,
+    SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast, coalesce, count, cte,
+    delete, exists, field, func, insert, not_exists, raw, raw_query, select, sum, update,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -462,6 +462,46 @@ async fn executes_raw_source_with_safe_outer_filtering() -> TestResult {
 }
 
 #[tokio::test]
+async fn maps_expression_select_items_into_structs() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    struct ExpressionRow {
+        email: String,
+        label: String,
+        #[serde(rename = "statusLabel")]
+        status_label: String,
+        #[serde(rename = "totalText")]
+        total_text: String,
+    }
+
+    let rows = select(order_search::dataset())
+        .select([order_search::EMAIL])
+        .select_expr(
+            coalesce([order_search::CHANNEL.expr(), order_search::EMAIL.expr()]).alias("label"),
+        )
+        .select_expr(
+            case_when(order_search::STATUS.eq(order_search::OrderStatus::Paid))
+                .then("settled")
+                .otherwise("open")
+                .alias("statusLabel"),
+        )
+        .select_expr(cast(order_search::TOTAL_CENTS.expr(), FieldType::Text).alias("totalText"))
+        .filter(order_search::EMAIL.eq("ada@example.com"))
+        .fetch_all_as::<ExpressionRow>(&client)
+        .await?;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].email, "ada@example.com");
+    assert_eq!(rows[0].label, "web");
+    assert_eq!(rows[0].status_label, "settled");
+    assert_eq!(rows[0].total_text, "15900");
+    Ok(())
+}
+
+#[tokio::test]
 async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
         return Ok(());
@@ -788,6 +828,14 @@ async fn executes_insert_update_delete_and_upsert() -> TestResult {
         payload: serde_json::Value,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct EventExpressionRow {
+        event_type: String,
+        event_type_lower: String,
+        payload: serde_json::Value,
+    }
+
     let event_id = "50000000-0000-0000-0000-000000009901";
     let default_returning_event_id = "50000000-0000-0000-0000-000000009906";
     let order_id = "30000000-0000-0000-0000-000000000001";
@@ -860,6 +908,25 @@ async fn executes_insert_update_delete_and_upsert() -> TestResult {
         .await?;
     assert_eq!(updated.event_type, "rqb-updated");
     assert_eq!(updated.payload["updated"], true);
+
+    let expression_updated: EventExpressionRow = update(events_table::dataset())
+        .set_expr(
+            events_table::EVENT_TYPE,
+            func("upper", [events_table::EVENT_TYPE.expr()]).returns(FieldType::Text),
+        )
+        .set_default(events_table::PAYLOAD)
+        .filter(events_table::ID.eq(event_id))
+        .returning([events_table::EVENT_TYPE, events_table::PAYLOAD])
+        .returning_expr(
+            func("lower", [events_table::EVENT_TYPE.expr()])
+                .returns(FieldType::Text)
+                .alias("eventTypeLower"),
+        )
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(expression_updated.event_type, "RQB-UPDATED");
+    assert_eq!(expression_updated.event_type_lower, "rqb-updated");
+    assert_eq!(expression_updated.payload, serde_json::json!({}));
 
     let deleted: EventRow = delete(events_table::dataset())
         .filter(events_table::ID.eq(event_id))

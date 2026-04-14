@@ -1,4 +1,4 @@
-use rqb_core::{SelectColumn, ValidatedDelete};
+use rqb_core::ValidatedDelete;
 
 use crate::{BuiltQuery, Result};
 
@@ -10,12 +10,11 @@ impl Renderer {
         self.render_write_target(&validated.dataset.source);
         self.sql.push_str(" WHERE ");
         self.render_expr(&validated.filter)?;
-        self.render_returning(&validated.returning);
+        self.render_returning(&validated.returning)?;
         self.columns = validated
             .returning
             .iter()
-            .cloned()
-            .map(SelectColumn::Field)
+            .map(|item| item.column())
             .collect();
         Ok(self.finish())
     }

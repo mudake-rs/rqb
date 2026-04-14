@@ -1,4 +1,4 @@
-use rqb_core::{SelectColumn, ValidatedUpdate};
+use rqb_core::ValidatedUpdate;
 
 use crate::helpers::write_quoted_ident;
 use crate::{BuiltQuery, Result};
@@ -24,12 +24,11 @@ impl Renderer {
             self.sql.push_str(" WHERE ");
             self.render_expr(expr)?;
         }
-        self.render_returning(&validated.returning);
+        self.render_returning(&validated.returning)?;
         self.columns = validated
             .returning
             .iter()
-            .cloned()
-            .map(SelectColumn::Field)
+            .map(|item| item.column())
             .collect();
         Ok(self.finish())
     }

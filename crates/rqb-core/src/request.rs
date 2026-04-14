@@ -5,6 +5,7 @@ use crate::dataset::{Cte, Dataset, Join};
 use crate::error::Error;
 use crate::expr::{Expr, Sort};
 use crate::field::FieldRef;
+use crate::sql_expr::SelectItem;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[must_use]
@@ -134,6 +135,7 @@ pub struct SelectQuery {
     pub distinct_on: Vec<FieldRef>,
     pub group_by: Vec<FieldRef>,
     pub aggregates: Vec<Aggregate>,
+    pub select_items: Vec<SelectItem>,
     pub having: Option<Expr>,
     pub lock: Option<RowLock>,
     pub builder_errors: Vec<Error>,
@@ -151,6 +153,7 @@ impl SelectQuery {
             distinct_on: Vec::new(),
             group_by: Vec::new(),
             aggregates: Vec::new(),
+            select_items: Vec::new(),
             having: None,
             lock: None,
             builder_errors: Vec::new(),

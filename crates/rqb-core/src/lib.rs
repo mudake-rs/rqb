@@ -15,6 +15,7 @@ mod field;
 mod raw;
 mod request;
 mod serde_bridge;
+mod sql_expr;
 mod types;
 mod validation;
 mod value;
@@ -36,6 +37,10 @@ pub use field::{Capabilities, Field, FieldRef, JsonPathPolicy, ResolvedField, Te
 pub use raw::{RawQuery, RawSql, raw, raw_query};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
+pub use sql_expr::{
+    CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, IntoSqlExpr, SelectItem, SqlExpr,
+    case_when, cast, coalesce, func, raw_expr,
+};
 pub use types::{
     DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,
     range_type_name,
@@ -45,8 +50,8 @@ pub use validation::{
     ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
     ValidatedContainmentOperator, ValidatedContainmentTarget, ValidatedCte, ValidatedCteBody,
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedJoin, ValidatedLikePattern,
-    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedSelect, ValidatedSort,
-    ValidatedUpdate, ValidatedWriteValue,
+    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedReturningItem, ValidatedSelect,
+    ValidatedSelectItem, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
 };
 pub use value::Value;
 pub use write::{
@@ -57,16 +62,17 @@ pub use write::{
 
 pub mod prelude {
     pub use crate::{
-        Aggregate, AggregateType, Capabilities, ColumnOperator, ColumnPredicate, ConflictAction,
-        ConflictClause, ConflictTarget, Cte, Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType,
-        EnumType, ExistsPredicate, Expr, Field, FieldRef, FieldType, InsertBuilder,
-        InsertConflictBuilder, InsertQuery, Join, JoinKind, JsonPathPolicy, LockMode, LockWait,
-        LogicalOp, NullsOrder, Operator, RawQuery, RawSql, Relation, ReturningMode, RowLock,
-        SearchRequest, SelectBuilder, SelectColumn, SelectQuery, SelectRepr, Sort, SortDir,
+        Aggregate, AggregateType, Capabilities, CaseBranch, CaseBuilder, CaseThenBuilder,
+        ColumnOperator, ColumnPredicate, ConflictAction, ConflictClause, ConflictTarget, Cte,
+        Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType, ExistsPredicate, Expr,
+        Field, FieldRef, FieldType, FunctionBuilder, InsertBuilder, InsertConflictBuilder,
+        InsertQuery, IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LockMode, LockWait, LogicalOp,
+        NullsOrder, Operator, RawQuery, RawSql, Relation, ReturningMode, RowLock, SearchRequest,
+        SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr, Sort, SortDir, SqlExpr,
         SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder,
         UpdateQuery, Value, ValueRepr, WriteAssignment, WriteValue, all, any, array_agg, avg,
-        count, count_distinct, count_field, cte, delete, exists, field, insert, json_agg,
-        json_agg_nullable, max, max_agg, min, min_agg, not, not_exists, raw, raw_query, select,
-        string_agg, sum, update,
+        case_when, cast, coalesce, count, count_distinct, count_field, cte, delete, exists, field,
+        func, insert, json_agg, json_agg_nullable, max, max_agg, min, min_agg, not, not_exists,
+        raw, raw_expr, raw_query, select, string_agg, sum, update,
     };
 }

@@ -4,6 +4,7 @@ use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, SortDir, SubqueryOperat
 use crate::field::ResolvedField;
 use crate::raw::RawSql;
 use crate::request::RowLock;
+use crate::types::FieldType;
 use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -17,6 +18,7 @@ pub struct ValidatedSelect {
     pub distinct_on: Vec<ResolvedField>,
     pub group_by: Vec<ResolvedField>,
     pub aggregates: Vec<ValidatedAggregate>,
+    pub select_items: Vec<ValidatedSelectItem>,
     pub columns: Vec<SelectColumn>,
     pub filter: Option<ValidatedExpr>,
     pub having: Option<ValidatedExpr>,
@@ -26,6 +28,64 @@ pub struct ValidatedSelect {
     pub limit_explicit: bool,
     pub offset_explicit: bool,
     pub lock: Option<RowLock>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedSelectItem {
+    pub expr: ValidatedSqlExpr,
+    pub alias: String,
+    pub ty: FieldType,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedSqlExpr {
+    Field(ResolvedField),
+    Value {
+        value: Value,
+        ty: FieldType,
+    },
+    Raw {
+        raw: RawSql,
+        ty: FieldType,
+    },
+    Function {
+        name: String,
+        args: Vec<ValidatedSqlExpr>,
+        ty: FieldType,
+    },
+    Coalesce {
+        args: Vec<ValidatedSqlExpr>,
+        ty: FieldType,
+    },
+    Case {
+        branches: Vec<ValidatedCaseBranch>,
+        otherwise: Box<ValidatedSqlExpr>,
+        ty: FieldType,
+    },
+    Cast {
+        expr: Box<ValidatedSqlExpr>,
+        ty: FieldType,
+    },
+}
+
+impl ValidatedSqlExpr {
+    pub fn ty(&self) -> FieldType {
+        match self {
+            Self::Field(field) => field.ty,
+            Self::Value { ty, .. }
+            | Self::Raw { ty, .. }
+            | Self::Function { ty, .. }
+            | Self::Coalesce { ty, .. }
+            | Self::Case { ty, .. }
+            | Self::Cast { ty, .. } => *ty,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedCaseBranch {
+    pub condition: ValidatedExpr,
+    pub value: ValidatedSqlExpr,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -213,6 +273,33 @@ pub enum ValidatedWriteValue {
     Value(Value),
     Raw(RawSql),
     Column(ResolvedField),
+    Expr(ValidatedSqlExpr),
+    Default,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedReturningItem {
+    Field(ResolvedField),
+    Expression(ValidatedSelectItem),
+}
+
+impl ValidatedReturningItem {
+    pub fn alias(&self) -> String {
+        match self {
+            Self::Field(field) => field.output_alias(),
+            Self::Expression(item) => item.alias.clone(),
+        }
+    }
+
+    pub fn column(&self) -> SelectColumn {
+        match self {
+            Self::Field(field) => SelectColumn::Field(field.clone()),
+            Self::Expression(item) => SelectColumn::Expression {
+                alias: item.alias.clone(),
+                ty: item.ty,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -243,7 +330,7 @@ pub struct ValidatedInsert {
     pub target_fields: Vec<ResolvedField>,
     pub rows: Vec<Vec<ValidatedAssignment>>,
     pub from_select: Option<ValidatedSelect>,
-    pub returning: Vec<ResolvedField>,
+    pub returning: Vec<ValidatedReturningItem>,
     pub conflict: Option<ValidatedConflictClause>,
 }
 
@@ -252,14 +339,14 @@ pub struct ValidatedUpdate {
     pub dataset: Dataset,
     pub assignments: Vec<ValidatedAssignment>,
     pub filter: Option<ValidatedExpr>,
-    pub returning: Vec<ResolvedField>,
+    pub returning: Vec<ValidatedReturningItem>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedDelete {
     pub dataset: Dataset,
     pub filter: ValidatedExpr,
-    pub returning: Vec<ResolvedField>,
+    pub returning: Vec<ValidatedReturningItem>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

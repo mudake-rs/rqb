@@ -30,7 +30,9 @@ pub use build::{BuildPostgres, BuildRowsPostgres, Postgres};
 pub use built::{BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql};
 pub use error::Error;
 #[cfg(feature = "runtime-tokio-postgres")]
-pub use executor::{ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor};
+pub use executor::{
+    ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, StatementCache,
+};
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use params::PgParams;
 #[cfg(feature = "pool")]

@@ -4,7 +4,7 @@ use tokio_postgres::{Row, types::FromSqlOwned};
 
 use crate::{BuiltQuery, BuiltSelect, Error, PgParams, Result, raw_row_to_json, row_to_json};
 
-use super::driver::{Page, PgExecutor};
+use super::driver::{Page, PgExecutor, StatementCache};
 
 pub(super) async fn query_all(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Vec<Row>> {
     query_all_parts(exec, &built.sql, &built.params, built.cacheable).await
@@ -32,11 +32,9 @@ async fn query_all_parts(
     cacheable: bool,
 ) -> Result<Vec<Row>> {
     let pg = PgParams::from_values(params);
-    if cacheable {
-        exec.query_cached(sql, &pg.as_refs()).await
-    } else {
-        exec.query(sql, &pg.as_refs()).await
-    }
+    let refs = pg.as_refs();
+    exec.query(sql, &refs, StatementCache::from_cacheable(cacheable))
+        .await
 }
 
 async fn query_optional_parts(
@@ -46,11 +44,9 @@ async fn query_optional_parts(
     cacheable: bool,
 ) -> Result<Option<Row>> {
     let pg = PgParams::from_values(params);
-    if cacheable {
-        exec.query_opt_cached(sql, &pg.as_refs()).await
-    } else {
-        exec.query_opt(sql, &pg.as_refs()).await
-    }
+    let refs = pg.as_refs();
+    exec.query_opt(sql, &refs, StatementCache::from_cacheable(cacheable))
+        .await
 }
 
 async fn execute_parts(
@@ -60,11 +56,9 @@ async fn execute_parts(
     cacheable: bool,
 ) -> Result<u64> {
     let pg = PgParams::from_values(params);
-    if cacheable {
-        exec.execute_sql_cached(sql, &pg.as_refs()).await
-    } else {
-        exec.execute_sql(sql, &pg.as_refs()).await
-    }
+    let refs = pg.as_refs();
+    exec.execute_sql(sql, &refs, StatementCache::from_cacheable(cacheable))
+        .await
 }
 
 pub(super) async fn query_count(exec: &impl PgExecutor, built: BuiltQuery) -> Result<i64> {

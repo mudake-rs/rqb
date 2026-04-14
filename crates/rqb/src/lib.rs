@@ -38,7 +38,7 @@ pub use rqb_postgres::{
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use rqb_postgres::{
     ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams,
-    ResultExt,
+    ResultExt, StatementCache,
 };
 pub use serde;
 
@@ -52,7 +52,7 @@ pub mod prelude {
     #[cfg(feature = "runtime-tokio-postgres")]
     pub use rqb_postgres::{
         ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams,
-        ResultExt,
+        ResultExt, StatementCache,
     };
 
     #[cfg(feature = "pool")]

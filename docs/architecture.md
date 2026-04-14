@@ -135,11 +135,12 @@ not keep the original write AST.
 
 The user sees query helpers through prelude, so the ergonomics are acceptable,
 but internally there are separate execution traits for select, write, and raw
-queries. `PgExecutor` also exposes cached and uncached methods because cache
-policy lives in `BuiltQuery`.
+queries. `PgExecutor` now has one low-level method per operation and receives
+`StatementCache` from `BuiltQuery`, so raw cache bypass stays explicit without
+duplicating cached and uncached executor methods.
 
-This should stay stable until a refactor clearly reduces code without making raw
-cache bypass or pool/client/transaction support less explicit.
+Keep this separation unless a later refactor clearly reduces code without
+making raw cache bypass or pool/client/transaction support less explicit.
 
 ### Row Mapping Has Two Paths
 
@@ -242,9 +243,11 @@ every layer.
    `validation/mod.rs` now wires validation modules together and re-exports the
    validated model for backend crates.
 
-7. Revisit execution traits. Pending.
-   Only after rendering and validation are cleaner, decide whether select/write
-   and raw execution helpers can share implementation without hiding semantics.
+7. Revisit execution traits. Done.
+   Select, write, and raw user-facing traits stay separate because their
+   semantics differ, but the lower `PgExecutor` contract now carries
+   `StatementCache` explicitly instead of exposing duplicate cached/uncached
+   methods.
 
 8. Split CLI internals. Done.
    Catalog introspection, type mapping, code rendering, identifier hygiene, and

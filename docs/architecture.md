@@ -242,10 +242,11 @@ every layer.
    delegates to the generic field resolver, but no longer builds throwaway
    select queries for write validation.
 
-3. Centralize type behavior. Started.
-   Introduce small helper APIs that answer type-family, value shape, element
-   type, Postgres cast, selection representation, and array cast questions from
-   one place per layer.
+3. Centralize type behavior. Done.
+   Type-family and array element metadata live on `FieldType`; custom
+   representation helpers live on `ValueRepr`, `SelectRepr`, and `TypeSpec`;
+   Postgres cast, selection, type-name, and array-cast behavior lives in
+   `rqb-postgres/src/type_sql`; runtime value-shape guards live in validation.
 
 4. Categorize and lower operators. Done.
    Keep `Operator` as the JSON/user-facing enum, but route validation and

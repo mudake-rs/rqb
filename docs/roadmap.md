@@ -47,14 +47,17 @@ Remaining work before beta:
 
 The BFM `uint_256` domain is the reference use case for this work.
 
-## Validated Expression Reuse
+## Architecture Refactor Status
 
-Validation now carries resolved SELECT and write shapes into the renderer, including CTE/subquery bodies and write filters. The remaining work is to make type/operator metadata easier to centralize and to keep future query features from reintroducing raw AST reads in rendering.
+The current architecture refactor is complete enough for the next feature work:
 
-A future refactor should introduce validated expression nodes that carry `ResolvedField` data through rendering:
+- validation carries resolved SELECT and write shapes into the renderer
+- write validation uses a write-specific scope instead of throwaway selects
+- operators lower into concrete validated predicate shapes before rendering
+- type classification, array metadata, and custom representation helpers are centralized in the type model
+- Postgres cast, selection, and type-name behavior has a dedicated `type_sql` module
+- the public facade hides internal validated structs while `rqb-postgres` can still consume them
 
-- preserve already resolved fields for predicates, column predicates, and subqueries
-- keep SQL rendering a mostly mechanical pass over validated data
-- keep validated write models render-ready without depending on raw write AST details
-
-This should be an internal architecture change, not a public ergonomics regression.
+Future query features should preserve this shape: validation decides semantics,
+rendering stays mechanical, and new type/operator behavior goes through the
+metadata contract instead of scattered renderer checks.

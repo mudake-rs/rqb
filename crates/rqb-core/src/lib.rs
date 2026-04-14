@@ -1,11 +1,10 @@
 //! Core query model, metadata, validation, and serde-facing request types.
 //!
-//! `rqb-core` does not connect to a database. It owns the portable pieces:
+//! `rqb-core` does not connect to a database. It owns the runtime-free pieces:
 //! datasets, fields, expressions, write queries, `SearchRequest`, and runtime
 //! validation against field metadata.
 //!
-//! Backend crates, such as `rqb-postgres`, take validated query models and
-//! render or execute them.
+//! `rqb-postgres` takes validated query models and renders or executes them.
 
 mod aggregate;
 mod builder;

@@ -60,6 +60,24 @@ traits, pool and transaction helpers.
 
 `rqb-cli` owns database introspection and generated schema shape.
 
+## Postgres-Only Modularity
+
+rqb is Postgres-only. The crate split is not a promise of future MySQL, SQLite,
+or generic SQL dialect support.
+
+Keep modules when they separate real responsibilities:
+
+- `rqb-core`: runtime-free metadata, ASTs, JSON request types, validation, and
+  validated models
+- `rqb-postgres`: Postgres SQL rendering, casts, params, row mapping, execution,
+  pools, transactions, and savepoints
+- `rqb-cli`: Postgres catalog introspection and generated schema code
+- `rqb`: facade and prelude
+
+Do not add `Backend`, `Dialect`, generic renderer, or generic executor layers
+without a concrete current need. The architecture should expose Postgres clearly
+instead of hiding it behind lowest-common-denominator abstractions.
+
 ## Architecture Rules
 
 Validation owns correctness. Rendering should be a mostly mechanical pass over
@@ -235,14 +253,14 @@ every layer.
    `ValidatedPredicate` shapes and no longer reinterprets user-facing operators.
 
 5. Clean the facade API surface. Done.
-   `rqb-core` must expose validated models for backend crates, but the `rqb`
+   `rqb-core` must expose validated models for `rqb-postgres`, but the `rqb`
    facade uses an explicit ergonomic export list, so internal `Validated*`
    types stay in `rqb_core` instead of appearing under `rqb::*`.
 
 6. Split validated model definitions. Done.
    Render-ready validated structs and enums live in `validation/model.rs`.
    `validation/mod.rs` now wires validation modules together and re-exports the
-   validated model for backend crates.
+   validated model for `rqb-postgres`.
 
 7. Revisit execution traits. Done.
    Select, write, and raw user-facing traits stay separate because their

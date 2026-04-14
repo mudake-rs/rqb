@@ -66,6 +66,28 @@ First-class Postgres features include:
 
 If generic SQL support conflicts with Postgres ergonomics, choose Postgres ergonomics.
 
+## Postgres Only, Modular By Responsibility
+
+rqb is not preparing for MySQL, SQLite, or a generic SQL dialect layer.
+
+Keep modules and crates only when they separate real responsibilities:
+
+- `rqb-core` owns metadata, ASTs, JSON request types, validation, and
+  validated models
+- `rqb-postgres` owns Postgres SQL, casts, params, row mapping, execution,
+  pools, transactions, and savepoints
+- `rqb-cli` owns Postgres introspection and generated schema code
+- `rqb` owns the public facade and prelude
+
+Do not add a `Backend`, `Dialect`, generic renderer, generic executor, or
+lowest-common-denominator SQL abstraction unless there is a concrete current
+need. There is no current need.
+
+This separation exists so validation can stay runtime-free and reusable by the
+CLI, tests, renderer, samples, and docs. It does not exist to hide Postgres. If
+exposing a Postgres-specific concept makes the API clearer, expose the
+Postgres-specific concept.
+
 ## Type Ownership
 
 rqb should own broad Postgres type support.
@@ -164,7 +186,7 @@ The architecture should make room for:
 - project-specific domains and scalars through metadata
 - custom Rust enum/scalar mappings without per-field boilerplate
 - custom operators when metadata declares them safe
-- backend-specific fast paths without leaking backend details into `rqb-core`
+- Postgres-specific fast paths without leaking runtime execution details into `rqb-core`
 
 Extension points must preserve the safety model: server-owned SQL shape, metadata-constrained client input, and parameterized values. If adding a type or operator requires scattered hacks, the architecture is wrong.
 

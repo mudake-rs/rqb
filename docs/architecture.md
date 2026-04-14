@@ -19,6 +19,9 @@ Current public capabilities:
   raw sources, subqueries, `EXISTS`, `DISTINCT`, `DISTINCT ON`, grouping,
   aggregate selection, expression select items, aggregate filters, row locks,
   sorting, pagination, and JSON `SearchRequest` merge.
+- Query body composition through `QueryExpr`, including `UNION`, `UNION ALL`,
+  `INTERSECT`, and `EXCEPT` with validated output column count, output type
+  compatibility, final ordering, limit, and offset.
 - Expression trees for predicates, column predicates, logical `and`/`or`/`not`,
   raw server-owned fragments, subquery predicates, and exists predicates.
 - Server-owned SQL value expressions for computed select items, including
@@ -162,6 +165,18 @@ JSON `SearchRequest` does not see computed select aliases. If an expression must
 be client-addressable, expose it as dataset metadata, usually through a view or
 generated field.
 
+### Query Bodies Own Set Operations
+
+`QueryExpr` is the common server-owned query body used by top-level reads, CTEs,
+subquery predicates, `EXISTS`, and `INSERT ... SELECT`. A query body is either a
+plain `SelectQuery` or a `SetQuery`.
+
+Validation lowers `SetQuery` into `ValidatedSetQuery`, validates both sides with
+the same outer scope rules as subqueries, checks column count, computes compatible
+output column types, and validates final `ORDER BY` against output aliases. The
+renderer can then treat set operations mechanically: render each operand as a
+query body, render the set operator, then render final order/limit/offset.
+
 ### Write Validation Has A Dedicated Scope
 
 Write validation now uses a `WriteScope` over one writable dataset. It still
@@ -220,7 +235,7 @@ rqb-core
   metadata: Dataset, Source, Field, FieldType, TypeSpec, capabilities
   field::{capabilities, reference, resolved}: field metadata, FieldRef API, resolved fields
   types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
-  ast: SelectQuery, SearchRequest, Expr, Operator, Aggregate, write ASTs, RawSql
+  ast: QueryExpr, SelectQuery, SetQuery, SearchRequest, Expr, Operator, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> concrete validated models
   validation::model: render-ready validated structs and enums

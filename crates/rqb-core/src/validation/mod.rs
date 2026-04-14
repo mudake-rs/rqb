@@ -2,6 +2,7 @@ mod aggregate;
 mod expr;
 mod model;
 mod operators;
+mod query;
 mod resolve;
 mod scope;
 mod select;
@@ -19,6 +20,7 @@ pub use model::{
     ValidatedCaseBranch, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
     ValidatedContainmentOperator, ValidatedContainmentTarget, ValidatedCte, ValidatedCteBody,
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedJoin, ValidatedLikePattern,
-    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedReturningItem, ValidatedSelect,
-    ValidatedSelectItem, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
+    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedQueryExpr,
+    ValidatedReturningItem, ValidatedSelect, ValidatedSelectItem, ValidatedSetQuery,
+    ValidatedSetSort, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
 };

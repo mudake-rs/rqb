@@ -378,6 +378,45 @@ select(Dataset::cte("tree").fields([ID]))
     .cte(cte("tree", raw("SELECT id FROM nodes WHERE parent_id IS NULL UNION ALL SELECT n.id FROM nodes n JOIN tree t ON n.parent_id = t.id")).recursive());
 ```
 
+## Set Operations
+
+`union`, `union_all`, `intersect`, and `except` compose full query bodies. rqb
+validates that both sides select the same number of columns and that matching
+columns have compatible output types.
+
+```rust
+let active = select(users())
+    .fields([EMAIL])
+    .filter(STATUS.eq("active"));
+
+let disabled = select(users())
+    .fields([EMAIL])
+    .filter(STATUS.eq("disabled"));
+
+let emails = union(active, disabled)
+    .order_by(field("email").asc())
+    .limit(100)
+    .fetch_all_as::<EmailRow>(&db)
+    .await?;
+```
+
+Set queries can be used anywhere rqb accepts a query body, including CTEs,
+`EXISTS`, `IN (subquery)`, and `INSERT ... SELECT`:
+
+```rust
+let candidate_user_ids = union_all(
+    select(orders().alias("paid"))
+        .fields([USER_ID.on("paid")])
+        .filter(STATUS.on("paid").eq("paid")),
+    select(orders().alias("draft"))
+        .fields([USER_ID.on("draft")])
+        .filter(STATUS.on("draft").eq("draft")),
+);
+
+select(users())
+    .filter(ID.in_subquery(candidate_user_ids));
+```
+
 ## Subqueries
 
 Correlated `EXISTS`:

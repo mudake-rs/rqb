@@ -19,7 +19,7 @@ impl Renderer {
 
         if let Some(select) = &validated.from_select {
             self.sql.push(' ');
-            self.render_subquery_select(select, super::SelectProjection::Value)?;
+            self.render_query_expr(select, super::SelectProjection::Value, true)?;
         } else {
             self.sql.push_str(" VALUES ");
             for (row_idx, row) in validated.rows.iter().enumerate() {

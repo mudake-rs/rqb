@@ -2,6 +2,7 @@ use crate::aggregate::{AggregateType, SelectColumn};
 use crate::dataset::{Dataset, JoinKind};
 use crate::expr::{ColumnOperator, LogicalOp, NullsOrder, SortDir, SubqueryOperator};
 use crate::field::ResolvedField;
+use crate::query::SetOperator;
 use crate::raw::RawSql;
 use crate::request::RowLock;
 use crate::types::FieldType;
@@ -28,6 +29,47 @@ pub struct ValidatedSelect {
     pub limit_explicit: bool,
     pub offset_explicit: bool,
     pub lock: Option<RowLock>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedQueryExpr {
+    Select(Box<ValidatedSelect>),
+    Set(Box<ValidatedSetQuery>),
+}
+
+impl ValidatedQueryExpr {
+    pub fn columns(&self) -> &[SelectColumn] {
+        match self {
+            Self::Select(select) => &select.columns,
+            Self::Set(set) => &set.columns,
+        }
+    }
+
+    pub fn cacheable(&self) -> bool {
+        match self {
+            Self::Select(select) => select.cacheable,
+            Self::Set(set) => set.cacheable,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedSetQuery {
+    pub left: ValidatedQueryExpr,
+    pub operator: SetOperator,
+    pub right: ValidatedQueryExpr,
+    pub columns: Vec<SelectColumn>,
+    pub sort: Vec<ValidatedSetSort>,
+    pub limit: Option<u32>,
+    pub offset: Option<u64>,
+    pub cacheable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedSetSort {
+    pub alias: String,
+    pub dir: SortDir,
+    pub nulls: Option<NullsOrder>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -100,7 +142,7 @@ pub struct ValidatedCte {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValidatedCteBody {
     Raw(RawSql),
-    Select(Box<ValidatedSelect>),
+    Query(Box<ValidatedQueryExpr>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -132,10 +174,10 @@ pub enum ValidatedPredicate {
     Subquery {
         field: ResolvedField,
         operator: SubqueryOperator,
-        query: Box<ValidatedSelect>,
+        query: Box<ValidatedQueryExpr>,
     },
     Exists {
-        query: Box<ValidatedSelect>,
+        query: Box<ValidatedQueryExpr>,
         negated: bool,
     },
     NullCheck {
@@ -333,7 +375,7 @@ pub struct ValidatedInsert {
     pub dataset: Dataset,
     pub target_fields: Vec<ResolvedField>,
     pub rows: Vec<Vec<ValidatedAssignment>>,
-    pub from_select: Option<ValidatedSelect>,
+    pub from_select: Option<ValidatedQueryExpr>,
     pub returning: Vec<ValidatedReturningItem>,
     pub conflict: Option<ValidatedConflictClause>,
 }

@@ -157,9 +157,9 @@ fn validate_ctes(query: &SelectQuery) -> Result<Vec<ValidatedCte>> {
                     }
                     ValidatedCteBody::Raw(raw.clone())
                 }
-                CteBody::Select(select) => {
-                    ValidatedCteBody::Select(Box::new(ValidatedSelect::new((**select).clone())?))
-                }
+                CteBody::Query(query) => ValidatedCteBody::Query(Box::new(
+                    super::ValidatedQueryExpr::new((**query).clone())?,
+                )),
             };
             Ok(ValidatedCte {
                 name: cte.name.clone(),

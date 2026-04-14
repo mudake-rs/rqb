@@ -6,6 +6,7 @@ mod expr;
 mod insert;
 mod params;
 mod predicate;
+mod query;
 mod select;
 mod update;
 

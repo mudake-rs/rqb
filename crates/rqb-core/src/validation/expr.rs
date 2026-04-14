@@ -1,12 +1,12 @@
 use crate::error::{Error, Result};
 use crate::expr::{Expr, LogicalOp};
-use crate::request::SelectQuery;
+use crate::query::QueryExpr;
 
 use super::operators::{count_raw_placeholders, validate_predicate};
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
 use super::value_type::validate_column_operator;
-use super::{ValidatedExpr, ValidatedPredicate, ValidatedSelect};
+use super::{ValidatedExpr, ValidatedPredicate, ValidatedQueryExpr};
 
 pub(super) fn validate_expr(
     scope: &QueryScope,
@@ -45,7 +45,7 @@ pub(super) fn validate_expr(
                 });
             }
             let validated = validate_subquery(scope, &predicate.query)?;
-            let selected = validated.columns.len();
+            let selected = validated.columns().len();
             if selected != 1 {
                 return Err(Error::InvalidSubquerySelection {
                     expected: 1,
@@ -93,11 +93,11 @@ pub(super) fn validate_expr(
     })
 }
 
-fn validate_subquery(scope: &QueryScope, query: &SelectQuery) -> Result<ValidatedSelect> {
+fn validate_subquery(scope: &QueryScope, query: &QueryExpr) -> Result<ValidatedQueryExpr> {
     let outer_datasets = scope
         .datasets
         .iter()
         .map(|scoped| scoped.dataset.clone())
         .collect::<Vec<_>>();
-    ValidatedSelect::new_with_outer_datasets(query.clone(), &outer_datasets)
+    ValidatedQueryExpr::new_with_outer_datasets(query.clone(), &outer_datasets)
 }

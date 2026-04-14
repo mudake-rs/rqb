@@ -137,6 +137,26 @@ impl SelectColumn {
             Self::Aggregate { alias, .. } | Self::Expression { alias, .. } => alias.clone(),
         }
     }
+
+    pub fn ty(&self) -> FieldType {
+        match self {
+            Self::Field(field) => field.ty,
+            Self::Aggregate { ty, .. } => ty.field_type(),
+            Self::Expression { ty, .. } => *ty,
+        }
+    }
+}
+
+impl AggregateType {
+    pub fn field_type(&self) -> FieldType {
+        match self {
+            Self::Count => FieldType::BigInt,
+            Self::Sum | Self::Avg => FieldType::Float,
+            Self::Min(ty) | Self::Max(ty) => *ty,
+            Self::Json => FieldType::Jsonb,
+            Self::String => FieldType::Text,
+        }
+    }
 }
 
 pub fn count(alias: impl Into<String>) -> Aggregate {

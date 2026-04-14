@@ -81,6 +81,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     print_users("users with paid orders", &users_with_paid_orders);
 
+    let active_users = select(app_users::dataset())
+        .fields([app_users::ID, app_users::EMAIL])
+        .filter(app_users::STATUS.eq(rqb_sample_base::UserStatus::Active));
+    let disabled_users = select(app_users::dataset())
+        .fields([app_users::ID, app_users::EMAIL])
+        .filter(app_users::STATUS.eq(rqb_sample_base::UserStatus::Disabled));
+    let users_from_set_query = union(active_users, disabled_users)
+        .order_by(field("email").asc())
+        .fetch_all_as::<UserRow>(&db)
+        .await?;
+    print_users("users from UNION set query", &users_from_set_query);
+
     let raw_source = Dataset::raw(
         "SELECT id, email FROM app_users WHERE status = 'active'",
         "active_users",

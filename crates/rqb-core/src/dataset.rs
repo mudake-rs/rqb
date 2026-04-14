@@ -1,5 +1,7 @@
+use crate::builder::SelectBuilder;
 use crate::expr::Expr;
 use crate::field::{Field, FieldRef};
+use crate::query::{QueryExpr, SetQuery};
 use crate::raw::RawSql;
 use crate::request::SelectQuery;
 
@@ -320,7 +322,7 @@ pub struct Cte {
 #[derive(Clone, Debug, PartialEq)]
 pub enum CteBody {
     Raw(RawSql),
-    Select(Box<SelectQuery>),
+    Query(Box<QueryExpr>),
 }
 
 pub fn cte(name: impl Into<String>, body: impl Into<CteBody>) -> Cte {
@@ -358,9 +360,27 @@ impl From<RawSql> for CteBody {
     }
 }
 
+impl From<QueryExpr> for CteBody {
+    fn from(value: QueryExpr) -> Self {
+        Self::Query(Box::new(value))
+    }
+}
+
 impl From<SelectQuery> for CteBody {
     fn from(value: SelectQuery) -> Self {
-        Self::Select(Box::new(value))
+        QueryExpr::from(value).into()
+    }
+}
+
+impl From<SelectBuilder> for CteBody {
+    fn from(value: SelectBuilder) -> Self {
+        QueryExpr::from(value).into()
+    }
+}
+
+impl From<SetQuery> for CteBody {
+    fn from(value: SetQuery) -> Self {
+        QueryExpr::from(value).into()
     }
 }
 

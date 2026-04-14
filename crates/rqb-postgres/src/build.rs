@@ -1,13 +1,15 @@
 use rqb_core::{
-    DeleteBuilder, DeleteQuery, Error as CoreError, InsertBuilder, InsertQuery, RawQuery,
-    SelectBuilder, SelectQuery, UpdateBuilder, UpdateQuery, ValidatedDelete, ValidatedInsert,
-    ValidatedSelect, ValidatedUpdate,
+    DeleteBuilder, DeleteQuery, Error as CoreError, InsertBuilder, InsertQuery, QueryExpr,
+    RawQuery, SelectBuilder, SelectQuery, SetQuery, UpdateBuilder, UpdateQuery, ValidatedDelete,
+    ValidatedInsert, ValidatedQueryExpr, ValidatedSelect, ValidatedUpdate,
 };
 
 use crate::render::Renderer;
 use crate::{BuiltQuery, BuiltSelect, Error, Result};
 
 pub struct Postgres;
+
+const DEFAULT_SET_PAGE_LIMIT: u32 = 100;
 
 impl Postgres {
     pub fn build(query: SelectQuery) -> Result<BuiltSelect> {
@@ -29,6 +31,45 @@ impl Postgres {
     pub fn build_rows(query: SelectQuery) -> Result<BuiltQuery> {
         let validated = ValidatedSelect::new(query)?;
         Renderer::new().render_rows(&validated)
+    }
+
+    pub fn build_query(query: QueryExpr) -> Result<BuiltSelect> {
+        match query {
+            QueryExpr::Select(select) => Self::build(*select),
+            QueryExpr::Set(set) => {
+                let (built, _, _) = Self::build_query_page(QueryExpr::Set(set))?;
+                Ok(built)
+            }
+        }
+    }
+
+    pub(crate) fn build_query_page(query: QueryExpr) -> Result<(BuiltSelect, u32, u64)> {
+        match query {
+            QueryExpr::Select(select) => Self::build_page(*select),
+            QueryExpr::Set(set) => {
+                let mut set = *set;
+                let limit = set.limit.unwrap_or(DEFAULT_SET_PAGE_LIMIT);
+                let offset = set.offset.unwrap_or(0);
+                set.limit = Some(limit);
+                set.offset = Some(offset);
+                let validated = ValidatedQueryExpr::new(QueryExpr::Set(Box::new(set)))?;
+                let built = BuiltSelect {
+                    rows: Renderer::new().render_query_rows(&validated)?,
+                    count: Renderer::new().render_query_count(&validated)?,
+                };
+                Ok((built, limit, offset))
+            }
+        }
+    }
+
+    pub fn build_query_rows(query: QueryExpr) -> Result<BuiltQuery> {
+        match query {
+            QueryExpr::Select(select) => Self::build_rows(*select),
+            QueryExpr::Set(set) => {
+                let validated = ValidatedQueryExpr::new(QueryExpr::Set(set))?;
+                Renderer::new().render_query_rows(&validated)
+            }
+        }
     }
 
     pub fn build_insert(query: InsertQuery) -> Result<BuiltQuery> {
@@ -73,6 +114,22 @@ impl BuildPostgres for SelectQuery {
     }
 }
 
+impl BuildPostgres for QueryExpr {
+    type Output = BuiltSelect;
+
+    fn build_pg(self) -> Result<Self::Output> {
+        Postgres::build_query(self)
+    }
+}
+
+impl BuildPostgres for SetQuery {
+    type Output = BuiltSelect;
+
+    fn build_pg(self) -> Result<Self::Output> {
+        QueryExpr::from(self).build_pg()
+    }
+}
+
 pub trait BuildRowsPostgres {
     fn build_rows_pg(self) -> Result<BuiltQuery>;
 }
@@ -80,6 +137,18 @@ pub trait BuildRowsPostgres {
 impl BuildRowsPostgres for SelectQuery {
     fn build_rows_pg(self) -> Result<BuiltQuery> {
         Postgres::build_rows(self)
+    }
+}
+
+impl BuildRowsPostgres for QueryExpr {
+    fn build_rows_pg(self) -> Result<BuiltQuery> {
+        Postgres::build_query_rows(self)
+    }
+}
+
+impl BuildRowsPostgres for SetQuery {
+    fn build_rows_pg(self) -> Result<BuiltQuery> {
+        QueryExpr::from(self).build_rows_pg()
     }
 }
 

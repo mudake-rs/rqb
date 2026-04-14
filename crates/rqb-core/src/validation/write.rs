@@ -1,4 +1,4 @@
-use crate::aggregate::{AggregateType, SelectColumn};
+use crate::aggregate::SelectColumn;
 use crate::dataset::{Dataset, Source};
 use crate::error::{Error, Result};
 use crate::expr::{ColumnOperator, Expr, Operator};
@@ -24,7 +24,7 @@ use super::value_type::{
 };
 use super::{
     ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
-    ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedReturningItem, ValidatedSelect,
+    ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedQueryExpr, ValidatedReturningItem,
     ValidatedUpdate, ValidatedWriteValue,
 };
 
@@ -47,7 +47,7 @@ impl ValidatedInsert {
             .collect::<Result<Vec<_>>>()?;
         let from_select = source
             .as_ref()
-            .map(|select| ValidatedSelect::new((**select).clone()))
+            .map(|select| ValidatedQueryExpr::new((**select).clone()))
             .transpose()?;
 
         match (rows.is_empty(), from_select.is_some()) {
@@ -65,7 +65,7 @@ impl ValidatedInsert {
 
         let target_fields = match &from_select {
             Some(select) => select
-                .columns
+                .columns()
                 .iter()
                 .map(|column| {
                     let alias = column.alias();
@@ -82,7 +82,7 @@ impl ValidatedInsert {
                 .unwrap_or_default(),
         };
         if let Some(select) = &from_select {
-            for (target, source) in target_fields.iter().zip(&select.columns) {
+            for (target, source) in target_fields.iter().zip(select.columns()) {
                 validate_insert_select_column_type(target, source)?;
             }
         }
@@ -370,21 +370,7 @@ fn validate_insert_select_column_type(field: &ResolvedField, column: &SelectColu
 }
 
 fn select_column_type(column: &SelectColumn) -> FieldType {
-    match column {
-        SelectColumn::Field(field) => field.ty,
-        SelectColumn::Aggregate { ty, .. } => aggregate_type_to_field_type(ty),
-        SelectColumn::Expression { ty, .. } => *ty,
-    }
-}
-
-fn aggregate_type_to_field_type(ty: &AggregateType) -> FieldType {
-    match ty {
-        AggregateType::Count => FieldType::BigInt,
-        AggregateType::Sum | AggregateType::Avg => FieldType::Float,
-        AggregateType::Min(ty) | AggregateType::Max(ty) => *ty,
-        AggregateType::Json => FieldType::Jsonb,
-        AggregateType::String => FieldType::Text,
-    }
+    column.ty()
 }
 
 fn validate_insert_rows_shape(rows: &[Vec<ValidatedAssignment>]) -> Result<()> {

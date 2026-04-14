@@ -7,7 +7,7 @@ use rqb_core::{
     SelectColumn, SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg,
     case_when, cast, coalesce, count, count_distinct, delete, excluded, exists, field, func,
     insert, json_agg, max, min, not_exists, raw, raw_expr, raw_query, select, set_default,
-    set_expr, string_agg, sum, update,
+    set_expr, string_agg, sum, union, union_all, update,
 };
 use serde::Serialize;
 use tokio_postgres::{Row, types::ToSql};
@@ -2169,6 +2169,136 @@ fn renders_not_in_subquery_without_default_limit() {
     );
     assert!(!built.sql.contains("WHERE \"o\".\"status\" = $1 LIMIT"));
     assert_eq!(built.params, vec!["paid".into()]);
+}
+
+#[test]
+fn renders_union_all_query_rows_and_count() {
+    let paid = select(orders_table())
+        .fields([field("id"), field("status")])
+        .filter(field("status").eq("paid"));
+    let draft = select(orders_table())
+        .fields([field("id"), field("status")])
+        .filter(field("status").eq("draft"));
+
+    let query = union_all(paid, draft)
+        .order_by(field("status").desc())
+        .limit(50)
+        .offset(10);
+    let rows = query.clone().build_rows_pg().unwrap();
+
+    assert_eq!(
+        rows.sql,
+        concat!(
+            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $1) ",
+            "UNION ALL ",
+            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $2) ",
+            "ORDER BY \"status\" DESC ",
+            "LIMIT 50 OFFSET 10"
+        )
+    );
+    assert_eq!(rows.params, vec!["paid".into(), "draft".into()]);
+    assert_eq!(
+        rows.columns
+            .iter()
+            .map(SelectColumn::alias)
+            .collect::<Vec<_>>(),
+        vec!["id", "status"]
+    );
+
+    let page = query.build_pg().unwrap();
+    assert_eq!(
+        page.count.sql,
+        concat!(
+            "SELECT count(*) FROM (",
+            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $1) ",
+            "UNION ALL ",
+            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $2)",
+            ") AS \"rqb_count\""
+        )
+    );
+    assert_eq!(page.count.params, vec!["paid".into(), "draft".into()]);
+}
+
+#[test]
+fn renders_set_query_inside_in_subquery() {
+    let user_ids = union_all(
+        select(orders_table().alias("paid"))
+            .fields([field("paid.userId")])
+            .filter(field("paid.status").eq("paid")),
+        select(orders_table().alias("draft"))
+            .fields([field("draft.userId")])
+            .filter(field("draft.status").eq("draft")),
+    );
+
+    let built = select(users_table())
+        .fields(["email"])
+        .filter(field("id").in_subquery(user_ids))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(
+        built.sql.contains(concat!(
+            "WHERE \"id\" IN ((",
+            "SELECT \"paid\".\"user_id\" AS \"paid_userId\" FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) ",
+            "UNION ALL ",
+            "(SELECT \"draft\".\"user_id\" AS \"draft_userId\" FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)",
+            ")"
+        )),
+        "{}",
+        built.sql
+    );
+    assert_eq!(built.params, vec!["paid".into(), "draft".into()]);
+}
+
+#[test]
+fn rejects_set_query_with_different_column_count() {
+    let query = union(
+        select(orders_table()).fields([field("id")]),
+        select(orders_table()).fields([field("id"), field("status")]),
+    );
+
+    let err = query.build_rows_pg().unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::InvalidSetOperationSelection { left: 1, right: 2 })
+    ));
+}
+
+#[test]
+fn rejects_set_query_with_incompatible_column_types() {
+    let query = union(
+        select(orders_table()).fields([field("id")]),
+        select(orders_table()).fields([field("status")]),
+    );
+
+    let err = query.build_rows_pg().unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::IncompatibleSetOperationTypes {
+            column: 1,
+            ref left_type,
+            ref right_type,
+        }) if left_type == "uuid" && right_type == "text"
+    ));
+}
+
+#[test]
+fn rejects_set_query_sort_that_is_not_an_output_alias() {
+    let query = union(
+        select(orders_table()).fields([field("id")]),
+        select(orders_table()).fields([field("id")]),
+    )
+    .order_by(field("status").asc());
+
+    let err = query.build_rows_pg().unwrap_err();
+
+    assert!(matches!(
+        err,
+        Error::Core(rqb_core::Error::UnknownField { dataset, field })
+            if dataset == "set operation" && field == "status"
+    ));
 }
 
 #[test]

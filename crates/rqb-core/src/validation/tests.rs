@@ -349,7 +349,7 @@ fn lowers_non_value_predicates_to_concrete_validated_shapes() {
             operator: SubqueryOperator::In,
             query,
             ..
-        }) if query.columns.len() == 1
+        }) if query.columns().len() == 1
     ));
     assert!(matches!(
         &predicates[2],

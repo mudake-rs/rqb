@@ -102,6 +102,6 @@ For a new type:
 
 ## Speed Budget
 
-- Pure validation and rendering tests should stay under 5 seconds for `cargo test --workspace`.
+- Pure validation and rendering tests should stay under 5 seconds for `cargo test --workspace --all-features`.
 - Docker-backed verification through `make docker-test` should stay under 30 seconds on a warm machine.
 - Do not add per-test temporary databases or coverage tooling unless there is a clear current need.

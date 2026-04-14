@@ -2,8 +2,9 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy,
     SearchRequest, SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast,
-    coalesce, count, cte, delete, excluded, exists, field, insert, lower, not_exists, raw,
-    raw_query, select, set_default, set_expr, sum, union, union_all, update, upper,
+    coalesce, count, cte, delete, excluded, exists, field, insert, lag, lower, not_exists,
+    partition_by, raw, raw_query, row_number, select, set_default, set_expr, sum, union, union_all,
+    update, upper,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -474,6 +475,10 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
         label: String,
         campaign: String,
         score_text: String,
+        #[serde(rename = "emailOrder")]
+        email_order: i64,
+        #[serde(rename = "previousTotal")]
+        previous_total: Option<i64>,
         #[serde(rename = "statusLabel")]
         status_label: String,
         #[serde(rename = "totalText")]
@@ -496,6 +501,17 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
                 .alias("score_text"),
         )
         .select_expr(
+            row_number()
+                .over(partition_by(order_search::EMAIL).order_by(order_search::CREATED_AT.desc()))
+                .alias("emailOrder"),
+        )
+        .select_expr(
+            lag(order_search::TOTAL_CENTS)
+                .offset(1)
+                .over(partition_by(order_search::EMAIL).order_by(order_search::CREATED_AT.asc()))
+                .alias("previousTotal"),
+        )
+        .select_expr(
             case_when(order_search::STATUS.eq(order_search::OrderStatus::Paid))
                 .then("settled")
                 .otherwise("open")
@@ -503,6 +519,7 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
         )
         .select_expr(cast(order_search::TOTAL_CENTS.expr(), FieldType::Text).alias("totalText"))
         .filter(order_search::EMAIL.eq("ada@example.com"))
+        .filter(order_search::STATUS.eq(order_search::OrderStatus::Paid))
         .fetch_all_as::<ExpressionRow>(&client)
         .await?;
 
@@ -511,6 +528,8 @@ async fn maps_expression_select_items_into_structs() -> TestResult {
     assert_eq!(rows[0].label, "web");
     assert_eq!(rows[0].campaign, "spring");
     assert_eq!(rows[0].score_text, "92");
+    assert_eq!(rows[0].email_order, 1);
+    assert_eq!(rows[0].previous_total, None);
     assert_eq!(rows[0].status_label, "settled");
     assert_eq!(rows[0].total_text, "15900");
     Ok(())

@@ -1,6 +1,6 @@
 use rqb_core::{
     FieldType, RawSql, ResolvedField, Source, ValidatedReturningItem, ValidatedSelectItem,
-    ValidatedSource, ValidatedWriteValue, Value,
+    ValidatedSort, ValidatedSource, ValidatedWriteValue, Value,
 };
 
 use crate::helpers::{value_to_json, write_quoted_ident, write_quoted_qualified};
@@ -204,6 +204,16 @@ impl Renderer {
             self.push_param(&Value::String(segment.clone()));
         }
         self.sql.push_str("]::text[]");
+    }
+
+    pub(super) fn render_sort(&mut self, sort: &ValidatedSort) {
+        self.render_column_name(&sort.field);
+        self.sql.push(' ');
+        self.sql.push_str(sort.dir.as_str());
+        if let Some(nulls) = sort.nulls {
+            self.sql.push(' ');
+            self.sql.push_str(nulls.as_str());
+        }
     }
 
     pub(super) fn render_raw(&mut self, raw: &RawSql) {

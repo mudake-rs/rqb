@@ -26,3 +26,7 @@ serde_json.workspace = true
 [dev-dependencies]
 tokio.workspace = true
 uuid = { workspace = true, features = ["v4"] }
+
+[[example]]
+name = "transactions"
+required-features = ["pool", "with-uuid"]

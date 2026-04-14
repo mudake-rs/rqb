@@ -1,3 +1,4 @@
+#[cfg(feature = "runtime-tokio-postgres")]
 use std::sync::Mutex;
 
 use super::*;
@@ -6,11 +7,12 @@ use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy, SearchRequest,
     SelectColumn, SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg,
     case_when, cast, coalesce, count, count_distinct, date_trunc, delete, excluded, exists, field,
-    func, gen_random_uuid, greatest, insert, json_agg, least, length, lower, max, min, not_exists,
-    now, nullif, raw, raw_expr, raw_query, select, set_default, set_expr, string_agg, sum, trim,
-    union, union_all, update, upper,
+    func, gen_random_uuid, greatest, insert, json_agg, lag, lead, least, length, lower, max, min,
+    not_exists, now, nullif, partition_by, rank, raw, raw_expr, raw_query, row_number, select,
+    set_default, set_expr, string_agg, sum, trim, union, union_all, update, upper, window,
 };
 use serde::Serialize;
+#[cfg(feature = "runtime-tokio-postgres")]
 use tokio_postgres::{Row, types::ToSql};
 
 fn orders() -> Dataset {
@@ -844,6 +846,57 @@ fn renders_json_access_expression_select_items() {
             Value::String("email".to_owned()),
         ]
     );
+    assert!(built.cacheable);
+}
+
+#[test]
+fn renders_window_function_expression_select_items() {
+    let built = select(orders())
+        .select([field("email")])
+        .select_expr(
+            row_number()
+                .over(partition_by(field("email")).order_by(field("createdAt").desc()))
+                .alias("rowNumber"),
+        )
+        .select_expr(
+            rank()
+                .over(window().order_by(field("totalCents").desc()))
+                .alias("totalRank"),
+        )
+        .select_expr(
+            lag(field("totalCents"))
+                .offset(2)
+                .default(0)
+                .over(partition_by(field("email")).order_by(field("createdAt").asc()))
+                .alias("previousTotal"),
+        )
+        .select_expr(
+            lead(field("totalCents"))
+                .over(window().order_by(field("createdAt").asc()))
+                .alias("nextTotal"),
+        )
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains(
+        "row_number() OVER (PARTITION BY \"email\" ORDER BY \"created_at\" DESC) AS \"rowNumber\""
+    ));
+    assert!(
+        built
+            .sql
+            .contains("rank() OVER (ORDER BY \"total_cents\" DESC) AS \"totalRank\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("lag(\"total_cents\", $1::bigint::int, $2::bigint) OVER (PARTITION BY \"email\" ORDER BY \"created_at\" ASC) AS \"previousTotal\"")
+    );
+    assert!(
+        built
+            .sql
+            .contains("lead(\"total_cents\") OVER (ORDER BY \"created_at\" ASC) AS \"nextTotal\"")
+    );
+    assert_eq!(built.params, vec![Value::I64(2), Value::I64(0)]);
     assert!(built.cacheable);
 }
 
@@ -1770,11 +1823,13 @@ fn cache_policy_rejects_unbounded_or_raw_statement_shapes() {
     assert!(!update.cacheable);
 }
 
+#[cfg(feature = "runtime-tokio-postgres")]
 #[derive(Default)]
 struct RecordingExecutor {
     calls: Mutex<Vec<StatementCache>>,
 }
 
+#[cfg(feature = "runtime-tokio-postgres")]
 impl RecordingExecutor {
     fn record(&self, cache: StatementCache) {
         self.calls.lock().unwrap().push(cache);
@@ -1785,6 +1840,7 @@ impl RecordingExecutor {
     }
 }
 
+#[cfg(feature = "runtime-tokio-postgres")]
 impl PgExecutor for RecordingExecutor {
     async fn query(
         &self,
@@ -1817,6 +1873,7 @@ impl PgExecutor for RecordingExecutor {
     }
 }
 
+#[cfg(feature = "runtime-tokio-postgres")]
 #[tokio::test]
 async fn executor_receives_statement_cache_policy() {
     let exec = RecordingExecutor::default();

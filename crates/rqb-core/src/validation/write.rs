@@ -15,7 +15,7 @@ use super::operators::count_raw_placeholders;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
 use super::sql_expr::{
-    collect_sql_expr_fields, validate_conflict_sql_expr, validate_select_item,
+    collect_sql_expr_fields, validate_conflict_sql_expr, validate_returning_select_item,
     validate_write_sql_expr,
 };
 use super::value_type::{
@@ -451,10 +451,9 @@ fn resolve_returning(
         .collect::<Result<Vec<_>>>()?;
 
     for item in &returning.expressions {
-        items.push(ValidatedReturningItem::Expression(validate_select_item(
-            &scope.query_scope,
-            item,
-        )?));
+        items.push(ValidatedReturningItem::Expression(
+            validate_returning_select_item(&scope.query_scope, item)?,
+        ));
     }
     validate_returning_aliases(&items)?;
     Ok(items)

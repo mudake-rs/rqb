@@ -88,6 +88,7 @@ struct OrderRow {
     label: String,
     email_lower: String,
     campaign: String,
+    user_order: i64,
     created_day: chrono::DateTime<chrono::Utc>,
     status_label: String,
     total_text: String,
@@ -98,6 +99,11 @@ let rows = select(orders())
     .select_expr(coalesce([DISPLAY_NAME.expr(), EMAIL.expr()]).alias("label"))
     .select_expr(lower(EMAIL).alias("email_lower"))
     .select_expr(METADATA.json_text("campaign").alias("campaign"))
+    .select_expr(
+        row_number()
+            .over(partition_by(USER_ID).order_by(CREATED_AT.desc()))
+            .alias("user_order"),
+    )
     .select_expr(date_trunc("day", CREATED_AT).alias("created_day"))
     .select_expr(
         case_when(STATUS.eq("paid"))

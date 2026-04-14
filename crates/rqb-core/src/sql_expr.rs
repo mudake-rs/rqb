@@ -1,4 +1,4 @@
-use crate::expr::Expr;
+use crate::expr::{Expr, Sort};
 use crate::field::{Field, FieldRef};
 use crate::raw::RawSql;
 use crate::types::FieldType;
@@ -27,6 +27,11 @@ pub enum SqlExpr {
         expr: Box<SqlExpr>,
         path: JsonAccessPath,
         text: bool,
+    },
+    Window {
+        function: WindowFunction,
+        args: Vec<SqlExpr>,
+        spec: WindowSpec,
     },
     Coalesce(Vec<SqlExpr>),
     Case {
@@ -81,6 +86,114 @@ pub enum JsonAccessPath {
     Key(String),
     Index(i32),
     Path(Vec<String>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowFunction {
+    RowNumber,
+    Rank,
+    DenseRank,
+    Lag,
+    Lead,
+}
+
+impl WindowFunction {
+    pub fn sql_name(self) -> &'static str {
+        match self {
+            Self::RowNumber => "row_number",
+            Self::Rank => "rank",
+            Self::DenseRank => "dense_rank",
+            Self::Lag => "lag",
+            Self::Lead => "lead",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use]
+pub struct WindowSpec {
+    pub partition_by: Vec<FieldRef>,
+    pub order_by: Vec<Sort>,
+}
+
+impl WindowSpec {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn partition_by(mut self, field: impl Into<FieldRef>) -> Self {
+        self.partition_by.push(field.into());
+        self
+    }
+
+    pub fn partition_by_many<I, F>(mut self, fields: I) -> Self
+    where
+        I: IntoIterator<Item = F>,
+        F: Into<FieldRef>,
+    {
+        self.partition_by.extend(fields.into_iter().map(Into::into));
+        self
+    }
+
+    pub fn order_by(mut self, sort: impl Into<Sort>) -> Self {
+        self.order_by.push(sort.into());
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[must_use]
+pub struct WindowFunctionBuilder {
+    function: WindowFunction,
+    args: Vec<SqlExpr>,
+}
+
+impl WindowFunctionBuilder {
+    pub fn over(self, spec: WindowSpec) -> SqlExpr {
+        SqlExpr::Window {
+            function: self.function,
+            args: self.args,
+            spec,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[must_use]
+pub struct OffsetWindowFunctionBuilder {
+    function: WindowFunction,
+    args: Vec<SqlExpr>,
+}
+
+impl OffsetWindowFunctionBuilder {
+    pub fn offset(mut self, offset: impl IntoSqlExpr) -> Self {
+        if self.args.len() == 1 {
+            self.args.push(offset.into_sql_expr());
+        } else {
+            self.args[1] = offset.into_sql_expr();
+        }
+        self
+    }
+
+    pub fn default(mut self, value: impl IntoSqlExpr) -> Self {
+        if self.args.len() == 1 {
+            self.args.push(1.into_sql_expr());
+        }
+        if self.args.len() == 2 {
+            self.args.push(value.into_sql_expr());
+        } else {
+            self.args[2] = value.into_sql_expr();
+        }
+        self
+    }
+
+    pub fn over(self, spec: WindowSpec) -> SqlExpr {
+        SqlExpr::Window {
+            function: self.function,
+            args: self.args,
+            spec,
+        }
+    }
 }
 
 impl SqlExpr {
@@ -407,6 +520,55 @@ where
     E: IntoSqlExpr,
 {
     builtin_function(BuiltinFunction::Least, exprs)
+}
+
+fn window_function<I, E>(function: WindowFunction, args: I) -> WindowFunctionBuilder
+where
+    I: IntoIterator<Item = E>,
+    E: IntoSqlExpr,
+{
+    WindowFunctionBuilder {
+        function,
+        args: args.into_iter().map(IntoSqlExpr::into_sql_expr).collect(),
+    }
+}
+
+fn offset_window_function(
+    expr: impl IntoSqlExpr,
+    function: WindowFunction,
+) -> OffsetWindowFunctionBuilder {
+    OffsetWindowFunctionBuilder {
+        function,
+        args: vec![expr.into_sql_expr()],
+    }
+}
+
+pub fn window() -> WindowSpec {
+    WindowSpec::new()
+}
+
+pub fn partition_by(field: impl Into<FieldRef>) -> WindowSpec {
+    WindowSpec::new().partition_by(field)
+}
+
+pub fn row_number() -> WindowFunctionBuilder {
+    window_function(WindowFunction::RowNumber, std::iter::empty::<SqlExpr>())
+}
+
+pub fn rank() -> WindowFunctionBuilder {
+    window_function(WindowFunction::Rank, std::iter::empty::<SqlExpr>())
+}
+
+pub fn dense_rank() -> WindowFunctionBuilder {
+    window_function(WindowFunction::DenseRank, std::iter::empty::<SqlExpr>())
+}
+
+pub fn lag(expr: impl IntoSqlExpr) -> OffsetWindowFunctionBuilder {
+    offset_window_function(expr, WindowFunction::Lag)
+}
+
+pub fn lead(expr: impl IntoSqlExpr) -> OffsetWindowFunctionBuilder {
+    offset_window_function(expr, WindowFunction::Lead)
 }
 
 pub fn raw_expr(raw: RawSql, ty: FieldType) -> SqlExpr {

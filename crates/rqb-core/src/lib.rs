@@ -44,9 +44,10 @@ pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
 pub use sql_expr::{
     BuiltinFunction, CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, FunctionNameStyle,
-    IntoSqlExpr, JsonAccessPath, SelectItem, SqlExpr, case_when, cast, coalesce, date_trunc,
-    excluded, func, gen_random_uuid, greatest, least, length, lower, now, nullif, raw_expr, trim,
-    upper,
+    IntoSqlExpr, JsonAccessPath, OffsetWindowFunctionBuilder, SelectItem, SqlExpr, WindowFunction,
+    WindowFunctionBuilder, WindowSpec, case_when, cast, coalesce, date_trunc, dense_rank, excluded,
+    func, gen_random_uuid, greatest, lag, lead, least, length, lower, now, nullif, partition_by,
+    rank, raw_expr, row_number, trim, upper, window,
 };
 pub use types::{
     DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,
@@ -77,15 +78,17 @@ pub mod prelude {
         Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType, ExistsPredicate, Expr,
         Field, FieldRef, FieldType, FunctionBuilder, InsertBuilder, InsertConflictBuilder,
         InsertQuery, IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LockMode, LockWait, LogicalOp,
-        NullsOrder, Operator, QueryExpr, RawQuery, RawSql, Relation, ReturningMode, RowLock,
-        SearchRequest, SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr,
-        SetOperator, SetQuery, Sort, SortDir, SqlExpr, SubqueryOperator, SubqueryPredicate,
-        TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr,
-        WriteAssignment, WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count,
-        count_distinct, count_field, cte, date_trunc, delete, except, except_all, excluded, exists,
+        NullsOrder, OffsetWindowFunctionBuilder, Operator, QueryExpr, RawQuery, RawSql, Relation,
+        ReturningMode, RowLock, SearchRequest, SelectBuilder, SelectColumn, SelectItem,
+        SelectQuery, SelectRepr, SetOperator, SetQuery, Sort, SortDir, SqlExpr, SubqueryOperator,
+        SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery,
+        Value, ValueRepr, WindowFunction, WindowFunctionBuilder, WindowSpec, WriteAssignment,
+        WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count, count_distinct,
+        count_field, cte, date_trunc, delete, dense_rank, except, except_all, excluded, exists,
         field, func, gen_random_uuid, greatest, insert, intersect, intersect_all, json_agg,
-        json_agg_nullable, least, length, lower, max, max_agg, min, min_agg, not, not_exists, now,
-        nullif, raw, raw_expr, raw_query, select, set, set_col, set_default, set_expr, set_raw,
-        string_agg, sum, trim, union, union_all, update, upper,
+        json_agg_nullable, lag, lead, least, length, lower, max, max_agg, min, min_agg, not,
+        not_exists, now, nullif, partition_by, rank, raw, raw_expr, raw_query, row_number, select,
+        set, set_col, set_default, set_expr, set_raw, string_agg, sum, trim, union, union_all,
+        update, upper, window,
     };
 }

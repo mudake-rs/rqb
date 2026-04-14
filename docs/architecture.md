@@ -91,7 +91,8 @@ Type behavior currently lives in several places:
 
 This is correct behaviorally, but adding a new type still requires touching
 several files. The target is not a dynamic registry yet. Type classification and
-array element metadata live on `FieldType`; Postgres cast/selection behavior now
+array element metadata live on `FieldType`; representation helpers live on
+`ValueRepr`, `SelectRepr`, and `TypeSpec`; Postgres cast/selection behavior now
 has dedicated modules. Future type work should keep tightening that checklist
 instead of scattering new switch arms into generic helpers.
 

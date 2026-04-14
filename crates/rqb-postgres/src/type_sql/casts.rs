@@ -1,4 +1,4 @@
-use rqb_core::{ElemType, FieldType, ValueRepr};
+use rqb_core::{ElemType, FieldType};
 
 use super::names::{write_enum_type, write_type_spec, write_type_spec_array_cast};
 
@@ -56,9 +56,10 @@ pub(crate) fn write_postgres_cast(output: &mut String, field_type: FieldType) ->
             output.push_str(FieldType::Range(elem_type).as_str());
         }
         FieldType::Custom(type_spec) => {
-            output.push_str(match type_spec.value_repr {
-                ValueRepr::String | ValueRepr::DecimalString => "::text::",
-                ValueRepr::Native => "::",
+            output.push_str(if type_spec.value_is_string_backed() {
+                "::text::"
+            } else {
+                "::"
             });
             write_type_spec(output, *type_spec);
         }

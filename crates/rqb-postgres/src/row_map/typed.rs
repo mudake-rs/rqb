@@ -1,4 +1,4 @@
-use rqb_core::{AggregateType, ElemType, FieldType, SelectColumn, SelectRepr, TypeFamily};
+use rqb_core::{AggregateType, ElemType, FieldType, SelectColumn, TypeFamily};
 use serde_json::{Map, Number, Value as JsonValue};
 use tokio_postgres::Row;
 
@@ -56,7 +56,7 @@ fn custom_field_to_json(
     alias: &str,
     type_spec: rqb_core::TypeSpec,
 ) -> Result<JsonValue> {
-    if type_spec.select_repr == SelectRepr::Text {
+    if type_spec.selects_as_text() {
         return read_scalar(row, alias, JsonValue::String);
     }
 
@@ -116,7 +116,7 @@ fn custom_array_to_json(
     alias: &str,
     type_spec: rqb_core::TypeSpec,
 ) -> Result<JsonValue> {
-    if type_spec.select_repr == SelectRepr::Text {
+    if type_spec.selects_as_text() {
         return read_array(row, alias, JsonValue::String);
     }
 

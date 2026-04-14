@@ -1,4 +1,4 @@
-use rqb_core::{ElemType, FieldType, Value, ValueRepr};
+use rqb_core::{ElemType, FieldType, Value};
 
 use crate::helpers::value_to_json;
 use crate::type_sql::{write_postgres_array_cast_for_scalar, write_postgres_cast};
@@ -36,12 +36,12 @@ impl Renderer {
                 return;
             }
             FieldType::Array(ElemType::Custom(type_spec))
-                if type_spec.value_repr == ValueRepr::DecimalString =>
+                if type_spec.value_is_decimal_string() =>
             {
                 self.push_decimal_string_array_param(value, field_type);
                 return;
             }
-            FieldType::Custom(type_spec) if type_spec.value_repr == ValueRepr::DecimalString => {
+            FieldType::Custom(type_spec) if type_spec.value_is_decimal_string() => {
                 self.push_decimal_string_param(value, field_type);
                 return;
             }
@@ -95,7 +95,7 @@ impl Renderer {
                 self.sql.push_str("::text[]::numeric[]");
             }
             FieldType::Array(ElemType::Custom(type_spec))
-                if type_spec.value_repr == ValueRepr::DecimalString =>
+                if type_spec.value_is_decimal_string() =>
             {
                 self.push_owned_param(Value::Array(
                     values.iter().map(numeric_text_value).collect(),

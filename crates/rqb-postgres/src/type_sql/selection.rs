@@ -1,4 +1,4 @@
-use rqb_core::{ElemType, FieldType, SelectRepr};
+use rqb_core::{ElemType, FieldType};
 
 pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static str> {
     match field_type {
@@ -12,16 +12,14 @@ pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static 
         FieldType::Enum(_) => Some("::text"),
         FieldType::Array(ElemType::Citext) => Some("::text[]"),
         FieldType::Array(ElemType::Enum(_)) => Some("::text[]"),
-        FieldType::Array(ElemType::Custom(type_spec))
-            if type_spec.select_repr == SelectRepr::Text =>
-        {
+        FieldType::Array(ElemType::Custom(type_spec)) if type_spec.selects_as_text() => {
             Some("::text[]")
         }
         FieldType::Numeric => Some("::text"),
         FieldType::Array(ElemType::Numeric) => Some("::text[]"),
         FieldType::Array(ElemType::Timestamp) => timestamp_array_selection_cast(),
         FieldType::Array(ElemType::Timestamptz) => timestamptz_array_selection_cast(),
-        FieldType::Custom(type_spec) if type_spec.select_repr == SelectRepr::Text => Some("::text"),
+        FieldType::Custom(type_spec) if type_spec.selects_as_text() => Some("::text"),
         _ => None,
     }
 }

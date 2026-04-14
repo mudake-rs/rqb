@@ -24,11 +24,27 @@ pub enum ValueRepr {
     DecimalString,
 }
 
+impl ValueRepr {
+    pub const fn is_string_backed(self) -> bool {
+        matches!(self, Self::String | Self::DecimalString)
+    }
+
+    pub const fn is_decimal_string(self) -> bool {
+        matches!(self, Self::DecimalString)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SelectRepr {
     Native,
     Text,
+}
+
+impl SelectRepr {
+    pub const fn is_text(self) -> bool {
+        matches!(self, Self::Text)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -67,10 +83,51 @@ impl TypeSpec {
         self
     }
 
+    pub const fn value_is_string_backed(self) -> bool {
+        self.value_repr.is_string_backed()
+    }
+
+    pub const fn value_is_decimal_string(self) -> bool {
+        self.value_repr.is_decimal_string()
+    }
+
+    pub const fn selects_as_text(self) -> bool {
+        self.select_repr.is_text()
+    }
+
     pub fn display_name(self) -> String {
         match self.schema {
             Some(schema) => format!("{schema}.{}", self.name),
             None => self.name.to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn value_and_select_repr_helpers_describe_representation() {
+        assert!(ValueRepr::String.is_string_backed());
+        assert!(ValueRepr::DecimalString.is_string_backed());
+        assert!(!ValueRepr::Native.is_string_backed());
+        assert!(ValueRepr::DecimalString.is_decimal_string());
+        assert!(!ValueRepr::String.is_decimal_string());
+
+        assert!(SelectRepr::Text.is_text());
+        assert!(!SelectRepr::Native.is_text());
+    }
+
+    #[test]
+    fn type_spec_delegates_representation_helpers() {
+        const MONEY: TypeSpec = TypeSpec::domain(Some("public"), "money_256")
+            .base(TypeFamily::Numeric)
+            .value_repr(ValueRepr::DecimalString)
+            .select_repr(SelectRepr::Text);
+
+        assert!(MONEY.value_is_string_backed());
+        assert!(MONEY.value_is_decimal_string());
+        assert!(MONEY.selects_as_text());
     }
 }

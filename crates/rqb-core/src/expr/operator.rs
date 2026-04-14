@@ -106,7 +106,7 @@ pub(crate) enum OperatorCategory {
     Ordering,
     Inclusion,
     Between,
-    Contains,
+    ContainsDispatch,
     TextAffix,
     Regex,
     ArraySet,
@@ -128,7 +128,7 @@ impl Operator {
             Self::Gt | Self::Gte | Self::Lt | Self::Lte => OperatorCategory::Ordering,
             Self::In | Self::NotIn => OperatorCategory::Inclusion,
             Self::Between | Self::NotBetween => OperatorCategory::Between,
-            Self::Contains | Self::NotContains => OperatorCategory::Contains,
+            Self::Contains | Self::NotContains => OperatorCategory::ContainsDispatch,
             Self::StartsWith | Self::EndsWith | Self::NotStartsWith | Self::NotEndsWith => {
                 OperatorCategory::TextAffix
             }
@@ -191,8 +191,8 @@ mod tests {
             (Operator::NotIn, OperatorCategory::Inclusion),
             (Operator::Between, OperatorCategory::Between),
             (Operator::NotBetween, OperatorCategory::Between),
-            (Operator::Contains, OperatorCategory::Contains),
-            (Operator::NotContains, OperatorCategory::Contains),
+            (Operator::Contains, OperatorCategory::ContainsDispatch),
+            (Operator::NotContains, OperatorCategory::ContainsDispatch),
             (Operator::StartsWith, OperatorCategory::TextAffix),
             (Operator::EndsWith, OperatorCategory::TextAffix),
             (Operator::NotStartsWith, OperatorCategory::TextAffix),

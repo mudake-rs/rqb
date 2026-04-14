@@ -134,10 +134,10 @@ ValidatedExpr
 logical composition, while `render::predicate` mechanically renders concrete
 predicate shapes.
 
-The remaining cleanup is naming and file placement, not behavior. In particular,
-`OperatorCategory::Contains` still covers both text-like `LIKE` lowering and
-range/network containment lowering. That is workable, but should be revisited
-when operator naming gets a final ergonomics pass.
+`OperatorCategory::ContainsDispatch` is intentionally type-dependent: validation
+lowers `contains` / `notContains` to either text-like `LIKE` predicates or
+range/network containment predicates. The renderer only sees the concrete
+lowered shape.
 
 ### Write Validation Has A Dedicated Scope
 

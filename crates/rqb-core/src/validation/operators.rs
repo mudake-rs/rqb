@@ -94,7 +94,7 @@ pub(super) fn validate_predicate(
                 all: operator == Operator::JsonKeysExistAll,
             })
         }
-        OperatorCategory::Contains => {
+        OperatorCategory::ContainsDispatch => {
             validate_contains_operator(field, operator, value)?;
             if field.ty.is_range() || field.ty.is_network() {
                 Ok(ValidatedPredicate::Containment {

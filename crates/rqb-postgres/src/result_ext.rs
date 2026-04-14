@@ -27,7 +27,7 @@ impl<T> ResultExt<T> for Result<T> {
     {
         match self {
             Ok(value) => Ok(value),
-            Err(ref error) if error.is_unique_violation() => Err(f(error)),
+            Err(ref error) if matches!(error, Error::UniqueViolation { .. }) => Err(f(error)),
             Err(error) => Err(E::from(error)),
         }
     }
@@ -38,7 +38,7 @@ impl<T> ResultExt<T> for Result<T> {
     {
         match self {
             Ok(value) => Ok(value),
-            Err(ref error) if error.is_constraint(name) => Err(f(error)),
+            Err(ref error) if error.constraint_name() == Some(name) => Err(f(error)),
             Err(error) => Err(E::from(error)),
         }
     }

@@ -1311,8 +1311,8 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         .execute(&client)
         .await
         .unwrap_err();
-    assert!(duplicate.is_unique_violation());
-    assert!(duplicate.is_constraint("organizations_slug_key"));
+    assert!(matches!(duplicate, PgError::UniqueViolation { .. }));
+    assert_eq!(duplicate.constraint_name(), Some("organizations_slug_key"));
     client
         .batch_execute("ROLLBACK TO SAVEPOINT duplicate_org")
         .await?;
@@ -1329,7 +1329,7 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         .execute(&client)
         .await
         .unwrap_err();
-    assert!(fk.is_foreign_key_violation());
+    assert!(matches!(fk, PgError::ForeignKeyViolation { .. }));
     client.batch_execute("ROLLBACK TO SAVEPOINT bad_fk").await?;
 
     client
@@ -1352,7 +1352,7 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
         .fetch_one(&client)
         .await
         .unwrap_err();
-    assert!(not_found.is_not_found());
+    assert!(matches!(not_found, PgError::NotFound));
 
     let maybe = select(order_search::dataset())
         .fields([order_search::EMAIL])

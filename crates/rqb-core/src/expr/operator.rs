@@ -99,7 +99,7 @@ impl_as_str!(Operator {
 });
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OperatorCategory {
+pub(crate) enum OperatorCategory {
     NullCheck,
     Equality,
     NullSafeEquality,
@@ -120,7 +120,7 @@ pub enum OperatorCategory {
 }
 
 impl Operator {
-    pub fn category(self) -> OperatorCategory {
+    pub(crate) fn category(self) -> OperatorCategory {
         match self {
             Self::IsNull | Self::IsNotNull => OperatorCategory::NullCheck,
             Self::Equals | Self::NotEquals => OperatorCategory::Equality,

@@ -170,7 +170,7 @@ rqb-core
   metadata: Dataset, Source, Field, FieldType, TypeSpec, capabilities
   field::{capabilities, reference, resolved}: field metadata, FieldRef API, resolved fields
   types::{field_type, enum_type, custom}: core types, PG enums, custom type metadata
-  ast: SelectQuery, SearchRequest, Expr, OperatorCategory, Aggregate, write ASTs, RawSql
+  ast: SelectQuery, SearchRequest, Expr, Operator, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> concrete validated models
   validation::mod: validated model structs currently live here
@@ -233,11 +233,10 @@ every layer.
    lowering through explicit operator categories. Rendering consumes concrete
    `ValidatedPredicate` shapes and no longer reinterprets user-facing operators.
 
-5. Clean the facade API surface. Pending.
+5. Clean the facade API surface. Done.
    `rqb-core` must expose validated models for backend crates, but the `rqb`
-   facade currently glob-reexports `rqb_core::*`, so internal `Validated*` types
-   appear under `rqb::*`. Replace the facade glob with an explicit ergonomic
-   export list while keeping `rqb::prelude::*` focused.
+   facade uses an explicit ergonomic export list, so internal `Validated*`
+   types stay in `rqb_core` instead of appearing under `rqb::*`.
 
 6. Split validated model definitions. Pending.
    `validation/mod.rs` currently hosts all validated structs and enums. Move the

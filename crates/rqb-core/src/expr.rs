@@ -10,7 +10,8 @@ use crate::value::Value;
 
 mod operator;
 
-pub use operator::{ColumnOperator, Operator, OperatorCategory};
+pub(crate) use operator::OperatorCategory;
+pub use operator::{ColumnOperator, Operator};
 
 macro_rules! impl_as_str {
     ($ty:ident { $($variant:ident => $value:expr),* $(,)? }) => {

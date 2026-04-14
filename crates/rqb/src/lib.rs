@@ -14,10 +14,32 @@
 //! See the repository `README.md`, `docs/guide.md`, `docs/recipes.md`, and
 //! `docs/ergonomics.md` for end-to-end examples.
 
-pub use rqb_core::*;
+pub use rqb_core::{
+    Aggregate, AggregateType, Capabilities, ColumnOperator, ColumnPredicate, ConflictAction,
+    ConflictClause, ConflictTarget, Cte, CteBody, Dataset, DbEnum, DeleteBuilder, DeleteQuery,
+    ElemType, EnumType, Error, ExistsPredicate, Expr, Field, FieldRef, FieldType, InsertBuilder,
+    InsertConflictBuilder, InsertQuery, IntoFieldRefs, Join, JoinKind, JsonPathPolicy, LockMode,
+    LockWait, LogicalExpr, LogicalOp, NullsOrder, Operator, Predicate, RawQuery, RawSql, Relation,
+    Result, ReturningMode, RowLock, SearchRequest, SelectBuilder, SelectColumn, SelectQuery,
+    SelectRepr, Sort, SortDir, Source, SubqueryOperator, SubqueryPredicate, TextSearchConfig,
+    TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr, WriteAssignment,
+    WriteValue, all, any, array_agg, avg, count, count_distinct, count_field, cte, delete, exists,
+    field, insert, max, max_agg, min, min_agg, not, not_exists, raw, raw_query, select, string_agg,
+    sum, update,
+};
 pub use rqb_postgres as postgres;
 #[cfg(feature = "pool")]
-pub use rqb_postgres::{connect, connect_with_tls};
+pub use rqb_postgres::{
+    BeginBuilder, Db, IsolationLevel, Savepoint, Tx, TxFuture, connect, connect_with_tls,
+};
+pub use rqb_postgres::{
+    BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql, Postgres,
+};
+#[cfg(feature = "runtime-tokio-postgres")]
+pub use rqb_postgres::{
+    ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, PgParams,
+    ResultExt,
+};
 pub use serde;
 
 pub mod prelude {

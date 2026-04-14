@@ -234,8 +234,8 @@ fn json_path_numeric_comparison_keeps_i64_precision() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("score".to_owned()),
-            Value::String(exact.to_string())
+            BindParam::Text("score".to_owned()),
+            BindParam::Text(exact.to_string())
         ]
     );
 }
@@ -260,8 +260,8 @@ fn renders_custom_numeric_domain_losslessly() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("900719925474099312345678901234567890".to_owned()),
-            Value::String("42".to_owned())
+            BindParam::Text("900719925474099312345678901234567890".to_owned()),
+            BindParam::Text("42".to_owned())
         ]
     );
 }
@@ -286,10 +286,8 @@ fn renders_custom_numeric_domain_arrays_losslessly() {
     assert_eq!(
         built.params,
         vec![
-            Value::Array(vec![Value::String(
-                "900719925474099312345678901234567890".to_owned()
-            )]),
-            Value::String("42".to_owned())
+            BindParam::TextArray(vec!["900719925474099312345678901234567890".to_owned()]),
+            BindParam::Text("42".to_owned())
         ]
     );
 }
@@ -309,7 +307,7 @@ fn renders_numeric_selection_as_text_to_preserve_precision() {
     );
     assert_eq!(
         built.params,
-        vec![Value::String("9007199254740993".to_owned())]
+        vec![BindParam::Text("9007199254740993".to_owned())]
     );
 }
 
@@ -350,9 +348,9 @@ fn renders_numeric_float_special_values_as_postgres_literals() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("Infinity".to_owned()),
-            Value::String("-Infinity".to_owned()),
-            Value::String("NaN".to_owned())
+            BindParam::Text("Infinity".to_owned()),
+            BindParam::Text("-Infinity".to_owned()),
+            BindParam::Text("NaN".to_owned())
         ]
     );
     assert!(built.sql.contains("$1::text::numeric"), "{}", built.sql);
@@ -381,10 +379,10 @@ fn renders_scalar_range_and_text_negation_operators() {
     assert_eq!(
         built.params,
         vec![
-            Value::I64(1_000),
-            Value::I64(2_000),
-            Value::I64(5_000),
-            Value::String("%@spam.test%".to_owned())
+            BindParam::Int8(1_000),
+            BindParam::Int8(2_000),
+            BindParam::Int8(5_000),
+            BindParam::Text("%@spam.test%".to_owned())
         ]
     );
 }
@@ -404,8 +402,8 @@ fn renders_array_contains_all_and_elem_match_with_array_casts() {
     assert_eq!(
         built.params,
         vec![
-            Value::Array(vec!["vip".into(), "gift".into()]),
-            Value::Array(vec!["vip".into()])
+            BindParam::TextArray(vec!["vip".to_owned(), "gift".to_owned()]),
+            BindParam::TextArray(vec!["vip".to_owned()])
         ]
     );
 }
@@ -446,9 +444,12 @@ fn renders_jsonb_and_json_path_null_safe_comparisons_as_jsonb() {
             .sql
             .contains("\"metadata\" #>> ARRAY[$4]::text[] IS DISTINCT FROM $5")
     );
-    assert_eq!(built.params[0], serde_json::json!({"gift": true}).into());
-    assert_eq!(built.params[2], serde_json::json!(92).into());
-    assert_eq!(built.params[4], Value::Null);
+    assert_eq!(
+        built.params[0],
+        BindParam::Json(serde_json::json!({"gift": true}))
+    );
+    assert_eq!(built.params[2], BindParam::Json(serde_json::json!(92)));
+    assert_eq!(built.params[4], BindParam::Null(BindType::Text));
 }
 
 #[test]
@@ -467,8 +468,14 @@ fn renders_jsonb_array_comparisons_as_jsonb_params() {
             .sql
             .contains("\"metadata\" IS NOT DISTINCT FROM $2::jsonb")
     );
-    assert_eq!(built.params[0], serde_json::json!([1, 2, 3]).into());
-    assert_eq!(built.params[1], serde_json::json!(["vip", "gift"]).into());
+    assert_eq!(
+        built.params[0],
+        BindParam::Json(serde_json::json!([1, 2, 3]))
+    );
+    assert_eq!(
+        built.params[1],
+        BindParam::Json(serde_json::json!(["vip", "gift"]))
+    );
 }
 
 #[test]
@@ -520,15 +527,39 @@ fn renders_postgres_type_cast_matrix() {
         .unwrap();
 
     assert!(built.sql.contains("$1::text::uuid"));
-    assert!(built.sql.contains("$2::bigint::int"));
+    assert!(built.sql.contains("$2::int"));
     assert!(built.sql.contains("$3::bigint"));
     assert!(built.sql.contains("$4::text::numeric"));
     assert!(built.sql.contains("$5::double precision"));
     assert!(built.sql.contains("$7::text::date"));
     assert!(built.sql.contains("$8::text::timestamptz"));
-    assert!(built.sql.contains("$9::bigint[]::int[]"));
+    assert!(built.sql.contains("$9::int[]"));
     assert!(built.sql.contains("$10::text[]::uuid[]"));
     assert!(built.sql.contains("$11::text[]::timestamptz[]"));
+}
+
+#[test]
+fn renders_typed_integer_and_float_bind_params() {
+    let built = select(typed_values())
+        .filter(all([
+            field("a").eq(42),
+            field("scores").contains_any([1, 2]),
+            field("ratio").eq(1),
+        ]))
+        .build_rows_pg()
+        .unwrap();
+
+    assert!(built.sql.contains("\"a\" = $1::int"));
+    assert!(built.sql.contains("\"scores\" && $2::int[]"));
+    assert!(built.sql.contains("\"ratio\" = $3::double precision"));
+    assert_eq!(
+        built.params,
+        vec![
+            BindParam::Int4(42),
+            BindParam::Int4Array(vec![1, 2]),
+            BindParam::Float8(1.0),
+        ]
+    );
 }
 
 #[test]
@@ -578,7 +609,7 @@ fn renders_native_postgres_type_casts_and_operators() {
     );
     assert!(built.sql.contains("\"local_window\" <@ $6::text::tsrange"));
     assert!(built.sql.contains("$7::text::timestamptz"));
-    assert_eq!(built.params[1], Value::bytes([0xde, 0xad]));
+    assert_eq!(built.params[1], BindParam::Bytes(vec![0xde, 0xad]));
 }
 
 #[test]
@@ -608,7 +639,7 @@ fn renders_empty_array_params_as_typed_literals() {
         .build_rows_pg()
         .unwrap();
 
-    assert!(built.sql.contains("\"scores\" && ARRAY[]::bigint[]::int[]"));
+    assert!(built.sql.contains("\"scores\" && ARRAY[]::int[]"));
     assert!(built.sql.contains("\"ids\" && ARRAY[]::text[]::uuid[]"));
     assert!(
         built
@@ -701,11 +732,11 @@ fn renders_expression_select_items_with_aliases_and_output_metadata() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("paid".to_owned()),
-            Value::String("settled".to_owned()),
-            Value::String("cancelled".to_owned()),
-            Value::String("closed".to_owned()),
-            Value::String("open".to_owned()),
+            BindParam::Text("paid".to_owned()),
+            BindParam::Text("settled".to_owned()),
+            BindParam::Text("cancelled".to_owned()),
+            BindParam::Text("closed".to_owned()),
+            BindParam::Text("open".to_owned()),
         ]
     );
 }
@@ -815,12 +846,12 @@ fn renders_json_access_expression_select_items() {
     assert!(
         built
             .sql
-            .contains("(\"metadata\" -> $4::bigint::int) AS \"firstItem\"")
+            .contains("(\"metadata\" -> $4::int) AS \"firstItem\"")
     );
     assert!(
         built
             .sql
-            .contains("(\"metadata\" ->> $5::bigint::int) AS \"lastItemText\"")
+            .contains("(\"metadata\" ->> $5::int) AS \"lastItemText\"")
     );
     assert!(
         built
@@ -835,15 +866,15 @@ fn renders_json_access_expression_select_items() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("customer".to_owned()),
-            Value::String("customer".to_owned()),
-            Value::String("email".to_owned()),
-            Value::I64(0),
-            Value::I64(-1),
-            Value::String("customer".to_owned()),
-            Value::String("email".to_owned()),
-            Value::String("customer".to_owned()),
-            Value::String("email".to_owned()),
+            BindParam::Text("customer".to_owned()),
+            BindParam::Text("customer".to_owned()),
+            BindParam::Text("email".to_owned()),
+            BindParam::Int4(0),
+            BindParam::Int4(-1),
+            BindParam::Text("customer".to_owned()),
+            BindParam::Text("email".to_owned()),
+            BindParam::Text("customer".to_owned()),
+            BindParam::Text("email".to_owned()),
         ]
     );
     assert!(built.cacheable);
@@ -889,14 +920,14 @@ fn renders_window_function_expression_select_items() {
     assert!(
         built
             .sql
-            .contains("lag(\"total_cents\", $1::bigint::int, $2::bigint) OVER (PARTITION BY \"email\" ORDER BY \"created_at\" ASC) AS \"previousTotal\"")
+            .contains("lag(\"total_cents\", $1::int, $2::bigint) OVER (PARTITION BY \"email\" ORDER BY \"created_at\" ASC) AS \"previousTotal\"")
     );
     assert!(
         built
             .sql
             .contains("lead(\"total_cents\") OVER (ORDER BY \"created_at\" ASC) AS \"nextTotal\"")
     );
-    assert_eq!(built.params, vec![Value::I64(2), Value::I64(0)]);
+    assert_eq!(built.params, vec![BindParam::Int4(2), BindParam::Int8(0)]);
     assert!(built.cacheable);
 }
 
@@ -977,7 +1008,7 @@ fn renders_raw_sql_escaped_question_marks_and_bind_errors() {
         .build_rows_pg()
         .unwrap();
     assert!(built.sql.contains("SELECT ? AS literal, $1 AS n"));
-    assert_eq!(built.params, vec![Value::I64(1)]);
+    assert_eq!(built.params, vec![BindParam::Int8(1)]);
 
     let too_few = select(Dataset::cte("bad").fields([Field::new("n", FieldType::Integer)]))
         .cte(rqb_core::cte("bad", raw("SELECT ? AS n")))
@@ -1018,8 +1049,8 @@ fn renders_top_level_raw_query_placeholders_and_bind_errors() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("10000000-0000-0000-0000-000000000001".to_owned()),
-            Value::String("active".to_owned())
+            BindParam::Text("10000000-0000-0000-0000-000000000001".to_owned()),
+            BindParam::Text("active".to_owned())
         ]
     );
     assert!(!built.cacheable);
@@ -1358,7 +1389,10 @@ fn renders_jsonb_write_arrays_as_jsonb_params() {
         .unwrap();
 
     assert_eq!(built.sql, "UPDATE \"events\" SET \"payload\" = $1::jsonb");
-    assert_eq!(built.params, vec![serde_json::json!([1, 2, 3]).into()]);
+    assert_eq!(
+        built.params,
+        vec![BindParam::Json(serde_json::json!([1, 2, 3]))]
+    );
 }
 
 #[test]
@@ -1368,7 +1402,7 @@ fn renders_jsonb_write_null_as_sql_null() {
     let built = update(dataset).set_null("payload").build_pg().unwrap();
 
     assert_eq!(built.sql, "UPDATE \"events\" SET \"payload\" = $1::jsonb");
-    assert_eq!(built.params, vec![Value::Null]);
+    assert_eq!(built.params, vec![BindParam::Null(BindType::Json)]);
 }
 
 #[test]
@@ -1434,7 +1468,10 @@ fn renders_set_null_shortcut() {
     assert!(built.sql.contains("\"created_at\" = $1::text::timestamptz"));
     assert_eq!(
         built.params,
-        vec![Value::Null, "30000000-0000-0000-0000-000000009999".into()]
+        vec![
+            BindParam::Null(BindType::Text),
+            "30000000-0000-0000-0000-000000009999".into()
+        ]
     );
 }
 
@@ -1691,9 +1728,9 @@ fn renders_optional_conditional_and_apply_filters() {
     assert_eq!(
         built.params,
         vec![
-            Value::String("paid".to_owned()),
-            Value::I64(1_000),
-            Value::String("%@example.com".to_owned())
+            BindParam::Text("paid".to_owned()),
+            BindParam::Int8(1_000),
+            BindParam::Text("%@example.com".to_owned())
         ]
     );
 }
@@ -1915,7 +1952,7 @@ fn renders_debug_sql_with_params() {
 
     let debug = built.debug_sql().to_string();
     assert!(debug.starts_with("SELECT \"email\" FROM \"order_search_view\" WHERE \"status\" = $1"));
-    assert!(debug.contains("-- params: [String(\"paid\")]"));
+    assert!(debug.contains("-- params: [Text(\"paid\")]"));
 }
 
 #[test]
@@ -1931,7 +1968,7 @@ fn renders_debug_select_sql_with_rows_and_count() {
     assert!(debug.contains("SELECT \"email\" FROM \"order_search_view\" WHERE \"status\" = $1"));
     assert!(debug.contains("-- count"));
     assert!(debug.contains("SELECT count(*) FROM \"order_search_view\" WHERE \"status\" = $1"));
-    assert!(debug.contains("-- params: [String(\"paid\")]"));
+    assert!(debug.contains("-- params: [Text(\"paid\")]"));
 }
 
 #[cfg(feature = "runtime-tokio-postgres")]
@@ -2160,7 +2197,7 @@ fn escapes_like_wildcards() {
         .unwrap();
     assert_eq!(
         built.params[0],
-        Value::String("%a\\_b\\%c\\\\d%".to_owned())
+        BindParam::Text("%a\\_b\\%c\\\\d%".to_owned())
     );
 }
 
@@ -2188,7 +2225,7 @@ fn renders_join_with_qualified_columns() {
     assert_eq!(built.sql, expected);
     assert_eq!(
         built.params,
-        vec![Value::String("%@example.com%".to_owned())]
+        vec![BindParam::Text("%@example.com%".to_owned())]
     );
 }
 
@@ -2668,7 +2705,10 @@ fn renders_not_in() {
     );
     assert_eq!(
         built.params,
-        vec![Value::Array(vec!["draft".into(), "cancelled".into()])]
+        vec![BindParam::TextArray(vec![
+            "draft".to_owned(),
+            "cancelled".to_owned()
+        ])]
     );
     assert!(built.cacheable);
 
@@ -2700,7 +2740,7 @@ fn renders_in_as_any_with_one_typed_array_param() {
         .unwrap();
 
     assert!(built.sql.contains("\"id\" = ANY($1::text[]::uuid[])"));
-    assert!(built.sql.contains("\"a\" = ANY($2::bigint[]::int[])"));
+    assert!(built.sql.contains("\"a\" = ANY($2::int[])"));
     assert!(
         built
             .sql
@@ -2725,10 +2765,7 @@ fn renders_in_as_any_with_one_typed_array_param() {
     assert_eq!(built.params.len(), 7);
     assert_eq!(
         built.params[2],
-        Value::Array(vec![
-            Value::String("9007199254740993".to_owned()),
-            Value::String("42".to_owned()),
-        ])
+        BindParam::TextArray(vec!["9007199254740993".to_owned(), "42".to_owned()])
     );
     assert!(built.cacheable);
 }
@@ -2863,8 +2900,8 @@ fn renders_not_starts_with_and_not_ends_with() {
 
     assert!(built.sql.contains("\"email\" NOT ILIKE $1 ESCAPE '\\'"));
     assert!(built.sql.contains("\"email\" NOT ILIKE $2 ESCAPE '\\'"));
-    assert_eq!(built.params[0], Value::String("ada%".to_owned()));
-    assert_eq!(built.params[1], Value::String("%@example.com".to_owned()));
+    assert_eq!(built.params[0], BindParam::Text("ada%".to_owned()));
+    assert_eq!(built.params[1], BindParam::Text("%@example.com".to_owned()));
 }
 
 #[test]
@@ -2907,7 +2944,7 @@ fn renders_array_contains_scalar() {
         .unwrap();
 
     assert!(built.sql.contains("WHERE $1 = ANY(\"tags\")"));
-    assert_eq!(built.params, vec![Value::String("vip".to_owned())]);
+    assert_eq!(built.params, vec![BindParam::Text("vip".to_owned())]);
 }
 
 #[test]
@@ -2938,7 +2975,7 @@ fn renders_json_key_exists() {
         .unwrap();
 
     assert!(built.sql.contains("WHERE \"metadata\" ? $1"));
-    assert_eq!(built.params, vec![Value::String("campaign".to_owned())]);
+    assert_eq!(built.params, vec![BindParam::Text("campaign".to_owned())]);
 }
 
 #[test]
@@ -2987,5 +3024,5 @@ fn renders_text_search() {
             "WHERE to_tsvector('english', \"name\") @@ websearch_to_tsquery('english', $1)"
         )
     );
-    assert_eq!(built.params, vec![Value::String("camera bag".to_owned())]);
+    assert_eq!(built.params, vec![BindParam::Text("camera bag".to_owned())]);
 }

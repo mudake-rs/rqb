@@ -124,11 +124,10 @@ fn require_value_for_field_type(
         FieldType::Citext => require_value_shape(field, operator, value, "string", |value| {
             matches!(value, Value::String(_))
         }),
-        FieldType::Integer | FieldType::BigInt => {
-            require_value_shape(field, operator, value, "integer", |value| {
-                matches!(value, Value::I64(_))
-            })
-        }
+        FieldType::Integer => require_int4_value(field, operator, value),
+        FieldType::BigInt => require_value_shape(field, operator, value, "integer", |value| {
+            matches!(value, Value::I64(_))
+        }),
         FieldType::Float => require_value_shape(field, operator, value, "number", Value::is_number),
         FieldType::Numeric => require_value_shape(
             field,
@@ -365,11 +364,10 @@ pub(super) fn require_value_for_elem_type(
         ElemType::Citext => require_value_shape(field, operator, value, "string", |value| {
             matches!(value, Value::String(_))
         }),
-        ElemType::Int | ElemType::BigInt => {
-            require_value_shape(field, operator, value, "integer", |value| {
-                matches!(value, Value::I64(_))
-            })
-        }
+        ElemType::Int => require_int4_value(field, operator, value),
+        ElemType::BigInt => require_value_shape(field, operator, value, "integer", |value| {
+            matches!(value, Value::I64(_))
+        }),
         ElemType::Float => require_value_shape(field, operator, value, "number", Value::is_number),
         ElemType::Numeric => require_value_shape(
             field,
@@ -418,6 +416,24 @@ fn require_value_shape(
         field: field.display_name(),
         operator: operator.to_owned(),
         message: format!("expected {expected}, got {}", value.type_name()),
+    })
+}
+
+fn require_int4_value(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    let Value::I64(value) = value else {
+        return Err(Error::InvalidValue {
+            field: field.display_name(),
+            operator: operator.to_owned(),
+            message: format!("expected integer, got {}", value.type_name()),
+        });
+    };
+    if i32::try_from(*value).is_ok() {
+        return Ok(());
+    }
+    Err(Error::InvalidValue {
+        field: field.display_name(),
+        operator: operator.to_owned(),
+        message: format!("integer value `{value}` is outside the PostgreSQL integer range"),
     })
 }
 

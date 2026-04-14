@@ -2,15 +2,20 @@ use rqb_core::{ElemType, FieldType, Value};
 
 use crate::helpers::value_to_json;
 use crate::type_sql::{write_postgres_array_cast_for_scalar, write_postgres_cast};
+use crate::{BindParam, BindType};
 
 use super::Renderer;
 
 impl Renderer {
     pub(super) fn push_param(&mut self, value: &Value) {
-        self.push_owned_param(value.clone());
+        self.push_bind_param(BindParam::from_value(value));
     }
 
     pub(super) fn push_owned_param(&mut self, value: Value) {
+        self.push_bind_param(BindParam::from_value(&value));
+    }
+
+    pub(super) fn push_bind_param(&mut self, value: BindParam) {
         self.params.push(value);
         self.sql.push('$');
         self.sql.push_str(&self.params.len().to_string());
@@ -48,12 +53,20 @@ impl Renderer {
             _ => {}
         }
 
-        self.push_param(value);
+        self.push_bind_param(BindParam::from_typed_value(value, field_type));
         write_postgres_cast(&mut self.sql, field_type);
     }
 
     pub(super) fn push_jsonb_array_values_param(&mut self, values: &[Value]) {
-        self.push_owned_param(Value::Array(values.iter().map(value_to_json).collect()));
+        self.push_bind_param(BindParam::JsonArray(
+            values
+                .iter()
+                .map(|value| match value_to_json(value) {
+                    Value::Json(json) => json,
+                    _ => unreachable!(),
+                })
+                .collect(),
+        ));
         write_postgres_array_cast_for_scalar(&mut self.sql, FieldType::Jsonb);
     }
 
@@ -67,16 +80,14 @@ impl Renderer {
             return;
         }
 
-        self.push_owned_param(Value::Array(values.to_vec()));
+        self.push_bind_param(BindParam::from_value(&Value::Array(values.to_vec())));
         if !write_postgres_array_cast_for_scalar(&mut self.sql, field_type) {
             self.cacheable = false;
         }
     }
 
     pub(super) fn push_string_array_param(&mut self, values: &[String]) {
-        self.push_owned_param(Value::Array(
-            values.iter().cloned().map(Value::String).collect(),
-        ));
+        self.push_bind_param(BindParam::TextArray(values.to_vec()));
         write_postgres_cast(&mut self.sql, FieldType::Array(ElemType::Text));
     }
 
@@ -103,21 +114,22 @@ impl Renderer {
                 write_postgres_cast(&mut self.sql, field_type);
             }
             _ => {
-                self.push_owned_param(Value::Array(values.to_vec()));
+                self.push_bind_param(BindParam::from_typed_value(
+                    &Value::Array(values.to_vec()),
+                    field_type,
+                ));
                 write_postgres_cast(&mut self.sql, field_type);
             }
         }
     }
 
     fn push_numeric_param(&mut self, value: &Value) {
-        let value = numeric_text_value(value);
-        self.push_owned_param(value);
+        self.push_bind_param(numeric_text_bind(value));
         self.sql.push_str("::text::numeric");
     }
 
     fn push_decimal_string_param(&mut self, value: &Value, field_type: FieldType) {
-        let value = numeric_text_value(value);
-        self.push_owned_param(value);
+        self.push_bind_param(numeric_text_bind(value));
         write_postgres_cast(&mut self.sql, field_type);
     }
 
@@ -137,6 +149,14 @@ impl Renderer {
         };
         self.push_owned_param(value);
         write_postgres_cast(&mut self.sql, field_type);
+    }
+}
+
+fn numeric_text_bind(value: &Value) -> BindParam {
+    match numeric_text_value(value) {
+        Value::Null => BindParam::Null(BindType::Text),
+        Value::String(value) => BindParam::Text(value),
+        _ => unreachable!("numeric value shape is validated before rendering"),
     }
 }
 

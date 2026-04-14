@@ -1120,6 +1120,50 @@ fn rejects_scalar_values_that_do_not_match_field_types() {
 }
 
 #[test]
+fn rejects_integer_values_outside_postgres_int4_range() {
+    let too_large = i64::from(i32::MAX) + 1;
+    let too_small = i64::from(i32::MIN) - 1;
+    for (expr, field) in [
+        (field("score").eq(too_large), "score"),
+        (field("score").eq(too_small), "score"),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::InvalidValue {
+                    field: ref actual,
+                    ref message,
+                    ..
+                } if actual == field && message.contains("outside the PostgreSQL integer range")
+            ),
+            "unexpected error for {field}: {err}"
+        );
+    }
+
+    let scores = Dataset::table("scores").fields([
+        Field::new("id", FieldType::Uuid),
+        Field::new("values", FieldType::Array(ElemType::Int)).sortable(false),
+    ]);
+    let query = crate::select(scores)
+        .filter(field("values").contains_all([1, too_large]))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::InvalidValue {
+                ref field,
+                ref message,
+                ..
+            } if field == "values" && message.contains("outside the PostgreSQL integer range")
+        ),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
 fn accepts_numeric_strings_only_for_numeric_fields() {
     let query = crate::select(dataset())
         .filter(crate::all([

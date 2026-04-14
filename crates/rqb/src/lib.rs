@@ -40,7 +40,8 @@ pub use rqb_postgres::{
     BeginBuilder, Db, IsolationLevel, Savepoint, Tx, TxFuture, connect, connect_with_tls,
 };
 pub use rqb_postgres::{
-    BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql, Postgres,
+    BindParam, BindType, BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql,
+    DebugSql, Postgres,
 };
 pub use rqb_postgres::{Error, Result};
 #[cfg(feature = "runtime-tokio-postgres")]
@@ -53,8 +54,8 @@ pub use serde;
 pub mod prelude {
     pub use rqb_core::prelude::*;
     pub use rqb_postgres::{
-        BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql,
-        Postgres,
+        BindParam, BindType, BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect,
+        DebugSelectSql, DebugSql, Postgres,
     };
 
     #[cfg(feature = "runtime-tokio-postgres")]

@@ -35,8 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "fields": ["id", "email", "status", "totalCents"],
         "sort": [{ "field": "createdAt", "dir": "desc" }],
         "filter": {
-            "logical": "and",
-            "predicates": [
+            "and": [
                 { "field": "status", "operator": "equals", "value": "paid" },
                 { "field": "metadata.score", "operator": "gte", "value": 80 }
             ]

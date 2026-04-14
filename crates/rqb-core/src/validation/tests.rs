@@ -968,10 +968,20 @@ fn deserializes_api_request_without_runtime_generics() {
         "fields": ["id", "name"],
         "sort": [{ "field": "name", "dir": "asc" }],
         "filter": {
-            "logical": "or",
-            "predicates": [
+            "or": [
                 { "field": "name", "operator": "contains", "value": "hero" },
-                { "field": "properties.score", "operator": "gte", "value": 70 }
+                {
+                    "and": [
+                        { "field": "properties.score", "operator": "gte", "value": 70 },
+                        {
+                            "not": {
+                                "field": "state",
+                                "operator": "equals",
+                                "value": "archived"
+                            }
+                        }
+                    ]
+                }
             ]
         },
         "limit": 50,
@@ -984,6 +994,15 @@ fn deserializes_api_request_without_runtime_generics() {
     assert_eq!(validated.limit, 50);
     assert_eq!(validated.offset, 10);
     assert_eq!(validated.selected_fields.len(), 2);
+    let Some(crate::ValidatedExpr::Logical {
+        logical,
+        predicates,
+    }) = validated.filter
+    else {
+        panic!("expected top-level logical expression");
+    };
+    assert_eq!(logical, LogicalOp::Or);
+    assert_eq!(predicates.len(), 2);
 }
 
 #[test]
@@ -1009,12 +1028,26 @@ fn reports_specific_expr_json_shape_errors_for_all_expr_families() {
             "expression must be a JSON object",
         ),
         (
-            serde_json::json!({ "logical": "and" }),
-            "logical expression is missing `predicates`",
+            serde_json::json!({ "logical": "and", "predicates": [] }),
+            "legacy logical expression uses `logical`/`predicates`",
         ),
         (
-            serde_json::json!({ "predicates": [] }),
-            "logical expression is missing `logical`",
+            serde_json::json!({ "and": { "field": "name", "operator": "equals", "value": "Ada" } }),
+            "logical `and` expects an array of expressions",
+        ),
+        (
+            serde_json::json!({ "not": [
+                { "field": "name", "operator": "equals", "value": "Ada" }
+            ] }),
+            "logical `not` expects a single expression object",
+        ),
+        (
+            serde_json::json!({ "and": [], "or": [] }),
+            "logical expression must contain only one of `and`, `or`, or `not`",
+        ),
+        (
+            serde_json::json!({ "and": [], "field": "name" }),
+            "logical expression `and` cannot include extra fields",
         ),
         (
             serde_json::json!({ "left": "a", "operator": "equals" }),
@@ -1030,7 +1063,7 @@ fn reports_specific_expr_json_shape_errors_for_all_expr_families() {
         ),
         (
             serde_json::json!({ "unexpected": true }),
-            "expression must contain `field`, `left`/`right`, or `logical`",
+            "expression must contain `field`, `left`/`right`, or `and`/`or`/`not`",
         ),
     ] {
         let err = serde_json::from_value::<crate::Expr>(json).unwrap_err();
@@ -1039,6 +1072,40 @@ fn reports_specific_expr_json_shape_errors_for_all_expr_families() {
             "expected `{expected}` in `{err}`"
         );
     }
+}
+
+#[test]
+fn serializes_expr_logical_shape_with_operator_keys() {
+    let expr = crate::all([
+        field("status").eq("paid"),
+        crate::any([
+            field("email").contains("@example.com"),
+            crate::not(field("state").eq("archived")),
+        ]),
+    ]);
+
+    let json = serde_json::to_value(&expr).unwrap();
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "and": [
+                { "field": "status", "operator": "equals", "value": "paid" },
+                {
+                    "or": [
+                        { "field": "email", "operator": "contains", "value": "@example.com" },
+                        {
+                            "not": {
+                                "field": "state",
+                                "operator": "equals",
+                                "value": "archived"
+                            }
+                        }
+                    ]
+                }
+            ]
+        })
+    );
 }
 
 #[test]

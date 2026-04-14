@@ -163,8 +163,7 @@ Lock modes: `.for_update()`, `.for_no_key_update()`, `.for_share()`, `.for_key_s
   "fields": ["id", "status", "totalCents"],
   "sort": [{ "field": "createdAt", "dir": "desc" }],
   "filter": {
-    "logical": "and",
-    "predicates": [
+    "and": [
       { "field": "status", "operator": "equals", "value": "paid" },
       { "field": "metadata.score", "operator": "gte", "value": 80 }
     ]

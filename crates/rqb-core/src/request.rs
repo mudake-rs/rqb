@@ -223,7 +223,12 @@ mod tests {
         let request: SearchRequest = serde_json::from_value(serde_json::json!({
             "fields": ["id"],
             "sort": [{ "field": "createdAt", "dir": "desc" }],
-            "filter": { "field": "status", "operator": "equals", "value": "paid" }
+            "filter": {
+                "and": [
+                    { "field": "status", "operator": "equals", "value": "paid" },
+                    { "field": "email", "operator": "contains", "value": "@example.com" }
+                ]
+            }
         }))
         .unwrap();
 

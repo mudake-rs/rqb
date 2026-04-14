@@ -1,8 +1,9 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 // Custom serde keeps whole numbers exact when possible. Large unsigned JSON
 // numbers become strings instead of silently passing through f64.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -12,6 +13,36 @@ pub enum Value {
     Bytes(Vec<u8>),
     Array(Vec<Value>),
     Json(serde_json::Value),
+}
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Null => serializer.serialize_unit(),
+            Self::Bool(value) => serializer.serialize_bool(*value),
+            Self::I64(value) => serializer.serialize_i64(*value),
+            Self::F64(value) => serializer.serialize_f64(*value),
+            Self::String(value) => serializer.serialize_str(value),
+            Self::Bytes(value) => {
+                let mut seq = serializer.serialize_seq(Some(value.len()))?;
+                for byte in value {
+                    seq.serialize_element(byte)?;
+                }
+                seq.end()
+            }
+            Self::Array(values) => {
+                let mut seq = serializer.serialize_seq(Some(values.len()))?;
+                for value in values {
+                    seq.serialize_element(value)?;
+                }
+                seq.end()
+            }
+            Self::Json(value) => value.serialize(serializer),
+        }
+    }
 }
 
 macro_rules! impl_value_from {
@@ -271,6 +302,34 @@ mod tests {
                 Value::I64(1),
                 Value::String("x".to_owned()),
                 Value::Json(serde_json::json!({ "nested": true })),
+            ])
+        );
+    }
+
+    #[test]
+    fn serde_serializes_values_as_plain_json() {
+        let value = Value::Array(vec![
+            Value::Null,
+            Value::Bool(true),
+            Value::I64(42),
+            Value::F64(1.5),
+            Value::String("paid".to_owned()),
+            Value::Bytes(vec![0xde, 0xad]),
+            Value::Json(serde_json::json!({ "nested": true })),
+        ]);
+
+        let json = serde_json::to_value(value).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!([
+                null,
+                true,
+                42,
+                1.5,
+                "paid",
+                [222, 173],
+                { "nested": true }
             ])
         );
     }

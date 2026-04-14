@@ -141,8 +141,13 @@ The current expression model is:
 ```text
 ValidatedExpr
   Predicate(ValidatedPredicate)
-  Logical { and/or/not, predicates }
+  Logical { op, predicates }
 ```
+
+JSON search requests use logical operators as object keys:
+`{ "and": [...] }`, `{ "or": [...] }`, and `{ "not": { ... } }`. The internal
+validated model still stores the logical operator and children separately, so
+validation and rendering do not depend on the serde-facing shape.
 
 `ValidatedPredicate` owns value predicates, column comparisons, subqueries,
 `EXISTS`, and raw server-owned fragments. This keeps `render::expr` focused on

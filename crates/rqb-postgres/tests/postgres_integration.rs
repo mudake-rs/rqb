@@ -687,6 +687,53 @@ async fn executes_set_queries_and_set_subqueries() -> TestResult {
 }
 
 #[tokio::test]
+async fn executes_subquery_sources_and_lateral_joins() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    let paid_orders = select(orders_table::dataset().alias("o"))
+        .fields([orders_table::ID.on("o"), orders_table::USER_ID.on("o")])
+        .filter(orders_table::STATUS.on("o").eq("paid"))
+        .into_source("paid_orders")
+        .fields([orders_table::ID, orders_table::USER_ID]);
+
+    let paid_rows = select(paid_orders)
+        .fields([orders_table::USER_ID])
+        .fetch_all(&client)
+        .await?;
+    assert_eq!(paid_rows.len(), 3);
+
+    let latest_order = select(orders_table::dataset().alias("o"))
+        .fields([orders_table::STATUS.on("o")])
+        .filter(
+            orders_table::USER_ID
+                .on("o")
+                .eq_col(users_table::ID.on("u")),
+        )
+        .order_by(orders_table::CREATED_AT.on("o").desc())
+        .limit(1)
+        .into_source("latest_order")
+        .fields([orders_table::STATUS]);
+
+    let latest = select(users_table::dataset().alias("u"))
+        .fields([
+            users_table::EMAIL.on("u"),
+            orders_table::STATUS
+                .on("latest_order")
+                .alias("latestStatus"),
+        ])
+        .left_join_lateral(latest_order, raw("TRUE"))
+        .filter(users_table::EMAIL.on("u").eq("ada@example.com"))
+        .fetch_one(&client)
+        .await?;
+
+    assert_eq!(latest.get::<_, String>("email"), "ada@example.com");
+    assert_eq!(latest.get::<_, String>("latestStatus"), "draft");
+    Ok(())
+}
+
+#[tokio::test]
 async fn executor_api_runs_rows_optional_and_count() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
         return Ok(());

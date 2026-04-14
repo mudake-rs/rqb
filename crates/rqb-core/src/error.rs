@@ -161,4 +161,23 @@ pub enum Error {
         left_type: String,
         right_type: String,
     },
+
+    #[error(
+        "source `{source_name}` metadata declares {expected} column(s), but query selects {actual}"
+    )]
+    InvalidSourceSelection {
+        source_name: String,
+        expected: usize,
+        actual: usize,
+    },
+
+    #[error(
+        "source `{source_name}` column {column} metadata type `{expected_type}` is incompatible with query type `{actual_type}`"
+    )]
+    IncompatibleSourceColumnType {
+        source_name: String,
+        column: usize,
+        expected_type: String,
+        actual_type: String,
+    },
 }

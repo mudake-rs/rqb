@@ -1612,6 +1612,7 @@ fn rejects_missing_join_condition() {
         kind: JoinKind::Inner,
         dataset: users_dataset().alias("u"),
         on: None,
+        lateral: false,
     });
 
     let err = ValidatedSelect::new(query).unwrap_err();

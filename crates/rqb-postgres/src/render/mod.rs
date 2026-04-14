@@ -29,6 +29,12 @@ pub(super) enum SelectProjection {
 }
 
 #[derive(Clone, Copy)]
+pub(super) enum SetRenderMode {
+    QueryResult,
+    Source,
+}
+
+#[derive(Clone, Copy)]
 pub(super) enum LimitPolicy {
     Always,
     ExplicitOnly,

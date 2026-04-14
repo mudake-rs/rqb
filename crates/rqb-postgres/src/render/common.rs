@@ -1,11 +1,11 @@
 use rqb_core::{
     FieldType, RawSql, ResolvedField, Source, ValidatedReturningItem, ValidatedSelectItem,
-    ValidatedWriteValue, Value,
+    ValidatedSource, ValidatedWriteValue, Value,
 };
 
-use crate::Result;
 use crate::helpers::{value_to_json, write_quoted_ident, write_quoted_qualified};
 use crate::type_sql::postgres_selection_cast;
+use crate::{Error, Result};
 
 use super::Renderer;
 
@@ -41,7 +41,20 @@ impl Renderer {
         Ok(())
     }
 
-    pub(super) fn render_source(&mut self, source: &Source) {
+    pub(super) fn render_validated_source(&mut self, source: &ValidatedSource) -> Result<()> {
+        match source {
+            ValidatedSource::Plain(source) => self.render_source(source),
+            ValidatedSource::Subquery { query, alias } => {
+                self.sql.push('(');
+                self.render_query_source(query)?;
+                self.sql.push_str(") AS ");
+                write_quoted_ident(&mut self.sql, alias);
+                Ok(())
+            }
+        }
+    }
+
+    pub(super) fn render_source(&mut self, source: &Source) -> Result<()> {
         match source {
             Source::Table {
                 schema,
@@ -77,7 +90,11 @@ impl Renderer {
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
             }
+            Source::Subquery { .. } => {
+                return Err(Error::Core(rqb_core::Error::UnsupportedWriteSource));
+            }
         }
+        Ok(())
     }
 
     pub(super) fn render_write_target(&mut self, source: &Source) {
@@ -109,7 +126,7 @@ impl Renderer {
                     write_quoted_ident(&mut self.sql, alias);
                 }
             }
-            Source::Raw { alias, .. } => {
+            Source::Raw { alias, .. } | Source::Subquery { alias, .. } => {
                 self.cacheable = false;
                 write_quoted_ident(&mut self.sql, alias);
             }

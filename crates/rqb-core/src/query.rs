@@ -1,4 +1,5 @@
 use crate::builder::SelectBuilder;
+use crate::dataset::Dataset;
 use crate::expr::{Sort, SortDir};
 use crate::field::FieldRef;
 use crate::request::SelectQuery;
@@ -49,6 +50,10 @@ impl QueryExpr {
             Self::Set(query) => query.offset = Some(offset),
         }
         self
+    }
+
+    pub fn into_source(self, alias: impl Into<String>) -> Dataset {
+        Dataset::subquery(self, alias)
     }
 }
 
@@ -149,6 +154,10 @@ impl SetQuery {
     pub fn cacheable(mut self, cacheable: bool) -> Self {
         self.cacheable = cacheable;
         self
+    }
+
+    pub fn into_source(self, alias: impl Into<String>) -> Dataset {
+        QueryExpr::from(self).into_source(alias)
     }
 }
 

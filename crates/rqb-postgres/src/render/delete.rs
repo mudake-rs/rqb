@@ -14,7 +14,7 @@ impl Renderer {
                 if idx > 0 {
                     self.sql.push_str(", ");
                 }
-                self.render_source(&dataset.source);
+                self.render_source(&dataset.source)?;
             }
         }
         self.sql.push_str(" WHERE ");

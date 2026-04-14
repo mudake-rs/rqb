@@ -23,6 +23,19 @@ macro_rules! join_methods {
     };
 }
 
+macro_rules! lateral_join_methods {
+    ($($method:ident => $kind:ident),* $(,)?) => {
+        $(
+            pub fn $method(mut self, dataset: impl Into<Dataset>, on: impl Into<Expr>) -> Self {
+                self.query
+                    .joins
+                    .push(Join::lateral(JoinKind::$kind, dataset, on));
+                self
+            }
+        )*
+    };
+}
+
 macro_rules! select_filter_methods {
     () => {
         pub fn filter(self, expr: impl Into<Expr>) -> Self {
@@ -148,8 +161,18 @@ impl SelectBuilder {
         full_join => Full,
     );
 
+    lateral_join_methods!(
+        join_lateral => Inner,
+        left_join_lateral => Left,
+    );
+
     pub fn cross_join(mut self, dataset: impl Into<Dataset>) -> Self {
         self.query.joins.push(Join::cross(dataset));
+        self
+    }
+
+    pub fn cross_join_lateral(mut self, dataset: impl Into<Dataset>) -> Self {
+        self.query.joins.push(Join::cross_lateral(dataset));
         self
     }
 
@@ -169,6 +192,10 @@ impl SelectBuilder {
     pub fn offset(mut self, offset: u64) -> Self {
         self.query.request.offset = Some(offset);
         self
+    }
+
+    pub fn into_source(self, alias: impl Into<String>) -> Dataset {
+        Dataset::subquery(self, alias)
     }
 
     pub fn cte(mut self, cte: Cte) -> Self {

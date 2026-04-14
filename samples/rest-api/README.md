@@ -71,8 +71,7 @@ curl -X POST 'http://127.0.0.1:3000/orders/search' \
     "limit": 5,
     "sort": [{ "field": "createdAt", "dir": "desc" }],
     "filter": {
-      "logical": "and",
-      "predicates": [
+      "and": [
         { "field": "status", "operator": "equals", "value": "paid" },
         { "field": "metadata.score", "operator": "gte", "value": 80 }
       ]

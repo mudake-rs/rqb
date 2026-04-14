@@ -9,8 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         r#"{
             "fields": ["id", "email", "status", "totalCents"],
             "filter": {
-                "logical": "and",
-                "predicates": [
+                "and": [
                     { "field": "status", "operator": "equals", "value": "paid" },
                     { "field": "metadata.score", "operator": "gte", "value": 80 }
                 ]

@@ -561,8 +561,7 @@ async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestRes
         "limit": 5,
         "sort": [{ "field": "totalCents", "dir": "desc" }],
         "filter": {
-            "logical": "and",
-            "predicates": [
+            "and": [
                 { "field": "status", "operator": "equals", "value": "paid" },
                 { "field": "metadata.campaign", "operator": "equals", "value": "spring" }
             ]

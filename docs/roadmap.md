@@ -109,11 +109,12 @@ Done:
 
 - Request JSON uses `filter`, not `query`.
 - Sort directions deserialize as lowercase `asc` / `desc`.
+- Logical filters use operator keys: `{ "and": [...] }`, `{ "or": [...] }`,
+  and `{ "not": { ... } }`.
 - JSON SearchRequest remains limited to fields, filter, sort, limit, and offset.
 
 Break and clean the JSON DSL before beta:
 
-- Make logical expression shape consistent and easy to produce from clients.
 - Keep JSON SearchRequest away from joins, CTEs, raw SQL, computed aliases, and
   arbitrary expressions.
 - Put SearchRequest serde support behind a default-on feature if it materially

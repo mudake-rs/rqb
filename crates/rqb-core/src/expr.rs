@@ -1,5 +1,7 @@
 use serde::de::Error as _;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
 use crate::field::{Field, FieldRef};
 use crate::query::QueryExpr;
@@ -94,10 +96,36 @@ fn default_predicate_value() -> Value {
     Value::Null
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LogicalExpr {
     pub logical: LogicalOp,
     pub predicates: Vec<Expr>,
+}
+
+impl Serialize for LogicalExpr {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serialize_logical_expr(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LogicalExpr {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = JsonValue::deserialize(deserializer)?;
+        let object = value
+            .as_object()
+            .ok_or_else(|| D::Error::custom("logical expression must be a JSON object"))?;
+        deserialize_logical_expr(object)
+            .map_err(D::Error::custom)?
+            .ok_or_else(|| {
+                D::Error::custom("logical expression must contain `and`, `or`, or `not`")
+            })
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,19 +156,31 @@ pub struct ExistsPredicate {
     pub negated: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq)]
 #[must_use]
 pub enum Expr {
     Predicate(Predicate),
     ColumnPredicate(ColumnPredicate),
     Logical(LogicalExpr),
-    #[serde(skip)]
     Subquery(SubqueryPredicate),
-    #[serde(skip)]
     Exists(ExistsPredicate),
-    #[serde(skip)]
     Raw(RawSql),
+}
+
+impl Serialize for Expr {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Predicate(predicate) => predicate.serialize(serializer),
+            Self::ColumnPredicate(predicate) => predicate.serialize(serializer),
+            Self::Logical(logical) => logical.serialize(serializer),
+            Self::Subquery(_) | Self::Exists(_) | Self::Raw(_) => Err(serde::ser::Error::custom(
+                "server-owned expressions cannot be serialized to JSON",
+            )),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Expr {
@@ -159,15 +199,14 @@ fn deserialize_expr(value: serde_json::Value) -> Result<Expr, String> {
         .ok_or_else(|| "expression must be a JSON object".to_owned())?;
 
     if object.contains_key("logical") || object.contains_key("predicates") {
-        if !object.contains_key("logical") {
-            return Err("logical expression is missing `logical`".to_owned());
-        }
-        if !object.contains_key("predicates") {
-            return Err("logical expression is missing `predicates`".to_owned());
-        }
-        return serde_json::from_value::<LogicalExpr>(value)
-            .map(Expr::Logical)
-            .map_err(|error| format!("invalid logical expression: {error}"));
+        return Err(
+            "legacy logical expression uses `logical`/`predicates`; use `and`, `or`, or `not`"
+                .to_owned(),
+        );
+    }
+
+    if let Some(logical) = deserialize_logical_expr(object)? {
+        return Ok(Expr::Logical(logical));
     }
 
     if object.contains_key("field") {
@@ -194,7 +233,82 @@ fn deserialize_expr(value: serde_json::Value) -> Result<Expr, String> {
             .map_err(|error| format!("invalid column predicate: {error}"));
     }
 
-    Err("expression must contain `field`, `left`/`right`, or `logical`".to_owned())
+    Err("expression must contain `field`, `left`/`right`, or `and`/`or`/`not`".to_owned())
+}
+
+fn deserialize_logical_expr(
+    object: &JsonMap<String, JsonValue>,
+) -> Result<Option<LogicalExpr>, String> {
+    let keys: Vec<&str> = ["and", "or", "not"]
+        .into_iter()
+        .filter(|key| object.contains_key(*key))
+        .collect();
+
+    let Some(key) = keys.first().copied() else {
+        return Ok(None);
+    };
+
+    if keys.len() > 1 {
+        return Err("logical expression must contain only one of `and`, `or`, or `not`".to_owned());
+    }
+
+    if object.len() != 1 {
+        return Err(format!(
+            "logical expression `{key}` cannot include extra fields"
+        ));
+    }
+
+    let value = &object[key];
+    let logical = match key {
+        "and" => LogicalExpr {
+            logical: LogicalOp::And,
+            predicates: deserialize_logical_array("and", value)?,
+        },
+        "or" => LogicalExpr {
+            logical: LogicalOp::Or,
+            predicates: deserialize_logical_array("or", value)?,
+        },
+        "not" => {
+            if value.is_array() {
+                return Err("logical `not` expects a single expression object".to_owned());
+            }
+            LogicalExpr {
+                logical: LogicalOp::Not,
+                predicates: vec![deserialize_expr(value.clone())?],
+            }
+        }
+        _ => unreachable!("logical keys are constrained above"),
+    };
+
+    Ok(Some(logical))
+}
+
+fn deserialize_logical_array(key: &str, value: &JsonValue) -> Result<Vec<Expr>, String> {
+    if !value.is_array() {
+        return Err(format!("logical `{key}` expects an array of expressions"));
+    }
+    serde_json::from_value::<Vec<Expr>>(value.clone())
+        .map_err(|error| format!("invalid `{key}` logical expression: {error}"))
+}
+
+fn serialize_logical_expr<S>(logical: &LogicalExpr, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut map = serializer.serialize_map(Some(1))?;
+    match logical.logical {
+        LogicalOp::And => map.serialize_entry("and", &logical.predicates)?,
+        LogicalOp::Or => map.serialize_entry("or", &logical.predicates)?,
+        LogicalOp::Not => {
+            let [predicate] = logical.predicates.as_slice() else {
+                return Err(serde::ser::Error::custom(
+                    "logical `not` must contain exactly one expression",
+                ));
+            };
+            map.serialize_entry("not", predicate)?;
+        }
+    }
+    map.end()
 }
 
 impl Expr {

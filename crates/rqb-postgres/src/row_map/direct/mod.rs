@@ -8,7 +8,7 @@ use tokio_postgres::Row;
 
 use crate::Result;
 
-use self::decode::column_to_decoded;
+use self::decode::{column_to_decoded, raw_column_to_decoded};
 
 mod decode;
 mod value;
@@ -29,6 +29,13 @@ where
         aliases,
     })
     .map_err(crate::Error::from)
+}
+
+pub fn raw_row_to_deserialized<T>(row: &Row) -> Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    T::deserialize(RawRowDeserializer { row }).map_err(crate::Error::from)
 }
 
 pub fn column_aliases(columns: &[SelectColumn]) -> Vec<Cow<'_, str>> {
@@ -56,6 +63,10 @@ struct RowDeserializer<'a> {
     row: &'a Row,
     columns: &'a [SelectColumn],
     aliases: &'a [Cow<'a, str>],
+}
+
+struct RawRowDeserializer<'a> {
+    row: &'a Row,
 }
 
 impl<'de> Deserializer<'de> for RowDeserializer<'_> {
@@ -99,10 +110,54 @@ impl<'de> Deserializer<'de> for RowDeserializer<'_> {
     }
 }
 
+impl<'de> Deserializer<'de> for RawRowDeserializer<'_> {
+    type Error = JsonError;
+
+    fn deserialize_any<V>(self, visitor: V) -> DeResult<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_map(RawRowMapAccess {
+            row: self.row,
+            index: 0,
+        })
+    }
+
+    fn deserialize_map<V>(self, visitor: V) -> DeResult<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.deserialize_any(visitor)
+    }
+
+    fn deserialize_struct<V>(
+        self,
+        _name: &'static str,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> DeResult<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.deserialize_any(visitor)
+    }
+
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf
+        option unit unit_struct newtype_struct seq tuple tuple_struct enum identifier
+        ignored_any
+    }
+}
+
 struct RowMapAccess<'a> {
     row: &'a Row,
     columns: &'a [SelectColumn],
     aliases: &'a [Cow<'a, str>],
+    index: usize,
+}
+
+struct RawRowMapAccess<'a> {
+    row: &'a Row,
     index: usize,
 }
 
@@ -136,5 +191,39 @@ impl<'de> MapAccess<'de> for RowMapAccess<'_> {
 
     fn size_hint(&self) -> Option<usize> {
         Some(self.aliases.len().saturating_sub(self.index))
+    }
+}
+
+impl<'de> MapAccess<'de> for RawRowMapAccess<'_> {
+    type Error = JsonError;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> DeResult<Option<K::Value>>
+    where
+        K: DeserializeSeed<'de>,
+    {
+        let Some(column) = self.row.columns().get(self.index) else {
+            return Ok(None);
+        };
+        seed.deserialize(column.name().into_deserializer())
+            .map(Some)
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> DeResult<V::Value>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        let index = self.index;
+        self.index += 1;
+        let column = self
+            .row
+            .columns()
+            .get(index)
+            .ok_or_else(|| JsonError::custom("missing raw query column metadata"))?;
+        let value = raw_column_to_decoded(self.row, index, column.type_())?;
+        seed.deserialize(value)
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.row.columns().len().saturating_sub(self.index))
     }
 }

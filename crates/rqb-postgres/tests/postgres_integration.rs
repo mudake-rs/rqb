@@ -10,7 +10,7 @@ use rqb_core::{
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
-    ExecuteWritePostgres, PgExecutor, ResultExt, StatementCache, row_to_json,
+    ExecuteWritePostgres, PgExecutor, ResultExt, StatementCache,
 };
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{
@@ -379,18 +379,6 @@ fn row_mapping_matrix_query(sql: &'static str) -> rqb_core::SelectBuilder {
     select(Dataset::raw(sql, "matrix").fields(fields.clone())).fields(fields)
 }
 
-async fn assert_row_mapping_paths_match(client: &TestDb, sql: &'static str) -> TestResult {
-    let built = row_mapping_matrix_query(sql).build_pg()?.rows;
-    let rows = query(client, &built).await?;
-    assert_eq!(rows.len(), 1);
-
-    let json_path = row_to_json(&rows[0], &built.columns)?;
-    let direct_path: serde_json::Value = row_mapping_matrix_query(sql).fetch_one_as(client).await?;
-
-    assert_eq!(direct_path, json_path);
-    Ok(())
-}
-
 fn assert_timestamp_prefix(value: &str, rfc3339_prefix: &str) {
     let postgres_text_prefix = rfc3339_prefix.replace('T', " ");
     assert!(
@@ -669,8 +657,8 @@ async fn integer_and_bigint_binds_execute_for_reads_and_writes() -> TestResult {
         metadata: serde_json::Value,
     }
 
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(rqb_macros::WriteRecord)]
+    #[rqb(crate = rqb_core, fields = order_items_table)]
     struct NewOrderItem<'a> {
         id: &'a str,
         order_id: &'a str,
@@ -759,8 +747,8 @@ async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestRes
     assert_eq!(rows[0].amount, high_value);
     assert_eq!(rows[0].amount_history, vec!["1", high_value]);
 
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(rqb_macros::WriteRecord)]
+    #[rqb(crate = rqb_core, fields = withdrawals_table)]
     struct NewWithdrawal<'a> {
         id: &'a str,
         user_id: &'a str,
@@ -880,28 +868,10 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
 }
 
 #[tokio::test]
-async fn row_mapping_paths_stay_consistent_for_supported_type_matrix() -> TestResult {
-    let Some(client) = begin_test_transaction().await? else {
-        return Ok(());
-    };
-
-    assert_row_mapping_paths_match(&client, ROW_MAPPING_NON_NULL_SQL).await?;
-    assert_row_mapping_paths_match(&client, ROW_MAPPING_NULL_SQL).await?;
-    Ok(())
-}
-
-#[tokio::test]
 async fn direct_row_mapping_deserializes_supported_type_matrix_into_structs() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
         return Ok(());
     };
-
-    let built = row_mapping_matrix_query(ROW_MAPPING_NON_NULL_SQL)
-        .build_pg()?
-        .rows;
-    let rows = query(&client, &built).await?;
-    assert_eq!(rows.len(), 1);
-    let expected = row_to_json(&rows[0], &built.columns)?;
 
     let row: RowMappingNonNull = row_mapping_matrix_query(ROW_MAPPING_NON_NULL_SQL)
         .fetch_one_as(&client)
@@ -923,7 +893,6 @@ async fn direct_row_mapping_deserializes_supported_type_matrix_into_structs() ->
     assert_eq!(row.time_array, vec!["09:30:15"]);
     assert!(row.timetz_array[0].starts_with("09:30:15"));
     assert!(row.interval_array[0].contains("01:30:00"));
-    assert_eq!(serde_json::to_value(&row)?, expected);
 
     Ok(())
 }
@@ -934,13 +903,6 @@ async fn direct_row_mapping_deserializes_typed_nulls_into_options() -> TestResul
         return Ok(());
     };
 
-    let built = row_mapping_matrix_query(ROW_MAPPING_NULL_SQL)
-        .build_pg()?
-        .rows;
-    let rows = query(&client, &built).await?;
-    assert_eq!(rows.len(), 1);
-    let expected = row_to_json(&rows[0], &built.columns)?;
-
     let row: RowMappingNullable = row_mapping_matrix_query(ROW_MAPPING_NULL_SQL)
         .fetch_one_as(&client)
         .await?;
@@ -950,8 +912,51 @@ async fn direct_row_mapping_deserializes_typed_nulls_into_options() -> TestResul
     assert!(row.time_value.is_none());
     assert!(row.interval_array.is_none());
     assert!(row.custom_numeric_array.is_none());
-    assert_eq!(serde_json::to_value(&row)?, expected);
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn direct_row_mapping_preserves_non_finite_floats() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NonFiniteRow {
+        nan_value: f64,
+        infinity_value: f64,
+        neg_infinity_value: Option<f64>,
+    }
+
+    let dataset = Dataset::raw(
+        r#"
+        SELECT
+            'NaN'::double precision AS nan_value,
+            'Infinity'::double precision AS infinity_value,
+            '-Infinity'::double precision AS neg_infinity_value
+        "#,
+        "non_finite",
+    )
+    .fields([
+        Field::mapped("nanValue", "nan_value", FieldType::Float),
+        Field::mapped("infinityValue", "infinity_value", FieldType::Float),
+        Field::mapped("negInfinityValue", "neg_infinity_value", FieldType::Float),
+    ]);
+
+    let row: NonFiniteRow = select(dataset)
+        .fields([
+            field("nanValue"),
+            field("infinityValue"),
+            field("negInfinityValue"),
+        ])
+        .fetch_one_as(&client)
+        .await?;
+
+    assert!(row.nan_value.is_nan());
+    assert_eq!(row.infinity_value, f64::INFINITY);
+    assert_eq!(row.neg_infinity_value, Some(f64::NEG_INFINITY));
     Ok(())
 }
 
@@ -1099,7 +1104,6 @@ async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestRes
     };
 
     let request: SearchRequest = serde_json::from_value(serde_json::json!({
-        "fields": ["id", "email", "totalCents"],
         "limit": 5,
         "sort": [{ "field": "totalCents", "dir": "desc" }],
         "filter": {
@@ -1111,6 +1115,11 @@ async fn accepts_json_api_request_and_runs_same_validation_pipeline() -> TestRes
     }))?;
 
     let built = select(order_search::dataset())
+        .fields([
+            order_search::ID,
+            order_search::EMAIL,
+            order_search::TOTAL_CENTS,
+        ])
         .request(request)
         .build_pg()?;
     let rows = query(&client, &built.rows).await?;
@@ -1499,8 +1508,14 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
         })
     ));
 
+    #[derive(Debug, Deserialize)]
+    struct UnsupportedNumeric {
+        #[serde(rename = "amount")]
+        _amount: String,
+    }
+
     let unsupported = raw_query("SELECT 1.23::numeric AS amount")
-        .fetch_one_as::<serde_json::Value>(&client)
+        .fetch_one_as::<UnsupportedNumeric>(&client)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -1509,6 +1524,34 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
             if message.contains("unsupported Postgres type `numeric`")
     ));
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn raw_query_mapping_preserves_non_finite_floats() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RawNonFinite {
+        nan_value: f64,
+        infinity_value: Option<f64>,
+    }
+
+    let row: RawNonFinite = raw_query(
+        r#"
+        SELECT
+            'NaN'::double precision AS "nanValue",
+            'Infinity'::double precision AS "infinityValue"
+        "#,
+    )
+    .fetch_one_as(&client)
+    .await?;
+
+    assert!(row.nan_value.is_nan());
+    assert_eq!(row.infinity_value, Some(f64::INFINITY));
     Ok(())
 }
 
@@ -1626,8 +1669,8 @@ async fn executes_insert_update_delete_and_upsert() -> TestResult {
         return Ok(());
     };
 
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(rqb_macros::WriteRecord)]
+    #[rqb(crate = rqb_core, fields = events_table)]
     struct NewEvent<'a> {
         id: &'a str,
         order_id: &'a str,

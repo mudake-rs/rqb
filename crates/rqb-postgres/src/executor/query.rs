@@ -2,8 +2,8 @@ use serde::de::DeserializeOwned;
 use tokio_postgres::{Row, types::FromSqlOwned};
 
 use crate::params::bind_refs;
-use crate::row_map::{column_aliases, row_to_deserialized};
-use crate::{BindParam, BuiltQuery, BuiltSelect, Error, Result, raw_row_to_json};
+use crate::row_map::{column_aliases, raw_row_to_deserialized, row_to_deserialized};
+use crate::{BindParam, BuiltQuery, BuiltSelect, Error, Result};
 
 use super::driver::{Page, PgExecutor, StatementCache};
 
@@ -133,12 +133,7 @@ where
     T: DeserializeOwned,
 {
     let rows = query_all(exec, built).await?;
-    rows.iter()
-        .map(|row| {
-            let json = raw_row_to_json(row)?;
-            serde_json::from_value(json).map_err(Error::from)
-        })
-        .collect()
+    rows.iter().map(raw_row_to_deserialized).collect()
 }
 
 pub(super) async fn raw_query_one_as<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<T>
@@ -158,12 +153,7 @@ where
     T: DeserializeOwned,
 {
     let row = query_optional(exec, built).await?;
-    row.as_ref()
-        .map(|row| {
-            let json = raw_row_to_json(row)?;
-            serde_json::from_value(json).map_err(Error::from)
-        })
-        .transpose()
+    row.as_ref().map(raw_row_to_deserialized).transpose()
 }
 
 pub(super) async fn query_scalar<T>(exec: &impl PgExecutor, built: BuiltQuery) -> Result<Vec<T>>

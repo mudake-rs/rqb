@@ -32,36 +32,36 @@ pub trait ExecutePostgres {
 
 impl ExecutePostgres for SelectBuilder {
     async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>> {
-        query_all(exec, self.build_pg()?.rows).await
+        query_all(exec, self.build_rows_pg()?).await
     }
 
     async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row> {
-        query_one(exec, self.limit(1).build_pg()?.rows).await
+        query_one(exec, self.limit(1).build_rows_pg()?).await
     }
 
     async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>> {
-        query_optional(exec, self.limit(1).build_pg()?.rows).await
+        query_optional(exec, self.limit(1).build_rows_pg()?).await
     }
 
     async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
     {
-        query_all_as(exec, self.build_pg()?.rows).await
+        query_all_as(exec, self.build_rows_pg()?).await
     }
 
     async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
     where
         T: DeserializeOwned,
     {
-        query_one_as(exec, self.limit(1).build_pg()?.rows).await
+        query_one_as(exec, self.limit(1).build_rows_pg()?).await
     }
 
     async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
     where
         T: DeserializeOwned,
     {
-        query_optional_as(exec, self.limit(1).build_pg()?.rows).await
+        query_optional_as(exec, self.limit(1).build_rows_pg()?).await
     }
 
     async fn count(self, exec: &impl PgExecutor) -> Result<i64> {
@@ -80,26 +80,26 @@ impl ExecutePostgres for SelectBuilder {
 
 impl ExecutePostgres for SelectQuery {
     async fn fetch_all(self, exec: &impl PgExecutor) -> Result<Vec<Row>> {
-        query_all(exec, self.build_pg()?.rows).await
+        query_all(exec, self.build_rows_pg()?).await
     }
 
     async fn fetch_one(self, exec: &impl PgExecutor) -> Result<Row> {
         let mut query = self;
         query.request.limit = Some(1);
-        query_one(exec, query.build_pg()?.rows).await
+        query_one(exec, query.build_rows_pg()?).await
     }
 
     async fn fetch_optional(self, exec: &impl PgExecutor) -> Result<Option<Row>> {
         let mut query = self;
         query.request.limit = Some(1);
-        query_optional(exec, query.build_pg()?.rows).await
+        query_optional(exec, query.build_rows_pg()?).await
     }
 
     async fn fetch_all_as<T>(self, exec: &impl PgExecutor) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
     {
-        query_all_as(exec, self.build_pg()?.rows).await
+        query_all_as(exec, self.build_rows_pg()?).await
     }
 
     async fn fetch_one_as<T>(self, exec: &impl PgExecutor) -> Result<T>
@@ -108,7 +108,7 @@ impl ExecutePostgres for SelectQuery {
     {
         let mut query = self;
         query.request.limit = Some(1);
-        query_one_as(exec, query.build_pg()?.rows).await
+        query_one_as(exec, query.build_rows_pg()?).await
     }
 
     async fn fetch_optional_as<T>(self, exec: &impl PgExecutor) -> Result<Option<T>>
@@ -117,7 +117,7 @@ impl ExecutePostgres for SelectQuery {
     {
         let mut query = self;
         query.request.limit = Some(1);
-        query_optional_as(exec, query.build_pg()?.rows).await
+        query_optional_as(exec, query.build_rows_pg()?).await
     }
 
     async fn count(self, exec: &impl PgExecutor) -> Result<i64> {

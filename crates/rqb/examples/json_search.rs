@@ -1,7 +1,7 @@
 //! Merge a client JSON SearchRequest with server-owned filters.
 //!
-//! The client can choose fields, filters, sort, limit, and offset. The server
-//! still owns the dataset and can add required predicates before rendering.
+//! The client can choose filters, sort, limit, and offset. The server still
+//! owns the dataset, projection, and required predicates before rendering.
 
 use rqb::prelude::*;
 
@@ -32,7 +32,6 @@ fn order_search() -> Dataset {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request: SearchRequest = serde_json::from_value(serde_json::json!({
-        "fields": ["id", "email", "status", "totalCents"],
         "sort": [{ "field": "createdAt", "dir": "desc" }],
         "filter": {
             "and": [
@@ -45,6 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }))?;
 
     let built = select(order_search())
+        .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
         .filter(ORGANIZATION_ID.eq("00000000-0000-0000-0000-000000000001"))
         .request(request)
         .build_pg()?;

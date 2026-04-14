@@ -1,0 +1,16 @@
+[package]
+name = "rqb-macros"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Derive macros for rqb."
+
+[lib]
+proc-macro = true
+
+[dependencies]
+heck.workspace = true
+proc-macro2.workspace = true
+quote.workspace = true
+syn = { workspace = true, features = ["full"] }

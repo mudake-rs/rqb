@@ -29,8 +29,7 @@ The benchmark is intentionally focused on application-side overhead:
 The `query_build` benchmark does not connect to Postgres and does not measure
 network, server planning, execution, row transfer, or row deserialization. The
 `fetch_as` benchmark intentionally does connect to Postgres and compares plain
-`fetch_all` against typed `fetch_all_as`, plus a prefetched legacy JSON mapping
-baseline.
+`fetch_all` against typed `fetch_all_as`.
 
 ## Competitor Baselines
 
@@ -61,7 +60,6 @@ The current harness covers:
 - rqb AST construction vs rendering of a prebuilt query
 - raw query placeholder rendering and bind lowering
 - live `fetch_all` vs `fetch_all_as` for 100 synthetic Postgres rows
-- legacy JSON object row mapping on 100 prefetched rows
 
 Add a new scenario whenever a hot query path is introduced or a performance
 claim needs evidence.
@@ -82,7 +80,7 @@ Latest local run on 2026-04-14:
 | `rqb_simple_select_render_prebuilt` | 5.68 us | 20 | 6.11 KB |
 | `rqb_simple_select_typed` | 5.79 us | 25 | 8.67 KB |
 | `rqb_simple_select` | 6.45 us | 32 | 8.71 KB |
-| `rqb_json_search_request` | 8.25 us | 44 | 8.35 KB |
+| `rqb_search_request` | 8.25 us | 44 | 8.35 KB |
 | `rqb_nested_dynamic_filter` | 10.84 us | 53 | 16.30 KB |
 | `rqb_nested_dynamic_render_prebuilt` | 9.25 us | 35 | 11.51 KB |
 | `rqb_raw_query_build` | 577 ns | 6 | 725 B |
@@ -101,18 +99,13 @@ Latest local run on 2026-04-14 against the test Postgres container:
 
 | Scenario | Median | Allocations | Allocated bytes |
 | --- | ---: | ---: | ---: |
-| `legacy_json_map_100_prefetched_rows` | 350 us | 1901 | 163 KB |
 | `rqb_fetch_all_100_rows` | 1.23 ms | ~172 | ~49 KB |
 | `rqb_fetch_all_as_100_rows` | 1.08 ms | ~1170 | ~114 KB |
 
 The live `fetch_all` and `fetch_all_as` timings include Postgres execution and
-row transfer. The prefetched legacy JSON mapping baseline does not; it measures
-only row mapping after the rows are already in memory. Use allocation counts for
-the stable signal in this section, not absolute wall-clock comparisons across
-live and prefetched scenarios.
+row transfer. Use allocation counts for the stable signal in this section, not
+absolute wall-clock comparisons across live runs.
 
 On this run, typed `fetch_all_as` adds roughly 1000 allocations per 100 owned
-result rows over plain `fetch_all`. The old JSON object bridge costs 1901
-allocations for mapping the same 100 prefetched rows, so the direct row
-deserializer removes roughly 40-50% of the mapping allocation work while
-preserving `serde::Deserialize` ergonomics.
+result rows over plain `fetch_all` while preserving `serde::Deserialize`
+ergonomics.

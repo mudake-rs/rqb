@@ -34,6 +34,8 @@ Avoid numbered names such as `select_1`, generic names such as `it_works`, and n
 Rendering tests should build a query and assert the produced SQL directly:
 
 ```rust
+use rqb::postgres::BuildRowsPostgres;
+
 let built = select(orders_table().alias("o"))
     .left_join(users_table().alias("u"), field("o.userId").eq_col(field("u.id")))
     .fields([field("o.id"), field("u.email")])

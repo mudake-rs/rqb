@@ -4,27 +4,32 @@
 //! `make db-up`, then run with `DATABASE_URL=postgres://rqb:rqb@localhost:55432/rqb`.
 
 use rqb::prelude::*;
-use serde::Serialize;
 use uuid::Uuid;
 
-const ID: Field = Field::new("id", FieldType::Uuid);
-const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
-const ORDER_STATUS: EnumType = EnumType::new(
-    Some("public"),
-    "order_status",
-    &["draft", "paid", "cancelled", "refunded"],
-);
-const STATUS: Field = Field::new("status", FieldType::Enum(ORDER_STATUS));
-const CHANNEL: Field = Field::new("channel", FieldType::Text);
-const METADATA: Field = Field::new("metadata", FieldType::Jsonb).sortable(false);
-const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
+mod order_fields {
+    use super::*;
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const ORDER_STATUS: EnumType = EnumType::new(
+        Some("public"),
+        "order_status",
+        &["draft", "paid", "cancelled", "refunded"],
+    );
+    pub const STATUS: Field = Field::new("status", FieldType::Enum(ORDER_STATUS));
+    pub const CHANNEL: Field = Field::new("channel", FieldType::Text);
+    pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb).sortable(false);
+    pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
+}
+
+use order_fields::{CHANNEL, ID, METADATA, STATUS, TAGS, USER_ID};
 
 fn orders() -> Dataset {
     Dataset::table("orders").fields([ID, USER_ID, STATUS, CHANNEL, METADATA, TAGS])
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(WriteRecord)]
+#[rqb(fields = order_fields)]
 struct NewOrder {
     id: Uuid,
     user_id: Uuid,

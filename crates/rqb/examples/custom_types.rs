@@ -4,30 +4,37 @@
 //! through `f64`. Selected values are cast to text and deserialize as `String`.
 
 use rqb::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
-    .base(TypeFamily::Numeric)
-    .value_repr(ValueRepr::DecimalString)
-    .select_repr(SelectRepr::Text);
+mod withdrawal_fields {
+    use super::*;
 
-const ID: Field = Field::new("id", FieldType::Uuid);
-const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
-const AMOUNT: Field = Field::new("amount", FieldType::Custom(&UINT_256));
-const AMOUNT_HISTORY: Field = Field::mapped(
-    "amountHistory",
-    "amount_history",
-    FieldType::Array(ElemType::Custom(&UINT_256)),
-)
-.sortable(false);
-const WALLET_ADDRESS: Field = Field::mapped("walletAddress", "wallet_address", FieldType::Text);
+    pub const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
+        .base(TypeFamily::Numeric)
+        .value_repr(ValueRepr::DecimalString)
+        .select_repr(SelectRepr::Text);
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const AMOUNT: Field = Field::new("amount", FieldType::Custom(&UINT_256));
+    pub const AMOUNT_HISTORY: Field = Field::mapped(
+        "amountHistory",
+        "amount_history",
+        FieldType::Array(ElemType::Custom(&UINT_256)),
+    )
+    .sortable(false);
+    pub const WALLET_ADDRESS: Field =
+        Field::mapped("walletAddress", "wallet_address", FieldType::Text);
+}
+
+use withdrawal_fields::{AMOUNT, AMOUNT_HISTORY, ID, USER_ID, WALLET_ADDRESS};
 
 fn withdrawals() -> Dataset {
     Dataset::table("withdrawals").fields([ID, USER_ID, AMOUNT, AMOUNT_HISTORY, WALLET_ADDRESS])
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = withdrawal_fields)]
 struct NewWithdrawal {
     id: String,
     user_id: String,

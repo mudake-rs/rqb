@@ -123,12 +123,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .fields([app_users::ID, app_users::EMAIL]);
     let raw_rows = select(raw_source)
-        .fetch_all_as::<serde_json::Value>(&db)
+        .fetch_all_as::<UserRow>(&db)
         .await?;
-    println!(
-        "raw source rows: {}",
-        serde_json::to_string_pretty(&raw_rows).unwrap()
-    );
+    print_users("raw source rows", &raw_rows);
 
     Ok(())
 }

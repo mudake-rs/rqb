@@ -253,7 +253,7 @@ fn validate_subquery_source_columns(dataset: &Dataset, columns: &[SelectColumn])
 }
 
 fn resolve_selection(scope: &QueryScope, query: &SelectQuery) -> Result<Vec<ResolvedField>> {
-    let fields = &query.request.fields;
+    let fields = &query.projection;
     if fields.is_empty() && query.aggregates.is_empty() && query.select_items.is_empty() {
         return scope
             .root()

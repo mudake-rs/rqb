@@ -93,9 +93,6 @@ pub enum Error {
     #[error("delete without filter is not allowed")]
     DeleteWithoutFilter,
 
-    #[error("expected serialized record to be an object: {message}")]
-    ExpectedObject { message: String },
-
     #[error("serialization error: {message}")]
     SerdeError { message: String },
 

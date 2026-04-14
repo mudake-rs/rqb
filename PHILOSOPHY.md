@@ -8,7 +8,7 @@ It exists for one reason: real application queries should be easy to write, easy
 
 Application code owns the query shape.
 
-The server builds tables, views, joins, CTEs, subqueries, raw server-owned sources, aggregates, locks, and writes in Rust. A client JSON `SearchRequest` can then choose fields, filters, sort, limit, and offset inside that server-owned scope.
+The server builds tables, views, joins, CTEs, subqueries, raw server-owned sources, aggregates, locks, writes, and response projections in Rust. A client JSON `SearchRequest` can then choose filters, sort, limit, and offset inside that server-owned scope.
 
 That gives Knex-like runtime composition without handing arbitrary SQL to clients.
 

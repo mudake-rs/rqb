@@ -3,7 +3,10 @@
 use rqb_core::{AggregateType, ElemType, FieldType, SelectColumn, TypeFamily};
 use serde::de::Error as _;
 use serde_json::Error as JsonError;
-use tokio_postgres::{Row, types::FromSql};
+use tokio_postgres::{
+    Row,
+    types::{FromSql, Type},
+};
 
 use super::DeResult;
 use super::value::{DecodedArray, DecodedValue};
@@ -17,6 +20,52 @@ pub(super) fn column_to_decoded(
         SelectColumn::Field(field) => field_to_decoded(row, index, field.ty),
         SelectColumn::Aggregate { ty, .. } => aggregate_to_decoded(row, index, ty),
         SelectColumn::Expression { ty, .. } => field_to_decoded(row, index, *ty),
+    }
+}
+
+pub(super) fn raw_column_to_decoded(row: &Row, index: usize, ty: &Type) -> DeResult<DecodedValue> {
+    match *ty {
+        Type::BOOL => read_decoded_scalar(row, index, DecodedValue::Bool),
+        Type::INT2 => read_decoded_scalar(row, index, |value: i16| DecodedValue::I32(value.into())),
+        Type::INT4 => read_decoded_scalar(row, index, DecodedValue::I32),
+        Type::INT8 => read_decoded_scalar(row, index, DecodedValue::I64),
+        Type::FLOAT4 => {
+            read_decoded_scalar(row, index, |value: f32| DecodedValue::F64(value.into()))
+        }
+        Type::FLOAT8 => read_decoded_scalar(row, index, DecodedValue::F64),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME => {
+            read_decoded_scalar(row, index, DecodedValue::String)
+        }
+        Type::JSON | Type::JSONB => read_decoded_scalar(row, index, DecodedValue::Json),
+        Type::BYTEA => read_decoded_scalar(row, index, DecodedValue::Bytes),
+        Type::BOOL_ARRAY => read_decoded_array(row, index, DecodedArray::Bool),
+        Type::INT2_ARRAY => read_decoded_array(row, index, |values: Vec<i16>| {
+            DecodedArray::I32(values.into_iter().map(Into::into).collect())
+        }),
+        Type::INT4_ARRAY => read_decoded_array(row, index, DecodedArray::I32),
+        Type::INT8_ARRAY => read_decoded_array(row, index, DecodedArray::I64),
+        Type::FLOAT4_ARRAY => read_decoded_array(row, index, |values: Vec<f32>| {
+            DecodedArray::F64(values.into_iter().map(Into::into).collect())
+        }),
+        Type::FLOAT8_ARRAY => read_decoded_array(row, index, DecodedArray::F64),
+        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY | Type::NAME_ARRAY => {
+            read_decoded_array(row, index, DecodedArray::String)
+        }
+        Type::JSON_ARRAY | Type::JSONB_ARRAY => read_decoded_array(row, index, DecodedArray::Json),
+        Type::BYTEA_ARRAY => read_decoded_array(row, index, DecodedArray::Bytes),
+        Type::UUID => uuid_to_decoded(row, index),
+        Type::UUID_ARRAY => uuid_array_to_decoded(row, index),
+        Type::TIMESTAMP => timestamp_to_decoded(row, index),
+        Type::TIMESTAMP_ARRAY => timestamp_array_to_decoded(row, index),
+        Type::TIMESTAMPTZ => timestamptz_to_decoded(row, index),
+        Type::TIMESTAMPTZ_ARRAY => timestamptz_array_to_decoded(row, index),
+        Type::DATE => date_to_decoded(row, index),
+        Type::DATE_ARRAY => date_array_to_decoded(row, index),
+        _ => Err(JsonError::custom(format!(
+            "raw query column `{}` has unsupported Postgres type `{}`; cast it to a supported type",
+            row.columns()[index].name(),
+            ty.name()
+        ))),
     }
 }
 

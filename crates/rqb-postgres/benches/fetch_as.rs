@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 use divan::{Bencher, black_box};
 use rqb_core::{Dataset, ElemType, Field, FieldType, JsonPathPolicy, SelectQuery, select};
-use rqb_postgres::{BuildRowsPostgres, ExecutePostgres, row_to_json};
+use rqb_postgres::ExecutePostgres;
 use serde::Deserialize;
 use tokio::runtime::Runtime;
 use tokio_postgres::{Client, NoTls};
@@ -105,39 +105,6 @@ fn rqb_fetch_all_as_100_rows(bencher: Bencher) {
                 .expect("fetch_all_as should run");
             black_box(consume_rows(&rows))
         })
-    });
-}
-
-#[divan::bench(
-    ignore = database_url().is_none(),
-    sample_count = 20,
-    sample_size = 1
-)]
-fn legacy_json_map_100_prefetched_rows(bencher: Bencher) {
-    let rt = runtime();
-    let client = rt.block_on(connect_client());
-    let query = bench_query();
-    let columns = query
-        .clone()
-        .build_rows_pg()
-        .expect("query should render")
-        .columns;
-    let rows = rt.block_on(async {
-        query
-            .fetch_all(&client)
-            .await
-            .expect("fetch_all should run")
-    });
-
-    bencher.bench_local(|| {
-        let mapped = rows
-            .iter()
-            .map(|row| {
-                let json = row_to_json(row, &columns).expect("row should map to json");
-                serde_json::from_value::<BenchRow>(json).expect("json should deserialize")
-            })
-            .collect::<Vec<_>>();
-        black_box(consume_rows(&mapped))
     });
 }
 

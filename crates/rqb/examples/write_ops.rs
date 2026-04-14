@@ -1,22 +1,27 @@
-//! Render INSERT, partial UPDATE, and DELETE from serde write models.
+//! Render INSERT, partial UPDATE, and DELETE from WriteRecord models.
 //!
-//! `value` and `set_from` use normal serde structs, including
-//! `skip_serializing_if` for partial updates.
+//! `value` and `set_from` use direct field/value DTOs. Patch DTOs can use
+//! `#[rqb(skip_none)]` to skip absent `Option` fields.
 
 use rqb::prelude::*;
-use serde::Serialize;
 
-const ID: Field = Field::new("id", FieldType::Uuid);
-const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
-const STATUS: Field = Field::new("status", FieldType::Text);
-const METADATA: Field = Field::new("metadata", FieldType::Jsonb).sortable(false);
+mod order_fields {
+    use super::*;
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const STATUS: Field = Field::new("status", FieldType::Text);
+    pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb).sortable(false);
+}
+
+use order_fields::{ID, METADATA, STATUS, USER_ID};
 
 fn orders() -> Dataset {
     Dataset::table("orders").fields([ID, USER_ID, STATUS, METADATA])
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(WriteRecord)]
+#[rqb(fields = order_fields)]
 struct NewOrder {
     id: String,
     user_id: String,
@@ -24,12 +29,10 @@ struct NewOrder {
     metadata: serde_json::Value,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(WriteRecord)]
+#[rqb(fields = order_fields, skip_none)]
 struct OrderPatch {
-    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<serde_json::Value>,
 }
 

@@ -129,7 +129,7 @@ impl SelectBuilder {
         I: IntoIterator<Item = F>,
         F: Into<FieldRef>,
     {
-        self.query.request.fields = fields.into_iter().map(Into::into).collect();
+        self.query.projection = fields.into_iter().map(Into::into).collect();
         self
     }
 

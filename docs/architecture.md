@@ -7,7 +7,7 @@ should optimize for while the API is still pre-public.
 
 rqb is a Postgres-first runtime query builder. Application Rust code owns the
 trusted query shape; client JSON requests can only refine that shape through
-metadata-constrained fields, filters, sorting, limit, and offset.
+metadata-constrained filters, sorting, limit, and offset.
 
 Current public capabilities:
 
@@ -32,7 +32,7 @@ Current public capabilities:
 - Operators for scalar comparisons, null checks, text matching, regex, arrays,
   JSONB keys and array matching, text search, ranges, networks, and column
   comparisons.
-- INSERT/UPDATE/DELETE with serde-backed values, raw assignments, column
+- INSERT/UPDATE/DELETE with `WriteRecord` DTO values, raw assignments, column
   assignments, expression assignments, `RETURNING` expressions, `ON CONFLICT`,
   custom conflict assignments, `UPDATE ... FROM`, `DELETE ... USING`,
   `INSERT ... SELECT`, and required DELETE filters.
@@ -119,7 +119,7 @@ Type behavior currently lives in several places:
 - Postgres cast helpers in `rqb-postgres/src/type_sql/{casts,names,selection}.rs`
 - SQL placeholder/cast rendering in `render/params.rs`
 - runtime parameter conversion in `params.rs`
-- row mapping in `row_map/{typed,raw,values}.rs`
+- row mapping in `row_map/direct/{decode,value}.rs`
 - CLI catalog introspection, type mapping, and code generation modules
 
 This is correct behaviorally, but adding a new type still requires touching
@@ -238,20 +238,19 @@ Normal typed rqb queries map rows through validated `SelectColumn` metadata and
 deserialize directly into `serde::Deserialize` targets. This is the primary
 `fetch_as` path and avoids building a full `serde_json::Map` for every row.
 
-Metadata-driven JSON row mapping still exists for explicit JSON results and for
-tests that compare the direct path against the JSON contract. Raw queries keep a
-separate OID-driven JSON mapper because raw SQL has no rqb metadata.
+Raw queries use a separate OID-driven row deserializer because raw SQL has no
+rqb `SelectColumn` metadata. It still feeds serde directly instead of building
+an intermediate JSON object.
 
 These paths are intentionally separate:
 
 - direct typed mapping: `Row + SelectColumn metadata -> serde visitor`
-- typed JSON mapping: `Row + SelectColumn metadata -> serde_json::Value`
-- raw JSON mapping: `Row + Postgres OIDs -> serde_json::Value`
+- raw typed mapping: `Row + Postgres OIDs -> serde visitor`
 
 The row mapping modules deny wildcard enum match arms for `FieldType`,
 `ElemType`, and `TypeFamily`, and the Postgres integration suite includes a
-type matrix that compares typed JSON mapping with direct serde mapping. Adding a
-new Postgres type should therefore fail loudly if either path is not updated.
+type matrix for direct serde mapping. Adding a new Postgres type should
+therefore fail loudly if the typed path is not updated.
 
 ### CLI Is Product-Critical
 
@@ -292,8 +291,7 @@ rqb-postgres
   render::predicate::{comparison, text, collection, target}: concrete predicate SQL
   render::params: Value -> SQL placeholder and cast shape
   params: Value -> ToSql-owned params
-  row_map::{typed, raw}: metadata-driven and OID-driven Row -> serde bridge
-  row_map::values: shared Row value readers and feature-gated conversions
+  row_map::direct::{decode,value}: metadata-driven and OID-driven Row -> serde deserializers
   executor::driver: PgExecutor implementations for driver/client types and Page
   executor::query: shared low-level query/fetch helpers
   executor::{select, write, raw}: user-facing execution traits

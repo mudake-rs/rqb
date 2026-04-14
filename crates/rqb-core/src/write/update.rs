@@ -1,13 +1,11 @@
-use serde::Serialize;
-
 use crate::dataset::Dataset;
 use crate::error::{Error, Result};
 use crate::expr::Expr;
 use crate::field::FieldRef;
 use crate::raw::RawSql;
-use crate::serde_bridge::fields_from_serializable;
 use crate::sql_expr::{IntoSqlExpr, SelectItem};
 use crate::value::Value;
+use crate::write_record::WriteRecord;
 
 use super::{IntoFieldRefs, ReturningMode, WriteAssignment};
 
@@ -95,9 +93,9 @@ impl UpdateBuilder {
 
     pub fn set_from<T>(mut self, record: &T) -> Self
     where
-        T: Serialize + ?Sized,
+        T: WriteRecord + ?Sized,
     {
-        match fields_from_serializable(&self.query.dataset, record) {
+        match record.write_fields() {
             Ok(fields) => self.query.assignments.extend(
                 fields
                     .into_iter()

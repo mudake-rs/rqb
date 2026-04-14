@@ -266,9 +266,8 @@ fn rqb_raw_query_build() -> BuiltQuery {
 }
 
 #[divan::bench]
-fn rqb_json_search_request(bencher: Bencher) {
+fn rqb_search_request(bencher: Bencher) {
     let request = SearchRequest {
-        fields: vec![field("id"), field("email"), field("createdAt")],
         sort: vec![field("createdAt").desc()],
         limit: Some(20),
         filter: Some(all([
@@ -281,6 +280,7 @@ fn rqb_json_search_request(bencher: Bencher) {
 
     bencher.bench(|| {
         select(orders())
+            .fields([field("id"), field("email"), field("createdAt")])
             .request(request.clone())
             .build_rows_pg()
             .unwrap()

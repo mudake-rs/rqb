@@ -11,7 +11,6 @@ use rqb_core::{
     not_exists, now, nullif, partition_by, rank, raw, raw_expr, raw_query, row_number, select,
     set_default, set_expr, string_agg, sum, trim, union, union_all, update, upper, window,
 };
-use serde::Serialize;
 #[cfg(feature = "runtime-tokio-postgres")]
 use tokio_postgres::{Row, types::ToSql};
 
@@ -50,13 +49,19 @@ fn users_table() -> Dataset {
 }
 
 fn writable_orders() -> Dataset {
-    Dataset::table("orders").fields([
-        Field::new("id", FieldType::Uuid),
-        Field::mapped("userId", "user_id", FieldType::Uuid),
-        Field::new("status", FieldType::Enum(ORDER_STATUS)),
-        Field::mapped("totalCents", "total_cents", FieldType::BigInt),
-        Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
-    ])
+    use writable_order_fields::*;
+
+    Dataset::table("orders").fields([ID, USER_ID, STATUS, TOTAL_CENTS, CREATED_AT])
+}
+
+mod writable_order_fields {
+    use super::*;
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const USER_ID: Field = Field::mapped("userId", "user_id", FieldType::Uuid);
+    pub const STATUS: Field = Field::new("status", FieldType::Enum(ORDER_STATUS));
+    pub const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
+    pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 }
 
 fn typed_values() -> Dataset {
@@ -1290,8 +1295,8 @@ fn renders_insert_values_returning_and_upsert() {
 
 #[test]
 fn renders_insert_batch_values() {
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(rqb_macros::WriteRecord)]
+    #[rqb(crate = rqb_core, fields = writable_order_fields)]
     struct NewOrder {
         id: &'static str,
         user_id: &'static str,
@@ -1531,9 +1536,9 @@ fn renders_write_expressions_defaults_and_returning_expressions() {
 }
 
 #[test]
-fn renders_update_set_from_serde_record() {
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
+fn renders_update_set_from_write_record() {
+    #[derive(rqb_macros::WriteRecord)]
+    #[rqb(crate = rqb_core, fields = writable_order_fields)]
     struct OrderPatch {
         status: &'static str,
         total_cents: i64,
@@ -2071,8 +2076,8 @@ fn cache_policy_rejects_unbounded_or_raw_statement_shapes() {
         .unwrap();
     assert!(single_insert.cacheable);
 
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(rqb_macros::WriteRecord)]
+    #[rqb(crate = rqb_core, fields = writable_order_fields)]
     struct NewOrder<'a> {
         id: &'a str,
         user_id: &'a str,

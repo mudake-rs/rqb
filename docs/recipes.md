@@ -20,8 +20,9 @@ async fn search_orders(
     body: web::Json<SearchRequest>,
 ) -> Result<HttpResponse, AppError> {
     let page = select(order_search())
+        .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
         .request(body.into_inner())
-        .page_as::<serde_json::Value>(&**db)
+        .page_as::<OrderSearchRow>(&**db)
         .await?;
     Ok(HttpResponse::Ok().json(Page {
         items: page.items,
@@ -32,7 +33,7 @@ async fn search_orders(
 }
 ```
 
-The HTTP body becomes `SearchRequest`, and the same validation path protects fields, operators, limits, and sort order.
+The HTTP body becomes `SearchRequest`, and the same validation path protects field references, operators, limits, and sort order.
 
 ## Search Over A Server-Owned Query Shape
 
@@ -44,9 +45,10 @@ let orders = orders().alias("o");
 
 let page = select(users)
     .left_join(orders, ID.on("u").eq_col(USER_ID.on("o")))
+    .fields([ID.on("u"), EMAIL.on("u"), STATUS.on("o")])
     .filter(ORGANIZATION_ID.on("u").eq(current_org_id))
     .request(body.into_inner())
-    .page_as::<serde_json::Value>(&db)
+    .page_as::<UserOrderRow>(&db)
     .await?;
 ```
 
@@ -84,12 +86,12 @@ tracing::debug!("{}", built.count.debug_sql());
 ## Partial Update From JSON Body
 
 ```rust
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, rqb::WriteRecord)]
 #[serde(rename_all = "camelCase")]
+#[rqb(fields = orders, skip_none)]
 struct PatchOrder {
-    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[rqb(json)]
     metadata: Option<OrderMetadata>,
 }
 
@@ -100,7 +102,9 @@ let updated = update(orders())
     .await?;
 ```
 
-Serde removes absent fields before `set_from` maps the remaining keys to known fields. Without `skip_serializing_if`, `None` is serialized as SQL `NULL`, which is useful for explicit nulling but wrong for most patch DTOs.
+`WriteRecord` skips `Option::None` fields for DTOs marked with `#[rqb(skip_none)]`
+before `set_from` builds assignments. Without it, `None` becomes an explicit SQL
+`NULL`, which is useful for intentional nulling but wrong for most patch DTOs.
 Use `.set_null(field)` for explicit SQL `NULL` assignments.
 
 ## Upsert Create Or Update
@@ -501,6 +505,6 @@ mod schema {
 
 let rows = select(schema::order_search_view::dataset())
     .fields([schema::order_search_view::ID, schema::order_search_view::EMAIL])
-    .fetch_all_as::<serde_json::Value>(&db)
+    .fetch_all_as::<OrderEmailRow>(&db)
     .await?;
 ```

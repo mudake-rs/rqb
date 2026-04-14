@@ -16,8 +16,6 @@ pub struct SearchRequest {
     #[serde(default)]
     pub limit: Option<u32>,
     #[serde(default)]
-    pub fields: Vec<FieldRef>,
-    #[serde(default)]
     pub sort: Vec<Sort>,
     #[serde(default)]
     pub filter: Option<Expr>,
@@ -34,9 +32,6 @@ impl SearchRequest {
     }
 
     pub fn merge_in(&mut self, request: Self) {
-        if !request.fields.is_empty() {
-            self.fields = request.fields;
-        }
         if !request.sort.is_empty() {
             self.sort = request.sort;
         }
@@ -129,6 +124,7 @@ impl Default for RowLock {
 pub struct SelectQuery {
     pub dataset: Dataset,
     pub joins: Vec<Join>,
+    pub projection: Vec<FieldRef>,
     pub request: SearchRequest,
     pub cacheable: bool,
     pub ctes: Vec<Cte>,
@@ -147,6 +143,7 @@ impl SelectQuery {
         Self {
             dataset: dataset.into(),
             joins: Vec::new(),
+            projection: Vec::new(),
             request: SearchRequest::new(),
             cacheable: true,
             ctes: Vec::new(),
@@ -171,18 +168,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn search_request_merge_replaces_shape_and_ands_filters() {
+    fn search_request_merge_replaces_page_sort_and_ands_filters() {
         let base = SearchRequest {
             offset: Some(10),
             limit: Some(20),
-            fields: vec![field("id")],
             sort: vec![field("createdAt").desc()],
             filter: Some(field("status").eq("paid")),
         };
         let incoming = SearchRequest {
             offset: Some(0),
             limit: Some(5),
-            fields: vec![field("email")],
             sort: vec![field("email").asc()],
             filter: Some(field("email").contains("@example.com")),
         };
@@ -191,7 +186,6 @@ mod tests {
 
         assert_eq!(merged.offset, Some(0));
         assert_eq!(merged.limit, Some(5));
-        assert_eq!(merged.fields, vec![field("email")]);
         assert_eq!(merged.sort[0].field, field("email"));
         assert_eq!(merged.sort[0].dir, SortDir::Asc);
         assert!(matches!(
@@ -204,11 +198,10 @@ mod tests {
     }
 
     #[test]
-    fn search_request_merge_keeps_existing_shape_when_incoming_shape_is_empty() {
+    fn search_request_merge_keeps_existing_values_when_incoming_is_empty() {
         let base = SearchRequest {
             offset: Some(10),
             limit: Some(20),
-            fields: vec![field("id")],
             sort: vec![field("createdAt").desc()],
             filter: Some(field("status").eq("paid")),
         };
@@ -221,7 +214,6 @@ mod tests {
     #[test]
     fn search_request_json_uses_filter_and_lowercase_sort_direction() {
         let request: SearchRequest = serde_json::from_value(serde_json::json!({
-            "fields": ["id"],
             "sort": [{ "field": "createdAt", "dir": "desc" }],
             "filter": {
                 "and": [
@@ -247,5 +239,13 @@ mod tests {
             "sort": [{ "field": "createdAt", "dir": "DESC" }]
         }));
         assert!(uppercase_dir.is_err());
+    }
+
+    #[test]
+    fn search_request_json_rejects_fields() {
+        let result = serde_json::from_value::<SearchRequest>(serde_json::json!({
+            "fields": ["id"]
+        }));
+        assert!(result.is_err());
     }
 }

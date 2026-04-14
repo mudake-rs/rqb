@@ -15,12 +15,12 @@ mod field;
 mod query;
 mod raw;
 mod request;
-mod serde_bridge;
 mod sql_expr;
 mod types;
 mod validation;
 mod value;
 mod write;
+mod write_record;
 
 pub use aggregate::{
     Aggregate, AggregateType, SelectColumn, array_agg, avg, count, count_distinct, count_field,
@@ -41,7 +41,6 @@ pub use query::{
 };
 pub use raw::{RawQuery, RawSql, raw, raw_query};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
-pub use serde_bridge::fields_from_serializable;
 pub use sql_expr::{
     BuiltinFunction, CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, FunctionNameStyle,
     IntoSqlExpr, JsonAccessPath, OffsetWindowFunctionBuilder, SelectItem, SqlExpr, WindowFunction,
@@ -70,6 +69,7 @@ pub use write::{
     WriteAssignment, WriteValue, delete, insert, set, set_col, set_default, set_expr, set_raw,
     update,
 };
+pub use write_record::{__RqbWriteRecordResult, __rqb_json_write_value, WriteRecord};
 
 pub mod prelude {
     pub use crate::{
@@ -83,12 +83,12 @@ pub mod prelude {
         SelectQuery, SelectRepr, SetOperator, SetQuery, Sort, SortDir, SqlExpr, SubqueryOperator,
         SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery,
         Value, ValueRepr, WindowFunction, WindowFunctionBuilder, WindowSpec, WriteAssignment,
-        WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count, count_distinct,
-        count_field, cte, date_trunc, delete, dense_rank, except, except_all, excluded, exists,
-        field, func, gen_random_uuid, greatest, insert, intersect, intersect_all, json_agg,
-        json_agg_nullable, lag, lead, least, length, lower, max, max_agg, min, min_agg, not,
-        not_exists, now, nullif, partition_by, rank, raw, raw_expr, raw_query, row_number, select,
-        set, set_col, set_default, set_expr, set_raw, string_agg, sum, trim, union, union_all,
-        update, upper, window,
+        WriteRecord, WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count,
+        count_distinct, count_field, cte, date_trunc, delete, dense_rank, except, except_all,
+        excluded, exists, field, func, gen_random_uuid, greatest, insert, intersect, intersect_all,
+        json_agg, json_agg_nullable, lag, lead, least, length, lower, max, max_agg, min, min_agg,
+        not, not_exists, now, nullif, partition_by, rank, raw, raw_expr, raw_query, row_number,
+        select, set, set_col, set_default, set_expr, set_raw, string_agg, sum, trim, union,
+        union_all, update, upper, window,
     };
 }

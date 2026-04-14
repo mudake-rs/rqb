@@ -114,6 +114,8 @@ fn require_value_for_field_type(
     field_type: FieldType,
     value: &Value,
 ) -> Result<()> {
+    reject_non_finite_numbers(field, operator, value)?;
+
     match field_type {
         FieldType::Text => require_value_shape(field, operator, value, "string", |value| {
             matches!(value, Value::String(_))
@@ -390,6 +392,8 @@ pub(super) fn require_value_for_elem_type(
     elem_type: ElemType,
     value: &Value,
 ) -> Result<()> {
+    reject_non_finite_numbers(field, operator, value)?;
+
     match elem_type {
         ElemType::Text => require_value_shape(field, operator, value, "string", |value| {
             matches!(value, Value::String(_))

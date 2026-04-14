@@ -3,7 +3,7 @@
 //! Without runtime features this crate can render `SelectQuery`, `InsertQuery`,
 //! `UpdateQuery`, and `DeleteQuery` into parameterized Postgres SQL. With
 //! `runtime-tokio-postgres` and `pool`, it also provides execution traits,
-//! row-to-serde mapping, pooled `Db`, transactions, and savepoints.
+//! row deserialization, pooled `Db`, transactions, and savepoints.
 
 #![allow(clippy::result_large_err)]
 
@@ -45,7 +45,4 @@ pub use pool::{
 };
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use result_ext::ResultExt;
-#[cfg(feature = "runtime-tokio-postgres")]
-pub use row_map::{raw_row_to_json, row_to_json};
-
 pub type Result<T> = std::result::Result<T, Error>;

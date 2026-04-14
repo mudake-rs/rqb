@@ -3,11 +3,10 @@ use rqb_sample_base::{
     ADA_USER_ID, CAMERA_PRODUCT_ID, OrderStatus,
     schema::{order_items, orders},
 };
-use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(WriteRecord)]
+#[rqb(fields = orders)]
 struct NewOrder {
     id: Uuid,
     user_id: Uuid,
@@ -17,8 +16,8 @@ struct NewOrder {
     tags: Vec<String>,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(WriteRecord)]
+#[rqb(fields = order_items)]
 struct NewOrderItem {
     id: Uuid,
     order_id: Uuid,

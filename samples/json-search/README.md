@@ -1,6 +1,6 @@
 # json-search
 
-Shows the dynamic JSON `SearchRequest` API: client JSON becomes validated, parameterized SQL.
+Shows the JSON `SearchRequest` API: client filter/sort/page input becomes validated, parameterized SQL.
 
 Run from the repository root:
 

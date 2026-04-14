@@ -1,13 +1,11 @@
-use serde::Serialize;
-
 use crate::dataset::Dataset;
 use crate::error::{Error, Result};
 use crate::expr::Expr;
 use crate::field::FieldRef;
 use crate::query::QueryExpr;
-use crate::serde_bridge::fields_from_serializable;
 use crate::sql_expr::{IntoSqlExpr, SelectItem};
 use crate::value::Value;
+use crate::write_record::WriteRecord;
 
 use super::{
     ConflictAction, ConflictClause, ConflictTarget, IntoFieldRefs, ReturningMode, WriteAssignment,
@@ -104,9 +102,9 @@ impl InsertBuilder {
 
     pub fn value<T>(mut self, record: &T) -> Self
     where
-        T: Serialize + ?Sized,
+        T: WriteRecord + ?Sized,
     {
-        match fields_from_serializable(&self.query.dataset, record) {
+        match record.write_fields() {
             Ok(fields) => self.query.rows.push(
                 fields
                     .into_iter()
@@ -120,7 +118,7 @@ impl InsertBuilder {
 
     pub fn values<'a, T, I>(mut self, records: I) -> Self
     where
-        T: Serialize + 'a,
+        T: WriteRecord + 'a,
         I: IntoIterator<Item = &'a T>,
     {
         for record in records {

@@ -17,8 +17,8 @@ The current baseline includes:
   `DISTINCT ON`, grouping, aggregates, row locks, set operations, computed
   select items, typed functions, JSON expression accessors, and window
   functions.
-- JSON `SearchRequest` for safe client filters, sorting, field selection,
-  limit, and offset on metadata-declared fields.
+- JSON `SearchRequest` for safe client filters, sorting, limit, and offset on
+  metadata-declared fields. Response projection stays server-owned.
 - INSERT, UPDATE, DELETE, upsert, `RETURNING`, expression assignments,
   `UPDATE ... FROM`, `DELETE ... USING`, and required DELETE filters.
 - Raw SQL escape hatch through `raw_query`, with bind count validation and
@@ -111,7 +111,7 @@ Done:
 - Sort directions deserialize as lowercase `asc` / `desc`.
 - Logical filters use operator keys: `{ "and": [...] }`, `{ "or": [...] }`,
   and `{ "not": { ... } }`.
-- JSON SearchRequest remains limited to fields, filter, sort, limit, and offset.
+- JSON SearchRequest remains limited to filter, sort, limit, and offset.
 
 Break and clean the JSON DSL before beta:
 

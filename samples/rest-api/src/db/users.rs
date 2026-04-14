@@ -22,16 +22,13 @@ pub struct CreateUser {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = users, skip_none)]
 pub struct UserPatch {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<UserStatus>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[rqb(json)]
     pub profile: Option<UserProfile>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
 }
 
@@ -78,13 +75,14 @@ pub struct OrderSummary {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = users)]
 struct NewUser {
     id: Uuid,
     organization_id: Uuid,
     email: String,
     status: UserStatus,
+    #[rqb(json)]
     profile: UserProfile,
     tags: Vec<String>,
 }

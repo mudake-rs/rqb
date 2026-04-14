@@ -2,15 +2,14 @@ use std::borrow::Cow;
 
 use super::*;
 use crate::{
-    ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType,
-    IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr,
-    Sort, SubqueryOperator, TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce,
-    count, count_field, date_trunc, dense_rank, excluded, field, gen_random_uuid, greatest, insert,
-    lag, lead, least, length, lower, max, min, now, nullif, partition_by, rank, row_number,
-    set_default, set_expr, string_agg, sum, window,
+    __RqbWriteRecordResult, ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr,
+    Field, FieldType, IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp,
+    Operator, SelectRepr, Sort, SubqueryOperator, TypeFamily, TypeSpec, Value, ValueRepr,
+    WriteRecord, avg, case_when, cast, coalesce, count, count_field, date_trunc, dense_rank,
+    excluded, field, gen_random_uuid, greatest, insert, lag, lead, least, length, lower, max, min,
+    now, nullif, partition_by, rank, row_number, set_default, set_expr, string_agg, sum, window,
 };
 use pretty_assertions::assert_eq;
-use serde::{Serialize, Serializer};
 
 const ASSET_STATE: EnumType = EnumType::new(None, "asset_state", &["active", "archived"]);
 const UINT_256: TypeSpec = TypeSpec::domain(Some("public"), "uint_256")
@@ -1046,7 +1045,6 @@ fn rejects_json_path_on_non_jsonb_fields() {
 #[test]
 fn deserializes_api_request_without_runtime_generics() {
     let request: crate::SearchRequest = serde_json::from_value(serde_json::json!({
-        "fields": ["id", "name"],
         "sort": [{ "field": "name", "dir": "asc" }],
         "filter": {
             "or": [
@@ -1070,7 +1068,10 @@ fn deserializes_api_request_without_runtime_generics() {
     }))
     .unwrap();
 
-    let query = crate::select(dataset()).request(request).build();
+    let query = crate::select(dataset())
+        .fields(["id", "name"])
+        .request(request)
+        .build();
     let validated = ValidatedSelect::new(query).unwrap();
     assert_eq!(validated.limit, 50);
     assert_eq!(validated.offset, 10);
@@ -1280,13 +1281,25 @@ fn rejects_unsupported_write_sources() {
 
 #[test]
 fn rejects_inconsistent_insert_row_shapes() {
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
     struct Patch {
-        #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         score: Option<i64>,
+    }
+
+    impl WriteRecord for Patch {
+        fn write_fields(&self) -> __RqbWriteRecordResult<Vec<(Field, Value)>> {
+            let mut fields = Vec::new();
+            if let Some(name) = self.name.as_ref() {
+                fields.push((
+                    Field::new("name", FieldType::Text),
+                    Value::from(name.clone()),
+                ));
+            }
+            if let Some(score) = self.score {
+                fields.push((Field::new("score", FieldType::Integer), Value::from(score)));
+            }
+            Ok(fields)
+        }
     }
 
     let query = insert(dataset())
@@ -1306,23 +1319,14 @@ fn rejects_inconsistent_insert_row_shapes() {
 }
 
 #[test]
-fn rejects_non_object_insert_records() {
-    let err = insert(dataset()).value(&42).build().unwrap_err();
-    assert!(
-        matches!(err, Error::ExpectedObject { message } if message == "expected object, got number")
-    );
-}
-
-#[test]
-fn reports_serde_errors_from_record_conversion() {
+fn reports_write_record_errors_from_record_conversion() {
     struct BrokenRecord;
 
-    impl Serialize for BrokenRecord {
-        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            Err(serde::ser::Error::custom("boom"))
+    impl WriteRecord for BrokenRecord {
+        fn write_fields(&self) -> __RqbWriteRecordResult<Vec<(Field, Value)>> {
+            Err(Error::SerdeError {
+                message: "boom".to_owned(),
+            })
         }
     }
 

@@ -79,7 +79,7 @@ pub async fn search_orders(
     services: web::Data<AppServices>,
     payload: web::Json<SearchRequest>,
 ) -> Result<impl Responder, AppError> {
-    // SearchRequest is intentionally dynamic JSON; rqb validates it against generated metadata.
+    // SearchRequest is intentionally limited to search parameters; rqb validates it against generated metadata.
     let response =
         PaginatedResponse::from(OrderService::search(services.db(), payload.into_inner()).await?);
     Ok(HttpResponse::Ok().json(response))

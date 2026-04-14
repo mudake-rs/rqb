@@ -3,11 +3,11 @@ use rqb_sample_base::{
     ADA_USER_ID,
     schema::{types, withdrawals},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = withdrawals)]
 struct NewWithdrawal {
     id: Uuid,
     user_id: Uuid,

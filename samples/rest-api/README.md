@@ -67,7 +67,6 @@ JSON search body:
 curl -X POST 'http://127.0.0.1:3000/orders/search' \
   -H 'Content-Type: application/json' \
   -d '{
-    "fields": ["id", "email", "status", "totalCents"],
     "limit": 5,
     "sort": [{ "field": "createdAt", "dir": "desc" }],
     "filter": {
@@ -79,7 +78,7 @@ curl -X POST 'http://127.0.0.1:3000/orders/search' \
   }'
 ```
 
-This endpoint applies the JSON `SearchRequest` to `order_search_view`, a server-owned search view. The client can choose fields, filters, sort, limit, and offset; it cannot define joins or raw SQL.
+This endpoint applies the JSON `SearchRequest` to `order_search_view`, a server-owned search view. The client can choose filters, sort, limit, and offset; it cannot define response fields, joins, or raw SQL.
 
 Create order:
 

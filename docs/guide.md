@@ -76,7 +76,7 @@ let rows = select(orders())
     .await?;
 ```
 
-Use `.fields([...])` when the response should be narrower, when selecting qualified columns from a join, when building a one-column `IN (subquery)`, or when returning `serde_json::Value` from a client-selected field list.
+Use `.fields([...])` when the response should be narrower, when selecting qualified columns from a join, when building a one-column `IN (subquery)`, or when pinning the DTO shape for a search endpoint.
 
 Use `.select_expr(...)` for server-owned computed columns. Computed expressions
 must be aliased because the alias is the serde/result field name:
@@ -117,13 +117,13 @@ let rows = select(orders())
 ```
 
 `.select_expr(...)` is Rust-only query shape. JSON `SearchRequest` can still
-select, sort, and filter only dataset-declared fields; it cannot reference a
+sort and filter only dataset-declared fields; it cannot reference a
 computed alias such as `label` unless that alias is exposed through dataset
 metadata, for example by a view.
 
 `.filter(expr)` and `.and_where(expr)` AND-compose with the current filter. `.or_where(expr)` OR-composes with it. Use `.replace_filter(expr)` when replacement is intentional. `.filter_if(condition, expr)` is useful for already-normalized params. `.filter_option(value, |value| ...)` handles optional values without unwraps.
 
-`.request(search_request)` merges JSON search input into the current builder. Server-side filters are preserved and combined with the request filter using `AND`; request fields, sort, limit, and offset replace those parts when present. Use `.replace_request(search_request)` only when replacement is intended.
+`.request(search_request)` merges JSON search input into the current builder. Server-side filters are preserved and combined with the request filter using `AND`; request sort, limit, and offset replace those parts when present. Use `.replace_request(search_request)` only when replacement is intended.
 
 ```rust
 let query = select(orders())
@@ -160,7 +160,6 @@ Lock modes: `.for_update()`, `.for_no_key_update()`, `.for_share()`, `.for_key_s
 
 ```json
 {
-  "fields": ["id", "status", "totalCents"],
   "sort": [{ "field": "createdAt", "dir": "desc" }],
   "filter": {
     "and": [
@@ -177,13 +176,14 @@ Server code controls the query shape:
 
 ```rust
 let page = select(order_search())
+    .fields([ID, STATUS, TOTAL_CENTS])
     .filter(ORGANIZATION_ID.eq(current_org_id))
     .request(request)
-    .page_as::<serde_json::Value>(&db)
+    .page_as::<OrderSearchRow>(&db)
     .await?;
 ```
 
-JSON can select fields, filter, sort, and page. It cannot define joins, CTEs, raw SQL, subqueries, aggregates, or transactions. Build those in Rust and then apply `.request(request)`.
+JSON can filter, sort, and page. It cannot define response fields, joins, CTEs, raw SQL, subqueries, aggregates, or transactions. Build those in Rust and then apply `.request(request)`.
 
 ### INSERT
 
@@ -212,11 +212,12 @@ insert(events())
 
 Insert expressions cannot reference target fields because Postgres `VALUES` rows do not have a current target row. Use `.set(...)`, `.set_default(...)`, functions, or server-owned raw expressions.
 
-Struct inserts use serde:
+Struct inserts use `WriteRecord`. The derive maps each Rust field to a generated
+field constant and produces `Value`s directly:
 
 ```rust
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = orders)]
 struct NewOrder {
     id: uuid::Uuid,
     user_id: uuid::Uuid,
@@ -295,19 +296,20 @@ update(orders().alias("o"))
 Partial update:
 
 ```rust
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = orders, skip_none)]
 struct PatchOrder {
-    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<serde_json::Value>,
 }
 
 update(orders()).set_from(&patch).filter(ID.eq(order_id));
 ```
 
-For patch DTOs, put `#[serde(skip_serializing_if = "Option::is_none")]` on optional fields. Otherwise `None` means an explicit SQL `NULL` assignment.
+For patch DTOs, put `skip_none` on the `#[rqb(...)]` attribute to skip `Option::None`
+fields. Without it, `None` means an explicit SQL `NULL` assignment.
+`#[rqb(json)]` is only needed for structured JSONB payload fields such as
+`OrderMetadata`; `serde_json::Value` fields convert directly.
 
 ### DELETE
 
@@ -655,9 +657,9 @@ really needs a Postgres numeric special value. See
 
 ### Output
 
-`fetch_all`, `fetch_one`, and `fetch_optional` return `tokio_postgres::Row`. `fetch_all_as::<T>` converts each row to JSON using selected `FieldType`s, then deserializes with serde.
+`fetch_all`, `fetch_one`, and `fetch_optional` return `tokio_postgres::Row`. `fetch_all_as::<T>` deserializes each row directly through serde without building an intermediate JSON object. Builder queries use selected `FieldType` metadata; `raw_query` uses returned Postgres column types.
 
-| `FieldType` | JSON value | Struct field |
+| `FieldType` | Serde value | Struct field |
 | --- | --- | --- |
 | `Text`, `Citext`, `Uuid`, `Timestamp`, `Timestamptz`, `Date`, `Time`, `Timetz`, `Interval`, `Enum` | string | `String`, `uuid::Uuid`, chrono types with serde |
 | `Integer` | number | `i32` |
@@ -675,7 +677,7 @@ Root fields in joined queries use clean aliases like `id` and `email`. Joined fl
 
 ## Debug SQL
 
-Use `build_pg()` or `build_rows_pg()` when you want to inspect SQL without executing it:
+Use `build_pg()` when you want to inspect SQL without executing it:
 
 ```rust
 let built = select(orders())

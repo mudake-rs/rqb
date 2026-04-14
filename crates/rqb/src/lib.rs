@@ -15,33 +15,33 @@
 //! `docs/ergonomics.md` for end-to-end examples.
 
 pub use rqb_core::{
-    Aggregate, AggregateType, BuiltinFunction, Capabilities, CaseBranch, CaseBuilder,
-    CaseThenBuilder, ColumnOperator, ColumnPredicate, ConflictAction, ConflictClause,
-    ConflictTarget, Cte, CteBody, Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType,
-    Error as CoreError, ExistsPredicate, Expr, Field, FieldRef, FieldType, FunctionBuilder,
-    InsertBuilder, InsertConflictBuilder, InsertQuery, IntoFieldRefs, IntoSqlExpr, Join, JoinKind,
-    JsonAccessPath, JsonPathPolicy, LockMode, LockWait, LogicalExpr, LogicalOp, NullsOrder,
-    OffsetWindowFunctionBuilder, Operator, Predicate, QueryExpr, RawQuery, RawSql, Relation,
-    Result as CoreResult, ReturningMode, RowLock, SearchRequest, SelectBuilder, SelectColumn,
-    SelectItem, SelectQuery, SelectRepr, SetOperator, SetQuery, Sort, SortDir, Source, SqlExpr,
-    SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder,
-    UpdateQuery, Value, ValueRepr, WindowFunction, WindowFunctionBuilder, WindowSpec,
-    WriteAssignment, WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count,
-    count_distinct, count_field, cte, date_trunc, delete, dense_rank, except, except_all, excluded,
-    exists, field, func, gen_random_uuid, greatest, insert, intersect, intersect_all, json_agg,
-    json_agg_nullable, lag, lead, least, length, lower, max, max_agg, min, min_agg, not,
-    not_exists, now, nullif, partition_by, rank, raw, raw_expr, raw_query, row_number, select, set,
-    set_col, set_default, set_expr, set_raw, string_agg, sum, trim, union, union_all, update,
-    upper, window,
+    __RqbWriteRecordResult, __rqb_json_write_value, Aggregate, AggregateType, BuiltinFunction,
+    Capabilities, CaseBranch, CaseBuilder, CaseThenBuilder, ColumnOperator, ColumnPredicate,
+    ConflictAction, ConflictClause, ConflictTarget, Cte, CteBody, Dataset, DbEnum, DeleteBuilder,
+    DeleteQuery, ElemType, EnumType, Error as CoreError, ExistsPredicate, Expr, Field, FieldRef,
+    FieldType, FunctionBuilder, InsertBuilder, InsertConflictBuilder, InsertQuery, IntoFieldRefs,
+    IntoSqlExpr, Join, JoinKind, JsonAccessPath, JsonPathPolicy, LockMode, LockWait, LogicalExpr,
+    LogicalOp, NullsOrder, OffsetWindowFunctionBuilder, Operator, Predicate, QueryExpr, RawQuery,
+    RawSql, Relation, Result as CoreResult, ReturningMode, RowLock, SearchRequest, SelectBuilder,
+    SelectColumn, SelectItem, SelectQuery, SelectRepr, SetOperator, SetQuery, Sort, SortDir,
+    Source, SqlExpr, SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily, TypeSpec,
+    UpdateBuilder, UpdateQuery, Value, ValueRepr, WindowFunction, WindowFunctionBuilder,
+    WindowSpec, WriteAssignment, WriteRecord, WriteValue, all, any, array_agg, avg, case_when,
+    cast, coalesce, count, count_distinct, count_field, cte, date_trunc, delete, dense_rank,
+    except, except_all, excluded, exists, field, func, gen_random_uuid, greatest, insert,
+    intersect, intersect_all, json_agg, json_agg_nullable, lag, lead, least, length, lower, max,
+    max_agg, min, min_agg, not, not_exists, now, nullif, partition_by, rank, raw, raw_expr,
+    raw_query, row_number, select, set, set_col, set_default, set_expr, set_raw, string_agg, sum,
+    trim, union, union_all, update, upper, window,
 };
+pub use rqb_macros::WriteRecord;
 pub use rqb_postgres as postgres;
 #[cfg(feature = "pool")]
 pub use rqb_postgres::{
     BeginBuilder, Db, IsolationLevel, Savepoint, Tx, TxFuture, connect, connect_with_tls,
 };
 pub use rqb_postgres::{
-    BindParam, BindType, BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect, DebugSelectSql,
-    DebugSql, Postgres,
+    BindParam, BindType, BuildPostgres, BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql, Postgres,
 };
 #[cfg(feature = "runtime-tokio-postgres")]
 pub use rqb_postgres::{
@@ -50,12 +50,14 @@ pub use rqb_postgres::{
 };
 pub use rqb_postgres::{Error, Result};
 pub use serde;
+pub use serde_json;
 
 pub mod prelude {
     pub use rqb_core::prelude::*;
+    pub use rqb_macros::WriteRecord;
     pub use rqb_postgres::{
-        BindParam, BindType, BuildPostgres, BuildRowsPostgres, BuiltQuery, BuiltSelect,
-        DebugSelectSql, DebugSql, Postgres,
+        BindParam, BindType, BuildPostgres, BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql,
+        Postgres,
     };
 
     #[cfg(feature = "runtime-tokio-postgres")]

@@ -91,8 +91,7 @@ impl<'de> Deserializer<'de> for DecodedValue {
             Self::Bool(value) => visitor.visit_bool(value),
             Self::I32(value) => visitor.visit_i32(value),
             Self::I64(value) => visitor.visit_i64(value),
-            Self::F64(value) if value.is_finite() => visitor.visit_f64(value),
-            Self::F64(_) => visitor.visit_unit(),
+            Self::F64(value) => visitor.visit_f64(value),
             Self::String(value) => visitor.visit_string(value),
             Self::Json(value) => value.deserialize_any(visitor),
             Self::Bytes(value) => visit_byte_seq(value, visitor),
@@ -106,7 +105,6 @@ impl<'de> Deserializer<'de> for DecodedValue {
     {
         match self {
             Self::Null => visitor.visit_none(),
-            Self::F64(value) if !value.is_finite() => visitor.visit_none(),
             Self::Json(JsonValue::Null) => visitor.visit_none(),
             other => visitor.visit_some(other),
         }

@@ -20,8 +20,8 @@ struct UserId {
     id: Uuid,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = app_users)]
 struct NewUser {
     id: Uuid,
     organization_id: Uuid,

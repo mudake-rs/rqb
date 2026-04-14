@@ -64,11 +64,11 @@ Then it can apply a JSON `SearchRequest`:
 ```rust
 let page = query
     .request(search_request)
-    .page_as::<serde_json::Value>(&db)
+    .page_as::<UserOrderRow>(&db)
     .await?;
 ```
 
-The JSON request is validated against dataset metadata. It can select fields, filter, sort, and page, but it cannot create joins, raw SQL, CTEs, or subqueries.
+The JSON request is validated against dataset metadata. It can filter, sort, and page, but it cannot create response fields, joins, raw SQL, CTEs, or subqueries.
 
 ## What Diesel Still Does Better
 

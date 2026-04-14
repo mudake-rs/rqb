@@ -35,14 +35,12 @@ pub struct CreateOrderItem {
     pub metadata: serde_json::Value,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = orders, skip_none)]
 pub struct OrderPatch {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<OrderStatus>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[rqb(json)]
     pub metadata: Option<OrderMetadata>,
 }
 
@@ -81,20 +79,21 @@ pub struct OrderStats {
     pub total_cents: String,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = orders)]
 struct NewOrder {
     id: Uuid,
     user_id: Uuid,
     status: OrderStatus,
     status_history: Vec<OrderStatus>,
     channel: String,
+    #[rqb(json)]
     metadata: OrderMetadata,
     tags: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, WriteRecord)]
+#[rqb(fields = order_items)]
 struct NewOrderItem {
     id: Uuid,
     order_id: Uuid,
@@ -230,12 +229,12 @@ impl OrderService {
     pub async fn search(
         exec: &impl PgExecutor,
         request: SearchRequest,
-    ) -> rqb::Result<Page<serde_json::Value>> {
-        // This endpoint shows the JSON request API. Client-selected fields make the shape dynamic,
-        // so the sample returns serde_json::Value instead of pretending it has a fixed DTO.
+    ) -> rqb::Result<Page<Order>> {
+        // This endpoint shows the JSON request API. The client controls search parameters,
+        // while the response shape stays the server-owned Order DTO.
         let page = select(order_search::dataset())
             .request(request)
-            .page_as::<serde_json::Value>(exec)
+            .page_as::<Order>(exec)
             .await?;
         Ok(page)
     }

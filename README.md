@@ -6,7 +6,7 @@ rqb is not an ORM and not a Diesel clone. The main idea is:
 
 1. Describe datasets with field metadata: API name, DB column, type, and allowed operations.
 2. Build the trusted query shape in Rust: table/view/raw source, joins, CTEs, aggregates, locks, subqueries.
-3. Optionally apply a client `SearchRequest` with selected fields, filters, sort, limit, and offset.
+3. Optionally apply a client `SearchRequest` with filters, sort, limit, and offset.
 4. Render parameterized Postgres SQL or execute it through `tokio-postgres`/`deadpool-postgres`.
 
 That gives a Knex-like runtime composition model without exposing arbitrary SQL in JSON.
@@ -89,7 +89,7 @@ let rows = select(users())
     .await?;
 ```
 
-Use `.fields([...])` when you want a narrower response, qualified join columns, a one-column subquery, or a stable shape for dynamic JSON responses.
+Use `.fields([...])` when you want a narrower response, qualified join columns, a one-column subquery, or a stable DTO shape for a search endpoint.
 
 On joined queries, the default projection is still the root dataset only. Joined tables are available for filters, sort, aggregates, and explicit projections, but rqb does not silently return every joined column:
 
@@ -109,11 +109,12 @@ For one static CRUD query, rqb and Diesel are close. The difference shows up whe
 
 ```rust
 let page = select(order_search_view())
+    .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
     .filter(ORGANIZATION_ID.eq(current_org_id))
     .filter_option(params.status, |status| STATUS.eq(status))
     .filter_option(params.min_total, |min_total| TOTAL_CENTS.gte(min_total))
     .request(request)
-    .page_as::<serde_json::Value>(&db)
+    .page_as::<OrderSearchRow>(&db)
     .await?;
 ```
 
@@ -123,7 +124,6 @@ The trusted query shape stays in Rust, while untrusted client search input is li
 
 `SearchRequest` is the JSON API surface. It supports:
 
-- `fields`
 - `filter`
 - `sort`
 - `limit`
@@ -133,7 +133,6 @@ Example HTTP body:
 
 ```json
 {
-  "fields": ["id", "email", "status", "totalCents"],
   "sort": [{ "field": "createdAt", "dir": "desc" }],
   "filter": {
     "and": [
@@ -152,16 +151,17 @@ Apply it to a server-owned query:
 async fn search_orders(
     db: &Db,
     request: SearchRequest,
-) -> rqb::Result<Page<serde_json::Value>> {
+) -> rqb::Result<Page<OrderSearchRow>> {
     select(order_search_view())
+        .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
         .filter(ORGANIZATION_ID.eq(current_org_id()))
         .request(request)
-        .page_as::<serde_json::Value>(db)
+        .page_as::<OrderSearchRow>(db)
         .await
 }
 ```
 
-`.request(request)` merges the incoming request with existing builder state. Existing server filters are combined with the client filter using `AND`; request fields/sort/limit/offset replace those parts when present. Use `.replace_request(request)` only when you intentionally want old replacement semantics.
+`.request(request)` merges the incoming request with existing builder state. Existing server filters are combined with the client filter using `AND`; request sort/limit/offset replace those parts when present. Use `.replace_request(request)` only when you intentionally want old replacement semantics.
 
 JSON does not define joins, CTEs, raw SQL, or subqueries. Build those in Rust, then apply `SearchRequest` on top.
 
@@ -177,7 +177,7 @@ let rows = select(users)
     .left_join(orders, ID.on("u").eq_col(USER_ID.on("o")))
     .fields([ID.on("u"), EMAIL.on("u"), STATUS.on("o")])
     .filter(STATUS.on("o").eq("paid"))
-    .fetch_all_as::<serde_json::Value>(&db)
+    .fetch_all_as::<UserOrderRow>(&db)
     .await?;
 ```
 
@@ -197,7 +197,7 @@ let recent = cte(
 let rows = select(Dataset::cte("recent_orders").fields([ID, USER_ID, STATUS]))
     .cte(recent)
     .filter(STATUS.eq("paid"))
-    .fetch_all_as::<serde_json::Value>(&db)
+    .fetch_all_as::<RecentOrderRow>(&db)
     .await?;
 ```
 
@@ -226,7 +226,7 @@ let paid_orders = select(orders().alias("o"))
 
 let rows = select(paid_orders)
     .fields([USER_ID])
-    .fetch_all_as::<serde_json::Value>(&db)
+    .fetch_all_as::<UserIdRow>(&db)
     .await?;
 ```
 
@@ -341,11 +341,13 @@ Other aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`,
 
 ## Writes
 
-Struct writes use serde.
+Struct writes use `WriteRecord`. The derive maps Rust field names to generated
+`Field` constants, so values reach validation directly instead of passing
+through an intermediate JSON object.
 
 ```rust
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = users)]
 struct NewUser {
     id: Uuid,
     email: String,
@@ -392,12 +394,10 @@ insert(order_counters())
 Partial updates:
 
 ```rust
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = users, skip_none)]
 struct PatchUser {
-    #[serde(skip_serializing_if = "Option::is_none")]
     email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
 }
 

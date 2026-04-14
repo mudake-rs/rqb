@@ -17,6 +17,8 @@ pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static 
         }
         FieldType::Numeric => Some("::text"),
         FieldType::Array(ElemType::Numeric) => Some("::text[]"),
+        FieldType::Array(ElemType::Uuid) => uuid_array_selection_cast(),
+        FieldType::Array(ElemType::Date) => chrono_array_selection_cast(),
         FieldType::Array(ElemType::Timestamp) => timestamp_array_selection_cast(),
         FieldType::Array(ElemType::Timestamptz) => timestamptz_array_selection_cast(),
         FieldType::Array(ElemType::Custom(_)) => None,
@@ -33,8 +35,6 @@ pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static 
         | FieldType::Array(ElemType::BigInt)
         | FieldType::Array(ElemType::Float)
         | FieldType::Array(ElemType::Bool)
-        | FieldType::Array(ElemType::Uuid)
-        | FieldType::Array(ElemType::Date)
         | FieldType::Custom(_) => None,
     }
 }
@@ -49,6 +49,16 @@ fn uuid_selection_cast() -> Option<&'static str> {
     Some("::text")
 }
 
+#[cfg(feature = "with-uuid")]
+fn uuid_array_selection_cast() -> Option<&'static str> {
+    None
+}
+
+#[cfg(not(feature = "with-uuid"))]
+fn uuid_array_selection_cast() -> Option<&'static str> {
+    Some("::text[]")
+}
+
 #[cfg(feature = "with-chrono")]
 fn chrono_selection_cast() -> Option<&'static str> {
     None
@@ -57,6 +67,16 @@ fn chrono_selection_cast() -> Option<&'static str> {
 #[cfg(not(feature = "with-chrono"))]
 fn chrono_selection_cast() -> Option<&'static str> {
     Some("::text")
+}
+
+#[cfg(feature = "with-chrono")]
+fn chrono_array_selection_cast() -> Option<&'static str> {
+    None
+}
+
+#[cfg(not(feature = "with-chrono"))]
+fn chrono_array_selection_cast() -> Option<&'static str> {
+    Some("::text[]")
 }
 
 #[cfg(feature = "with-chrono")]

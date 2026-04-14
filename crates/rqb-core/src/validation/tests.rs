@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::*;
 use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType,
@@ -79,6 +81,38 @@ fn dataset() -> Dataset {
             .sortable(false)
             .json_paths(JsonPathPolicy::Dynamic),
     ])
+}
+
+const STATIC_VALIDATION_FIELDS: &[Field] = &[
+    Field::new("id", FieldType::Uuid),
+    Field::new("status", FieldType::Text),
+    Field::mapped("createdAt", "created_at", FieldType::Timestamptz),
+];
+
+fn assert_borrowed_name(name: Cow<'static, str>, expected: &str) {
+    match name {
+        Cow::Borrowed(actual) => assert_eq!(actual, expected),
+        Cow::Owned(actual) => {
+            panic!("expected `{expected}` to stay borrowed, got owned `{actual}`")
+        }
+    }
+}
+
+#[test]
+fn validation_resolves_static_dataset_metadata_as_borrowed_names() {
+    let query =
+        crate::select(Dataset::static_table("orders").static_fields(STATIC_VALIDATION_FIELDS))
+            .fields(["id", "createdAt"])
+            .filter(field("status").eq("paid"))
+            .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+
+    assert_eq!(validated.selected_fields.len(), 2);
+    assert_borrowed_name(validated.selected_fields[0].api_name.clone(), "id");
+    assert_borrowed_name(validated.selected_fields[0].db_name.clone(), "id");
+    assert_borrowed_name(validated.selected_fields[1].api_name.clone(), "createdAt");
+    assert_borrowed_name(validated.selected_fields[1].db_name.clone(), "created_at");
 }
 
 #[test]

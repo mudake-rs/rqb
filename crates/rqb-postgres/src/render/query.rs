@@ -34,7 +34,10 @@ impl Renderer {
         projection: SelectProjection,
     ) -> Result<()> {
         self.cacheable &= validated.cacheable();
-        self.render_query_expr(validated, projection, true)
+        match validated {
+            ValidatedQueryExpr::Select(select) => self.render_subquery_select(select, projection),
+            ValidatedQueryExpr::Set(set) => self.render_set_query(set, true, SetRenderMode::Source),
+        }
     }
 
     pub(super) fn render_query_expr(

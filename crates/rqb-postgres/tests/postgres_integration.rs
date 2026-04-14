@@ -1,10 +1,12 @@
+use std::borrow::Cow;
+
 use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, DbEnum, ElemType, EnumType, Field, FieldType, IntoSqlExpr, JsonPathPolicy,
-    SearchRequest, SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all, case_when, cast,
-    coalesce, count, cte, delete, excluded, exists, field, insert, lag, lower, not_exists,
-    partition_by, raw, raw_query, row_number, select, set_default, set_expr, sum, union, union_all,
-    update, upper,
+    SearchRequest, SelectColumn, SelectRepr, TypeFamily, TypeSpec, Value, ValueRepr, all,
+    case_when, cast, coalesce, count, cte, delete, excluded, exists, field, insert, lag, lower,
+    not_exists, partition_by, raw, raw_query, row_number, select, set_default, set_expr, sum,
+    union, union_all, update, upper,
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
@@ -71,6 +73,19 @@ mod order_search {
     pub const ITEMS_COUNT: Field = Field::mapped("itemsCount", "items_count", FieldType::BigInt);
     pub const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
 
+    pub const FIELDS: &[Field] = &[
+        ID,
+        EMAIL,
+        STATUS,
+        STATUS_HISTORY,
+        CHANNEL,
+        TAGS,
+        METADATA,
+        CREATED_AT,
+        ITEMS_COUNT,
+        TOTAL_CENTS,
+    ];
+
     pub fn fields() -> [Field; 10] {
         [
             ID,
@@ -88,6 +103,10 @@ mod order_search {
 
     pub fn dataset() -> Dataset {
         Dataset::view("order_search_view").fields(fields())
+    }
+
+    pub fn static_dataset() -> Dataset {
+        Dataset::static_view("order_search_view").static_fields(FIELDS)
     }
 }
 
@@ -107,6 +126,31 @@ mod orders_table {
 
     pub fn dataset() -> Dataset {
         Dataset::table("orders").fields([ID, USER_ID, STATUS, CREATED_AT])
+    }
+}
+
+mod order_items_table {
+    use super::*;
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const ORDER_ID: Field = Field::mapped("orderId", "order_id", FieldType::Uuid);
+    pub const PRODUCT_ID: Field = Field::mapped("productId", "product_id", FieldType::Uuid);
+    pub const QUANTITY: Field = Field::new("quantity", FieldType::Integer);
+    pub const UNIT_PRICE_CENTS: Field =
+        Field::mapped("unitPriceCents", "unit_price_cents", FieldType::BigInt);
+    pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
+        .sortable(false)
+        .json_paths(JsonPathPolicy::Dynamic);
+
+    pub fn dataset() -> Dataset {
+        Dataset::table("order_items").fields([
+            ID,
+            ORDER_ID,
+            PRODUCT_ID,
+            QUANTITY,
+            UNIT_PRICE_CENTS,
+            METADATA,
+        ])
     }
 }
 
@@ -330,6 +374,14 @@ async fn assert_row_mapping_paths_match(client: &TestDb, sql: &'static str) -> T
     Ok(())
 }
 
+fn assert_timestamp_prefix(value: &str, rfc3339_prefix: &str) {
+    let postgres_text_prefix = rfc3339_prefix.replace('T', " ");
+    assert!(
+        value.starts_with(rfc3339_prefix) || value.starts_with(&postgres_text_prefix),
+        "expected `{value}` to start with `{rfc3339_prefix}` or `{postgres_text_prefix}`"
+    );
+}
+
 const ROW_MAPPING_NON_NULL_SQL: &str = r#"
 SELECT
     'hello'::text AS text_value,
@@ -509,6 +561,131 @@ async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestRes
 }
 
 #[tokio::test]
+async fn generated_style_static_dataset_executes_with_borrowed_metadata() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct StaticOrder {
+        id: String,
+        email: String,
+        status: order_search::OrderStatus,
+        created_at: String,
+    }
+
+    let built = select(order_search::static_dataset())
+        .fields(["id", "email", "status", "createdAt"])
+        .filter(all([
+            field("status").eq(order_search::OrderStatus::Paid),
+            field("email").eq("ada@example.com"),
+        ]))
+        .build_pg()?
+        .rows;
+
+    for (column, expected_api, expected_db) in [
+        (&built.columns[0], "id", "id"),
+        (&built.columns[1], "email", "email"),
+        (&built.columns[2], "status", "status"),
+        (&built.columns[3], "createdAt", "created_at"),
+    ] {
+        let SelectColumn::Field(field) = column else {
+            panic!("static dataset query should project fields only");
+        };
+        assert!(matches!(&field.api_name, Cow::Borrowed(name) if *name == expected_api));
+        assert!(matches!(&field.db_name, Cow::Borrowed(name) if *name == expected_db));
+    }
+
+    let order: StaticOrder = select(order_search::static_dataset())
+        .fields(["id", "email", "status", "createdAt"])
+        .filter(all([
+            field("status").eq(order_search::OrderStatus::Paid),
+            field("email").eq("ada@example.com"),
+        ]))
+        .fetch_one_as(&client)
+        .await?;
+
+    assert_eq!(order.id, "30000000-0000-0000-0000-000000000001");
+    assert_eq!(order.email, "ada@example.com");
+    assert_eq!(order.status, order_search::OrderStatus::Paid);
+    assert_timestamp_prefix(&order.created_at, "2026-02-01T10:00:00");
+    Ok(())
+}
+
+#[tokio::test]
+async fn integer_and_bigint_binds_execute_for_reads_and_writes() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OrderItemRow {
+        id: String,
+        quantity: i32,
+        unit_price_cents: i64,
+        metadata: serde_json::Value,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NewOrderItem<'a> {
+        id: &'a str,
+        order_id: &'a str,
+        product_id: &'a str,
+        quantity: i32,
+        unit_price_cents: i64,
+        metadata: serde_json::Value,
+    }
+
+    let id = "40000000-0000-0000-0000-000000009901";
+    insert(order_items_table::dataset())
+        .value(&NewOrderItem {
+            id,
+            order_id: "30000000-0000-0000-0000-000000000001",
+            product_id: "20000000-0000-0000-0000-000000000001",
+            quantity: 2,
+            unit_price_cents: 12_345,
+            metadata: serde_json::json!({ "warehouse": "perf-test" }),
+        })
+        .execute(&client)
+        .await?;
+
+    let inserted: OrderItemRow = select(order_items_table::dataset())
+        .fields([
+            order_items_table::ID,
+            order_items_table::QUANTITY,
+            order_items_table::UNIT_PRICE_CENTS,
+            order_items_table::METADATA,
+        ])
+        .filter(all([
+            order_items_table::QUANTITY.eq(2),
+            order_items_table::UNIT_PRICE_CENTS.gte(12_000),
+            order_items_table::METADATA
+                .path("warehouse")
+                .eq("perf-test"),
+        ]))
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(inserted.id, id);
+    assert_eq!(inserted.quantity, 2);
+    assert_eq!(inserted.unit_price_cents, 12_345);
+    assert_eq!(inserted.metadata["warehouse"], "perf-test");
+
+    let updated: OrderItemRow = update(order_items_table::dataset())
+        .set(order_items_table::QUANTITY, 3)
+        .set(order_items_table::UNIT_PRICE_CENTS, 13_000)
+        .filter(order_items_table::ID.eq(id))
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(updated.quantity, 3);
+    assert_eq!(updated.unit_price_cents, 13_000);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn round_trips_custom_numeric_domain_without_losing_precision() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
         return Ok(());
@@ -656,7 +833,7 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
     assert!(row.local_window.contains("2026-02-01"));
     assert_eq!(row.billing_dates, "[2026-02-01,2026-03-01)");
     assert_eq!(row.created_local, "2026-02-01 12:30:00");
-    assert!(row.created_at.starts_with("2026-02-01T12:30:00"));
+    assert_timestamp_prefix(&row.created_at, "2026-02-01T12:30:00");
 
     Ok(())
 }
@@ -932,6 +1109,48 @@ async fn executes_first_class_join_query() -> TestResult {
 }
 
 #[tokio::test]
+async fn fetch_as_maps_qualified_join_aliases() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    struct JoinedOrder {
+        id: String,
+        u_email: String,
+        status: order_search::OrderStatus,
+    }
+
+    let rows: Vec<JoinedOrder> = select(orders_table::dataset().alias("o"))
+        .join(
+            users_table::dataset().alias("u"),
+            orders_table::USER_ID
+                .on("o")
+                .eq_col(users_table::ID.on("u")),
+        )
+        .fields([
+            orders_table::ID.on("o"),
+            users_table::EMAIL.on("u"),
+            orders_table::STATUS.on("o"),
+        ])
+        .filter(all([
+            users_table::EMAIL.on("u").eq("ada@example.com"),
+            orders_table::STATUS
+                .on("o")
+                .eq(order_search::OrderStatus::Paid),
+        ]))
+        .order_by(orders_table::CREATED_AT.on("o").desc())
+        .fetch_all_as(&client)
+        .await?;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "30000000-0000-0000-0000-000000000001");
+    assert_eq!(rows[0].u_email, "ada@example.com");
+    assert_eq!(rows[0].status, order_search::OrderStatus::Paid);
+    Ok(())
+}
+
+#[tokio::test]
 async fn executes_correlated_exists_and_in_subquery() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
         return Ok(());
@@ -1160,7 +1379,7 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
     }
 
     let rows = raw_query(
-        "SELECT id, email, total_cents AS \"totalCents\", created_at AS \"createdAt\" \
+        "SELECT id::text AS id, email, total_cents AS \"totalCents\", created_at::text AS \"createdAt\" \
          FROM order_search_view \
          WHERE status = ?::text::order_status AND total_cents > ?::bigint \
          ORDER BY total_cents DESC",
@@ -1172,7 +1391,7 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].email, "ada@example.com");
     assert_eq!(rows[0].total_cents, 15_900);
-    assert!(rows[0].created_at.starts_with("2026-02-01T10:00:00"));
+    assert_timestamp_prefix(&rows[0].created_at, "2026-02-01T10:00:00");
     assert_eq!(rows[1].id, "30000000-0000-0000-0000-000000000004");
 
     let version: String = raw_query("SELECT 'rqb'::text")
@@ -1181,7 +1400,7 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
     assert_eq!(version, "rqb");
 
     let missing: Option<RawOrder> = raw_query(
-        "SELECT id, email, total_cents AS \"totalCents\", created_at AS \"createdAt\" \
+        "SELECT id::text AS id, email, total_cents AS \"totalCents\", created_at::text AS \"createdAt\" \
          FROM order_search_view WHERE email = ?",
     )
     .bind("nobody@example.com")
@@ -1241,6 +1460,82 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
             if message.contains("unsupported Postgres type `numeric`")
     ));
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn raw_query_executes_bind_param_scalar_and_array_matrix() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RawBindMatrix {
+        text_value: String,
+        bool_value: bool,
+        int_value: i64,
+        float_value: f64,
+        bytes_value: Vec<u8>,
+        json_value: serde_json::Value,
+        text_array: Vec<String>,
+        int_array: Vec<i64>,
+        float_array: Vec<f64>,
+        bool_array: Vec<bool>,
+        bytes_array: Vec<Vec<u8>>,
+        json_array: Vec<serde_json::Value>,
+    }
+
+    let row: RawBindMatrix = raw_query(
+        r#"
+        SELECT
+            ?::text AS "textValue",
+            ?::boolean AS "boolValue",
+            ?::bigint AS "intValue",
+            ?::double precision AS "floatValue",
+            ?::bytea AS "bytesValue",
+            ?::jsonb AS "jsonValue",
+            ?::text[] AS "textArray",
+            ?::bigint[] AS "intArray",
+            ?::double precision[] AS "floatArray",
+            ?::boolean[] AS "boolArray",
+            ?::bytea[] AS "bytesArray",
+            ?::jsonb[] AS "jsonArray"
+        "#,
+    )
+    .bind("hello")
+    .bind(true)
+    .bind(42_i64)
+    .bind(1.25_f64)
+    .bind(Value::bytes([0xde, 0xad]))
+    .bind(serde_json::json!({ "ok": true }))
+    .bind(["a", "b"])
+    .bind([1_i64, 2_i64])
+    .bind([1.25_f64, 2.5_f64])
+    .bind([true, false])
+    .bind(vec![Value::bytes([0xde]), Value::bytes([0xad, 0xbe])])
+    .bind(vec![
+        serde_json::json!({ "a": 1 }),
+        serde_json::json!({ "b": 2 }),
+    ])
+    .fetch_one_as(&client)
+    .await?;
+
+    assert_eq!(row.text_value, "hello");
+    assert!(row.bool_value);
+    assert_eq!(row.int_value, 42);
+    assert_eq!(row.float_value, 1.25);
+    assert_eq!(row.bytes_value, vec![0xde, 0xad]);
+    assert_eq!(row.json_value, serde_json::json!({ "ok": true }));
+    assert_eq!(row.text_array, vec!["a", "b"]);
+    assert_eq!(row.int_array, vec![1, 2]);
+    assert_eq!(row.float_array, vec![1.25, 2.5]);
+    assert_eq!(row.bool_array, vec![true, false]);
+    assert_eq!(row.bytes_array, vec![vec![0xde], vec![0xad, 0xbe]]);
+    assert_eq!(
+        row.json_array,
+        vec![serde_json::json!({ "a": 1 }), serde_json::json!({ "b": 2 })]
+    );
     Ok(())
 }
 

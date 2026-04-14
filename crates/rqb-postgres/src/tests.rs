@@ -502,7 +502,14 @@ fn renders_column_predicate_operator_matrix() {
 #[test]
 fn renders_postgres_type_cast_matrix() {
     let built = select(typed_values())
-        .fields(["id", "happenedOn", "active", "ratio"])
+        .fields([
+            "id",
+            "happenedOn",
+            "active",
+            "ratio",
+            "ids",
+            "createdAtList",
+        ])
         .filter(all([
             field("id").eq("10000000-0000-0000-0000-000000000001"),
             field("a").eq(42),
@@ -529,6 +536,14 @@ fn renders_postgres_type_cast_matrix() {
     assert!(built.sql.contains("$9::int[]"));
     assert!(built.sql.contains("$10::text[]::uuid[]"));
     assert!(built.sql.contains("$11::text[]::timestamptz[]"));
+    #[cfg(not(feature = "with-uuid"))]
+    assert!(built.sql.contains("\"ids\"::text[] AS \"ids\""));
+    #[cfg(not(feature = "with-chrono"))]
+    assert!(
+        built
+            .sql
+            .contains("\"created_at_list\"::text[] AS \"createdAtList\"")
+    );
 }
 
 #[test]
@@ -2582,15 +2597,13 @@ fn renders_set_query_inside_in_subquery() {
         .unwrap();
 
     assert!(
-        built.sql.contains(&format!(
+        built.sql.contains(
             "WHERE \"id\" IN ((\
-             SELECT {} FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) \
+             SELECT \"paid\".\"user_id\" FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) \
              UNION ALL \
-             (SELECT {} FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)\
-             )",
-            uuid_projection("\"paid\".\"user_id\"", "paid_userId", true),
-            uuid_projection("\"draft\".\"user_id\"", "draft_userId", true)
-        )),
+             (SELECT \"draft\".\"user_id\" FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)\
+             )"
+        ),
         "{}",
         built.sql
     );

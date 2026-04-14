@@ -228,11 +228,13 @@ impl Renderer {
     fn render_limit_offset(&mut self, validated: &ValidatedSelect, policy: LimitPolicy) {
         if matches!(policy, LimitPolicy::Always) || validated.limit_explicit {
             self.sql.push_str(" LIMIT ");
-            self.sql.push_str(&validated.limit.to_string());
+            let mut buffer = itoa::Buffer::new();
+            self.sql.push_str(buffer.format(validated.limit));
         }
         if matches!(policy, LimitPolicy::Always) || validated.offset_explicit {
             self.sql.push_str(" OFFSET ");
-            self.sql.push_str(&validated.offset.to_string());
+            let mut buffer = itoa::Buffer::new();
+            self.sql.push_str(buffer.format(validated.offset));
         }
     }
 

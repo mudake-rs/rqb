@@ -19,8 +19,23 @@ pub(crate) fn postgres_selection_cast(field_type: FieldType) -> Option<&'static 
         FieldType::Array(ElemType::Numeric) => Some("::text[]"),
         FieldType::Array(ElemType::Timestamp) => timestamp_array_selection_cast(),
         FieldType::Array(ElemType::Timestamptz) => timestamptz_array_selection_cast(),
+        FieldType::Array(ElemType::Custom(_)) => None,
         FieldType::Custom(type_spec) if type_spec.selects_as_text() => Some("::text"),
-        _ => None,
+        FieldType::Text
+        | FieldType::Integer
+        | FieldType::BigInt
+        | FieldType::Float
+        | FieldType::Bool
+        | FieldType::Jsonb
+        | FieldType::Bytea
+        | FieldType::Array(ElemType::Text)
+        | FieldType::Array(ElemType::Int)
+        | FieldType::Array(ElemType::BigInt)
+        | FieldType::Array(ElemType::Float)
+        | FieldType::Array(ElemType::Bool)
+        | FieldType::Array(ElemType::Uuid)
+        | FieldType::Array(ElemType::Date)
+        | FieldType::Custom(_) => None,
     }
 }
 

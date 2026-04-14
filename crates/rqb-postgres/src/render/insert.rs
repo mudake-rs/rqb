@@ -58,7 +58,7 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    write_quoted_ident(&mut self.sql, &field.db_name);
+                    write_quoted_ident(&mut self.sql, field.db_name.as_ref());
                 }
                 self.sql.push(')');
                 if let Some(predicate) = predicate {
@@ -83,7 +83,7 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    write_quoted_ident(&mut self.sql, &assignment.field.db_name);
+                    write_quoted_ident(&mut self.sql, assignment.field.db_name.as_ref());
                     self.sql.push_str(" = ");
                     self.render_write_value(&assignment.value, assignment.field.ty)?;
                 }

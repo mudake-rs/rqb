@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::dataset::Dataset;
 use crate::error::{Error, Result};
 use crate::field::{Field, FieldRef, JsonPathPolicy, ResolvedField};
@@ -37,7 +39,7 @@ fn resolve_known_field(
             })
             .copied()
             .ok_or_else(|| Error::UnknownField {
-                dataset: scoped.dataset.api_name.clone(),
+                dataset: scoped.dataset.api_name.to_string(),
                 field: field.api_name.to_owned(),
             })?;
         return resolved_from_field(
@@ -51,48 +53,64 @@ fn resolve_known_field(
         );
     }
 
-    let matches = scope
-        .datasets
-        .iter()
-        .filter_map(|scoped| {
-            scoped
-                .dataset
-                .fields
-                .iter()
-                .find(|candidate| {
-                    candidate.api_name == field.api_name || candidate.db_name == field.db_name
-                })
-                .copied()
-                .map(|found| (scoped, found))
-        })
-        .collect::<Vec<_>>();
+    let mut found: Option<(usize, Field)> = None;
+    let mut ambiguous: Option<Vec<String>> = None;
+    for (idx, scoped) in scope.datasets.iter().enumerate() {
+        let Some(candidate) = scoped
+            .dataset
+            .fields
+            .iter()
+            .find(|candidate| {
+                candidate.api_name == field.api_name || candidate.db_name == field.db_name
+            })
+            .copied()
+        else {
+            continue;
+        };
 
-    match matches.as_slice() {
-        [(scoped, found)] => resolved_from_field(
-            scope,
-            &scoped.dataset,
-            *found,
-            path,
-            None,
-            default_qualifier(scope, &scoped.dataset),
-            alias.clone(),
-        ),
-        [] if !scope.has_joins => {
+        if let Some(matches) = &mut ambiguous {
+            matches.push(format!(
+                "{}.{}",
+                QueryScope::label(&scoped.dataset),
+                field.api_name
+            ));
+        } else if let Some((first_idx, _)) = found {
+            let first = &scope.datasets[first_idx].dataset;
+            ambiguous = Some(vec![
+                format!("{}.{}", QueryScope::label(first), field.api_name),
+                format!("{}.{}", QueryScope::label(&scoped.dataset), field.api_name),
+            ]);
+        } else {
+            found = Some((idx, candidate));
+        }
+    }
+
+    if let Some(matches) = ambiguous {
+        return Err(Error::AmbiguousField {
+            field: field.api_name.to_owned(),
+            matches: matches.join(", "),
+        });
+    }
+
+    match found {
+        Some((idx, found)) => {
+            let scoped = &scope.datasets[idx];
+            resolved_from_field(
+                scope,
+                &scoped.dataset,
+                found,
+                path,
+                None,
+                default_qualifier(scope, &scoped.dataset),
+                alias.clone(),
+            )
+        }
+        None if !scope.has_joins => {
             resolved_from_field(scope, scope.root(), field, path, None, None, alias)
         }
-        [] => Err(Error::UnknownField {
-            dataset: scope.root().api_name.clone(),
+        None => Err(Error::UnknownField {
+            dataset: scope.root().api_name.to_string(),
             field: field.api_name.to_owned(),
-        }),
-        many => Err(Error::AmbiguousField {
-            field: field.api_name.to_owned(),
-            matches: many
-                .iter()
-                .map(|(scoped, _)| {
-                    format!("{}.{}", QueryScope::label(&scoped.dataset), field.api_name)
-                })
-                .collect::<Vec<_>>()
-                .join(", "),
         }),
     }
 }
@@ -102,24 +120,24 @@ fn resolve_named_field(
     name: &str,
     alias: Option<String>,
 ) -> Result<ResolvedField> {
-    let parts = name
+    let mut parts = name
         .split('.')
         .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
+        .filter(|part| !part.is_empty());
 
-    let Some(root) = parts.first().copied() else {
+    let Some(root) = parts.next() else {
         return Err(Error::UnknownField {
-            dataset: scope.root().api_name.clone(),
+            dataset: scope.root().api_name.to_string(),
             field: name.to_owned(),
         });
     };
 
-    if parts.len() >= 2 {
+    let rest = parts.collect::<Vec<_>>();
+
+    if let Some(field_name) = rest.first().copied() {
         match scope.find_qualified(root) {
             Ok(scoped) => {
-                let field_name = parts[1];
-                let path = parts[2..]
+                let path = rest[1..]
                     .iter()
                     .map(|part| (*part).to_owned())
                     .collect::<Vec<_>>();
@@ -132,7 +150,7 @@ fn resolve_named_field(
                     })
                     .copied()
                     .ok_or_else(|| Error::UnknownField {
-                        dataset: scoped.dataset.api_name.clone(),
+                        dataset: scoped.dataset.api_name.to_string(),
                         field: name.to_owned(),
                     })?;
                 return resolved_from_field(
@@ -150,45 +168,59 @@ fn resolve_named_field(
         }
     }
 
-    let path = parts[1..]
+    let path = rest
         .iter()
         .map(|part| (*part).to_owned())
         .collect::<Vec<_>>();
-    let matches = scope
-        .datasets
-        .iter()
-        .filter_map(|scoped| {
-            scoped
-                .dataset
-                .fields
-                .iter()
-                .find(|candidate| candidate.api_name == root || candidate.db_name == root)
-                .copied()
-                .map(|field| (scoped, field))
-        })
-        .collect::<Vec<_>>();
+    let mut found: Option<(usize, Field)> = None;
+    let mut ambiguous: Option<Vec<String>> = None;
+    for (idx, scoped) in scope.datasets.iter().enumerate() {
+        let Some(field) = scoped
+            .dataset
+            .fields
+            .iter()
+            .find(|candidate| candidate.api_name == root || candidate.db_name == root)
+            .copied()
+        else {
+            continue;
+        };
 
-    match matches.as_slice() {
-        [(scoped, field)] => resolved_from_field(
-            scope,
-            &scoped.dataset,
-            *field,
-            &path,
-            None,
-            default_qualifier(scope, &scoped.dataset),
-            alias,
-        ),
-        [] => Err(Error::UnknownField {
-            dataset: scope.root().api_name.clone(),
+        if let Some(matches) = &mut ambiguous {
+            matches.push(format!("{}.{}", QueryScope::label(&scoped.dataset), root));
+        } else if let Some((first_idx, _)) = found {
+            let first = &scope.datasets[first_idx].dataset;
+            ambiguous = Some(vec![
+                format!("{}.{}", QueryScope::label(first), root),
+                format!("{}.{}", QueryScope::label(&scoped.dataset), root),
+            ]);
+        } else {
+            found = Some((idx, field));
+        }
+    }
+
+    if let Some(matches) = ambiguous {
+        return Err(Error::AmbiguousField {
             field: name.to_owned(),
-        }),
-        many => Err(Error::AmbiguousField {
+            matches: matches.join(", "),
+        });
+    }
+
+    match found {
+        Some((idx, field)) => {
+            let scoped = &scope.datasets[idx];
+            resolved_from_field(
+                scope,
+                &scoped.dataset,
+                field,
+                &path,
+                None,
+                default_qualifier(scope, &scoped.dataset),
+                alias,
+            )
+        }
+        None => Err(Error::UnknownField {
+            dataset: scope.root().api_name.to_string(),
             field: name.to_owned(),
-            matches: many
-                .iter()
-                .map(|(scoped, _)| format!("{}.{}", QueryScope::label(&scoped.dataset), root))
-                .collect::<Vec<_>>()
-                .join(", "),
         }),
     }
 }
@@ -208,8 +240,8 @@ pub(super) fn resolved_from_field(
 ) -> Result<ResolvedField> {
     if path.is_empty() {
         return Ok(ResolvedField {
-            api_name: field.api_name.to_owned(),
-            db_name: field.db_name.to_owned(),
+            api_name: Cow::Borrowed(field.api_name),
+            db_name: Cow::Borrowed(field.db_name),
             ty: field.ty,
             caps: field.caps,
             json_path: Vec::new(),
@@ -237,8 +269,8 @@ pub(super) fn resolved_from_field(
     caps.sortable = false;
 
     Ok(ResolvedField {
-        api_name: field.api_name.to_owned(),
-        db_name: field.db_name.to_owned(),
+        api_name: Cow::Borrowed(field.api_name),
+        db_name: Cow::Borrowed(field.db_name),
         ty: field.ty,
         caps,
         json_path: path.to_vec(),

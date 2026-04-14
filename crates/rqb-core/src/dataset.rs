@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::builder::SelectBuilder;
 use crate::expr::Expr;
 use crate::field::{Field, FieldRef};
@@ -8,26 +10,26 @@ use crate::request::SelectQuery;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {
     Table {
-        schema: Option<String>,
-        name: String,
-        alias: Option<String>,
+        schema: Option<Cow<'static, str>>,
+        name: Cow<'static, str>,
+        alias: Option<Cow<'static, str>>,
     },
     View {
-        schema: Option<String>,
-        name: String,
-        alias: Option<String>,
+        schema: Option<Cow<'static, str>>,
+        name: Cow<'static, str>,
+        alias: Option<Cow<'static, str>>,
     },
     Cte {
-        name: String,
-        alias: Option<String>,
+        name: Cow<'static, str>,
+        alias: Option<Cow<'static, str>>,
     },
     Raw {
         sql: String,
-        alias: String,
+        alias: Cow<'static, str>,
     },
     Subquery {
         query: Box<QueryExpr>,
-        alias: String,
+        alias: Cow<'static, str>,
     },
 }
 
@@ -35,7 +37,15 @@ impl Source {
     pub fn table(name: impl Into<String>) -> Self {
         Self::Table {
             schema: None,
-            name: name.into(),
+            name: Cow::Owned(name.into()),
+            alias: None,
+        }
+    }
+
+    pub fn static_table(name: &'static str) -> Self {
+        Self::Table {
+            schema: None,
+            name: Cow::Borrowed(name),
             alias: None,
         }
     }
@@ -43,14 +53,22 @@ impl Source {
     pub fn view(name: impl Into<String>) -> Self {
         Self::View {
             schema: None,
-            name: name.into(),
+            name: Cow::Owned(name.into()),
+            alias: None,
+        }
+    }
+
+    pub fn static_view(name: &'static str) -> Self {
+        Self::View {
+            schema: None,
+            name: Cow::Borrowed(name),
             alias: None,
         }
     }
 
     pub fn cte(name: impl Into<String>) -> Self {
         Self::Cte {
-            name: name.into(),
+            name: Cow::Owned(name.into()),
             alias: None,
         }
     }
@@ -58,21 +76,21 @@ impl Source {
     pub fn raw(sql: impl Into<String>, alias: impl Into<String>) -> Self {
         Self::Raw {
             sql: sql.into(),
-            alias: alias.into(),
+            alias: Cow::Owned(alias.into()),
         }
     }
 
     pub fn subquery(query: impl Into<QueryExpr>, alias: impl Into<String>) -> Self {
         Self::Subquery {
             query: Box::new(query.into()),
-            alias: alias.into(),
+            alias: Cow::Owned(alias.into()),
         }
     }
 
     pub fn schema(mut self, schema: impl Into<String>) -> Self {
         match &mut self {
             Self::Table { schema: s, .. } | Self::View { schema: s, .. } => {
-                *s = Some(schema.into())
+                *s = Some(Cow::Owned(schema.into()))
             }
             Self::Cte { .. } | Self::Raw { .. } | Self::Subquery { .. } => {}
         }
@@ -83,8 +101,10 @@ impl Source {
         match &mut self {
             Self::Table { alias: a, .. }
             | Self::View { alias: a, .. }
-            | Self::Cte { alias: a, .. } => *a = Some(alias.into()),
-            Self::Raw { alias: a, .. } | Self::Subquery { alias: a, .. } => *a = alias.into(),
+            | Self::Cte { alias: a, .. } => *a = Some(Cow::Owned(alias.into())),
+            Self::Raw { alias: a, .. } | Self::Subquery { alias: a, .. } => {
+                *a = Cow::Owned(alias.into())
+            }
         }
         self
     }
@@ -117,9 +137,9 @@ impl Source {
 /// capabilities needed to validate dynamic requests before rendering SQL.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Dataset {
-    pub api_name: String,
+    pub api_name: Cow<'static, str>,
     pub source: Source,
-    pub fields: Vec<Field>,
+    pub fields: Cow<'static, [Field]>,
     pub default_limit: u32,
     pub max_limit: u32,
 }
@@ -130,9 +150,17 @@ impl Dataset {
         Self::new(name.clone(), Source::table(name))
     }
 
+    pub fn static_table(name: &'static str) -> Self {
+        Self::new_static(name, Source::static_table(name))
+    }
+
     pub fn view(name: impl Into<String>) -> Self {
         let name = name.into();
         Self::new(name.clone(), Source::view(name))
+    }
+
+    pub fn static_view(name: &'static str) -> Self {
+        Self::new_static(name, Source::static_view(name))
     }
 
     pub fn raw(sql: impl Into<String>, alias: impl Into<String>) -> Self {
@@ -152,16 +180,26 @@ impl Dataset {
 
     pub fn new(api_name: impl Into<String>, source: Source) -> Self {
         Self {
-            api_name: api_name.into(),
+            api_name: Cow::Owned(api_name.into()),
             source,
-            fields: Vec::new(),
+            fields: Cow::Borrowed(&[]),
+            default_limit: 100,
+            max_limit: 1000,
+        }
+    }
+
+    pub fn new_static(api_name: &'static str, source: Source) -> Self {
+        Self {
+            api_name: Cow::Borrowed(api_name),
+            source,
+            fields: Cow::Borrowed(&[]),
             default_limit: 100,
             max_limit: 1000,
         }
     }
 
     pub fn field(mut self, field: Field) -> Self {
-        self.fields.push(field);
+        self.fields.to_mut().push(field);
         self
     }
 
@@ -169,7 +207,12 @@ impl Dataset {
     where
         I: IntoIterator<Item = Field>,
     {
-        self.fields.extend(fields);
+        self.fields.to_mut().extend(fields);
+        self
+    }
+
+    pub fn static_fields(mut self, fields: &'static [Field]) -> Self {
+        self.fields = Cow::Borrowed(fields);
         self
     }
 
@@ -326,13 +369,19 @@ impl Join {
 
 impl From<Source> for Dataset {
     fn from(source: Source) -> Self {
-        let api_name = match &source {
+        let api_name: Cow<'static, str> = match &source {
             Source::Table { name, .. } | Source::View { name, .. } | Source::Cte { name, .. } => {
                 name.clone()
             }
             Source::Raw { alias, .. } | Source::Subquery { alias, .. } => alias.clone(),
         };
-        Self::new(api_name, source)
+        Self {
+            api_name,
+            source,
+            fields: Cow::Borrowed(&[]),
+            default_limit: 100,
+            max_limit: 1000,
+        }
     }
 }
 
@@ -423,10 +472,46 @@ impl From<SetQuery> for CteBody {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use crate::types::FieldType;
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    const STATIC_FIELDS: &[Field] = &[
+        Field::new("id", FieldType::Uuid),
+        Field::new("email", FieldType::Text),
+    ];
+
+    fn assert_static_fields(dataset: &Dataset) {
+        match &dataset.fields {
+            Cow::Borrowed(fields) => assert!(
+                std::ptr::eq(*fields, STATIC_FIELDS),
+                "dataset should keep the generated static field slice borrowed"
+            ),
+            Cow::Owned(_) => panic!("dataset should not allocate generated static fields"),
+        }
+    }
+
+    #[test]
+    fn static_dataset_fields_stay_borrowed_until_mutated() {
+        let dataset = Dataset::static_table("users").static_fields(STATIC_FIELDS);
+        assert_eq!(dataset.api_name, "users");
+        assert_static_fields(&dataset);
+
+        let cloned = dataset.clone();
+        assert_static_fields(&cloned);
+
+        let aliased = dataset.clone().alias("u");
+        assert_eq!(aliased.source_alias(), Some("u"));
+        assert_static_fields(&aliased);
+
+        let extended = dataset.field(Field::new("name", FieldType::Text));
+        assert!(matches!(extended.fields, Cow::Owned(_)));
+        assert_eq!(extended.fields.len(), 3);
+        assert_eq!(STATIC_FIELDS.len(), 2);
+    }
 
     #[test]
     fn relation_qualifies_fields_only_when_aliased() {

@@ -556,6 +556,63 @@ fn renders_typed_integer_and_float_bind_params() {
 }
 
 #[test]
+fn bind_param_typed_lowering_preserves_postgres_wire_shapes() {
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from(42), FieldType::Integer),
+        BindParam::Int4(42)
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from(42_i64), FieldType::BigInt),
+        BindParam::Int8(42)
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from(1), FieldType::Float),
+        BindParam::Float8(1.0)
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::from(true), FieldType::Bool),
+        BindParam::Bool(true)
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::bytes([0xde, 0xad]), FieldType::Bytea),
+        BindParam::Bytes(vec![0xde, 0xad])
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&serde_json::json!({"ok": true}).into(), FieldType::Jsonb),
+        BindParam::Json(serde_json::json!({"ok": true}))
+    );
+    assert_eq!(
+        BindParam::from_typed_value(
+            &Value::from("10000000-0000-0000-0000-000000000001"),
+            FieldType::Uuid
+        ),
+        BindParam::Text("10000000-0000-0000-0000-000000000001".to_owned())
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::Null, FieldType::Integer),
+        BindParam::Null(BindType::Int4)
+    );
+    assert_eq!(
+        BindParam::from_typed_value(&Value::Null, FieldType::Array(ElemType::Int)),
+        BindParam::Null(BindType::Int4Array)
+    );
+    assert_eq!(
+        BindParam::from_typed_array_values(
+            &[Value::from(1), Value::from(2)],
+            FieldType::Array(ElemType::Int),
+        ),
+        BindParam::Int4Array(vec![1, 2])
+    );
+    assert_eq!(
+        BindParam::from_typed_array_values(
+            &[Value::from("9007199254740993"), Value::from(42)],
+            FieldType::Array(ElemType::Custom(&UINT_256)),
+        ),
+        BindParam::TextArray(vec!["9007199254740993".to_owned(), "42".to_owned()])
+    );
+}
+
+#[test]
 fn renders_native_postgres_type_casts_and_operators() {
     let built = select(pg_type_examples())
         .fields([
@@ -721,9 +778,10 @@ fn renders_expression_select_items_with_aliases_and_output_metadata() {
         .build_rows_pg()
         .unwrap();
 
-    assert!(built.sql.starts_with(
-        "SELECT \"id\", COALESCE(\"name\", \"email\") AS \"label\", CASE WHEN \"status\" = $1 THEN $2"
-    ));
+    assert!(built.sql.starts_with(&format!(
+        "SELECT {}, COALESCE(\"name\", \"email\") AS \"label\", CASE WHEN \"status\" = $1 THEN $2",
+        uuid_projection("\"id\"", "id", false)
+    )));
     assert!(
         built
             .sql
@@ -791,13 +849,16 @@ fn renders_generic_and_raw_expression_select_items() {
             .sql
             .contains("\"public\".\"normalize_email\"(\"email\") AS \"normalizedEmail\"")
     );
-    assert!(built.sql.contains("now() AS \"seenAt\""));
+    assert!(built.sql.contains(&timestamp_projection("now()", "seenAt")));
+    assert!(built.sql.contains(&timestamp_projection(
+        "date_trunc($1, \"created_at\")",
+        "createdDay"
+    )));
     assert!(
         built
             .sql
-            .contains("date_trunc($1, \"created_at\") AS \"createdDay\"")
+            .contains(&uuid_projection("gen_random_uuid()", "generatedId", true))
     );
-    assert!(built.sql.contains("gen_random_uuid() AS \"generatedId\""));
     assert!(
         built
             .sql
@@ -813,11 +874,10 @@ fn renders_generic_and_raw_expression_select_items() {
             .sql
             .contains("LEAST(\"total_cents\", $4::bigint) AS \"cappedTotal\"")
     );
-    assert!(
-        built
-            .sql
-            .contains(" AS \"rawSeenAt\" FROM \"order_search_view\"")
-    );
+    assert!(built.sql.contains(&format!(
+        "{} FROM \"order_search_view\"",
+        timestamp_projection("now()", "rawSeenAt")
+    )));
     assert!(!built.cacheable);
 }
 
@@ -964,7 +1024,8 @@ fn renders_cte_and_raw_predicate() {
         "recent_orders",
         raw("SELECT * FROM order_search_view WHERE created_at >= ?").bind("2026-01-01T00:00:00Z"),
     );
-    let built = select(Dataset::cte("recent_orders").fields(orders().fields))
+    let orders = orders();
+    let built = select(Dataset::cte("recent_orders").fields(orders.fields.iter().copied()))
         .cte(cte)
         .filter(raw("total_cents > ?").bind(10_000))
         .build_rows_pg()
@@ -2468,12 +2529,14 @@ fn renders_union_all_query_rows_and_count() {
 
     assert_eq!(
         rows.sql,
-        concat!(
-            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $1) ",
-            "UNION ALL ",
-            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $2) ",
-            "ORDER BY \"status\" DESC ",
-            "LIMIT 50 OFFSET 10"
+        format!(
+            "(SELECT {}, \"status\" FROM \"orders\" WHERE \"status\" = $1) \
+             UNION ALL \
+             (SELECT {}, \"status\" FROM \"orders\" WHERE \"status\" = $2) \
+             ORDER BY \"status\" DESC \
+             LIMIT 50 OFFSET 10",
+            uuid_projection("\"id\"", "id", false),
+            uuid_projection("\"id\"", "id", false)
         )
     );
     assert_eq!(rows.params, vec!["paid".into(), "draft".into()]);
@@ -2488,12 +2551,14 @@ fn renders_union_all_query_rows_and_count() {
     let page = query.build_pg().unwrap();
     assert_eq!(
         page.count.sql,
-        concat!(
-            "SELECT count(*) FROM (",
-            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $1) ",
-            "UNION ALL ",
-            "(SELECT \"id\", \"status\" FROM \"orders\" WHERE \"status\" = $2)",
-            ") AS \"rqb_count\""
+        format!(
+            "SELECT count(*) FROM (\
+             (SELECT {}, \"status\" FROM \"orders\" WHERE \"status\" = $1) \
+             UNION ALL \
+             (SELECT {}, \"status\" FROM \"orders\" WHERE \"status\" = $2)\
+             ) AS \"rqb_count\"",
+            uuid_projection("\"id\"", "id", false),
+            uuid_projection("\"id\"", "id", false)
         )
     );
     assert_eq!(page.count.params, vec!["paid".into(), "draft".into()]);
@@ -2517,12 +2582,14 @@ fn renders_set_query_inside_in_subquery() {
         .unwrap();
 
     assert!(
-        built.sql.contains(concat!(
-            "WHERE \"id\" IN ((",
-            "SELECT \"paid\".\"user_id\" AS \"paid_userId\" FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) ",
-            "UNION ALL ",
-            "(SELECT \"draft\".\"user_id\" AS \"draft_userId\" FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)",
-            ")"
+        built.sql.contains(&format!(
+            "WHERE \"id\" IN ((\
+             SELECT {} FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) \
+             UNION ALL \
+             (SELECT {} FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)\
+             )",
+            uuid_projection("\"paid\".\"user_id\"", "paid_userId", true),
+            uuid_projection("\"draft\".\"user_id\"", "draft_userId", true)
         )),
         "{}",
         built.sql
@@ -2549,10 +2616,11 @@ fn renders_subquery_source_with_outer_filters() {
 
     assert_eq!(
         built.sql,
-        concat!(
-            "SELECT \"user_id\" AS \"userId\" FROM ",
-            "(SELECT \"o\".\"id\", \"o\".\"user_id\" FROM \"orders\" AS \"o\" WHERE \"o\".\"status\" = $1) AS \"paid_orders\" ",
-            "WHERE \"user_id\" = $2::text::uuid LIMIT 100 OFFSET 0"
+        format!(
+            "SELECT {} FROM \
+             (SELECT \"o\".\"id\", \"o\".\"user_id\" FROM \"orders\" AS \"o\" WHERE \"o\".\"status\" = $1) AS \"paid_orders\" \
+             WHERE \"user_id\" = $2::text::uuid LIMIT 100 OFFSET 0",
+            uuid_projection("\"user_id\"", "userId", true)
         )
     );
     assert_eq!(
@@ -2581,12 +2649,13 @@ fn renders_set_query_as_subquery_source() {
 
     assert_eq!(
         built.sql,
-        concat!(
-            "SELECT \"id\" FROM ",
-            "((SELECT \"paid\".\"id\" FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) ",
-            "UNION ALL ",
-            "(SELECT \"draft\".\"id\" FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)) ",
-            "AS \"order_ids\" LIMIT 100 OFFSET 0"
+        format!(
+            "SELECT {} FROM \
+             ((SELECT \"paid\".\"id\" FROM \"orders\" AS \"paid\" WHERE \"paid\".\"status\" = $1) \
+             UNION ALL \
+             (SELECT \"draft\".\"id\" FROM \"orders\" AS \"draft\" WHERE \"draft\".\"status\" = $2)) \
+             AS \"order_ids\" LIMIT 100 OFFSET 0",
+            uuid_projection("\"id\"", "id", false)
         )
     );
 }

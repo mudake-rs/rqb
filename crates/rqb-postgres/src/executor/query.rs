@@ -1,9 +1,9 @@
 use serde::de::DeserializeOwned;
 use tokio_postgres::{Row, types::FromSqlOwned};
 
-use crate::{
-    BindParam, BuiltQuery, BuiltSelect, Error, PgParams, Result, raw_row_to_json, row_to_json,
-};
+use crate::params::bind_refs;
+use crate::row_map::{column_aliases, row_to_deserialized};
+use crate::{BindParam, BuiltQuery, BuiltSelect, Error, Result, raw_row_to_json};
 
 use super::driver::{Page, PgExecutor, StatementCache};
 
@@ -32,8 +32,7 @@ async fn query_all_parts(
     params: &[BindParam],
     cacheable: bool,
 ) -> Result<Vec<Row>> {
-    let pg = PgParams::from_binds(params);
-    let refs = pg.as_refs();
+    let refs = bind_refs(params);
     exec.query(sql, &refs, StatementCache::from_cacheable(cacheable))
         .await
 }
@@ -44,8 +43,7 @@ async fn query_optional_parts(
     params: &[BindParam],
     cacheable: bool,
 ) -> Result<Option<Row>> {
-    let pg = PgParams::from_binds(params);
-    let refs = pg.as_refs();
+    let refs = bind_refs(params);
     exec.query_opt(sql, &refs, StatementCache::from_cacheable(cacheable))
         .await
 }
@@ -56,8 +54,7 @@ async fn execute_parts(
     params: &[BindParam],
     cacheable: bool,
 ) -> Result<u64> {
-    let pg = PgParams::from_binds(params);
-    let refs = pg.as_refs();
+    let refs = bind_refs(params);
     exec.execute_sql(sql, &refs, StatementCache::from_cacheable(cacheable))
         .await
 }
@@ -98,11 +95,9 @@ where
         cacheable,
     } = built;
     let rows = query_all_parts(exec, &sql, &params, cacheable).await?;
+    let aliases = column_aliases(&columns);
     rows.iter()
-        .map(|row| {
-            let json = row_to_json(row, &columns)?;
-            serde_json::from_value(json).map_err(Error::from)
-        })
+        .map(|row| row_to_deserialized(row, &columns, &aliases))
         .collect()
 }
 
@@ -127,11 +122,9 @@ where
         cacheable,
     } = built;
     let row = query_optional_parts(exec, &sql, &params, cacheable).await?;
+    let aliases = column_aliases(&columns);
     row.as_ref()
-        .map(|row| {
-            let json = row_to_json(row, &columns)?;
-            serde_json::from_value(json).map_err(Error::from)
-        })
+        .map(|row| row_to_deserialized(row, &columns, &aliases))
         .transpose()
 }
 

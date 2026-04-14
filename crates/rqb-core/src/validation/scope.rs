@@ -89,24 +89,36 @@ impl QueryScope {
     }
 
     pub(super) fn find_qualified(&self, qualifier: &str) -> Result<&ScopedDataset> {
-        let matches = self
-            .datasets
-            .iter()
-            .filter(|scoped| scoped.dataset.matches_qualifier(qualifier))
-            .collect::<Vec<_>>();
+        let mut found: Option<usize> = None;
+        let mut ambiguous: Option<Vec<String>> = None;
+        for (idx, scoped) in self.datasets.iter().enumerate() {
+            if !scoped.dataset.matches_qualifier(qualifier) {
+                continue;
+            }
 
-        match matches.as_slice() {
-            [] => Err(Error::UnknownDatasetQualifier {
+            if let Some(matches) = &mut ambiguous {
+                matches.push(Self::label(&scoped.dataset));
+            } else if let Some(first_idx) = found {
+                ambiguous = Some(vec![
+                    Self::label(&self.datasets[first_idx].dataset),
+                    Self::label(&scoped.dataset),
+                ]);
+            } else {
+                found = Some(idx);
+            }
+        }
+
+        if let Some(matches) = ambiguous {
+            return Err(Error::AmbiguousDatasetQualifier {
                 qualifier: qualifier.to_owned(),
-            }),
-            [scoped] => Ok(scoped),
-            many => Err(Error::AmbiguousDatasetQualifier {
+                matches: matches.join(", "),
+            });
+        }
+
+        match found {
+            Some(idx) => Ok(&self.datasets[idx]),
+            None => Err(Error::UnknownDatasetQualifier {
                 qualifier: qualifier.to_owned(),
-                matches: many
-                    .iter()
-                    .map(|scoped| Self::label(&scoped.dataset))
-                    .collect::<Vec<_>>()
-                    .join(", "),
             }),
         }
     }

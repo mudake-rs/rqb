@@ -54,7 +54,7 @@ impl ValidatedInsert {
             (true, false) => return Err(Error::EmptyInsert),
             (false, true) => {
                 return Err(Error::InvalidValue {
-                    field: dataset.api_name.clone(),
+                    field: dataset.api_name.to_string(),
                     operator: "insert".to_owned(),
                     message: "cannot combine VALUES and SELECT insert sources".to_owned(),
                 });
@@ -393,12 +393,12 @@ fn validate_insert_rows_shape(rows: &[Vec<ValidatedAssignment>]) -> Result<()> {
     };
     let first_fields = first
         .iter()
-        .map(|assignment| assignment.field.db_name.as_str())
+        .map(|assignment| assignment.field.db_name.as_ref())
         .collect::<Vec<_>>();
     for row in rows.iter().skip(1) {
         let fields = row
             .iter()
-            .map(|assignment| assignment.field.db_name.as_str())
+            .map(|assignment| assignment.field.db_name.as_ref())
             .collect::<Vec<_>>();
         if fields != first_fields {
             return Err(Error::InconsistentInsertFields);
@@ -482,7 +482,7 @@ fn match_write_field_by_name(
         .find(|field| field.api_name == api_name || field.db_name == db_name)
         .copied()
         .ok_or_else(|| Error::UnknownField {
-            dataset: scope.dataset.api_name.clone(),
+            dataset: scope.dataset.api_name.to_string(),
             field: api_name.to_owned(),
         })?;
     scope.resolve_field(&FieldRef::from(field))
@@ -535,7 +535,7 @@ fn validate_conflict_assignments(
 ) -> Result<Vec<ValidatedAssignment>> {
     if assignments.is_empty() {
         return Err(Error::InvalidValue {
-            field: scope.dataset.api_name.clone(),
+            field: scope.dataset.api_name.to_string(),
             operator: "on_conflict".to_owned(),
             message: "DO UPDATE requires at least one assignment".to_owned(),
         });

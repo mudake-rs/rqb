@@ -232,17 +232,26 @@ duplicating cached and uncached executor methods.
 Keep this separation unless a later refactor clearly reduces code without
 making raw cache bypass or pool/client/transaction support less explicit.
 
-### Row Mapping Has Two Paths
+### Row Mapping Has Three Paths
 
-Normal rqb queries map rows using validated `SelectColumn` metadata. Raw queries
-map rows from Postgres column type OIDs. Both currently go through a JSON bridge
-before serde deserialization.
+Normal typed rqb queries map rows through validated `SelectColumn` metadata and
+deserialize directly into `serde::Deserialize` targets. This is the primary
+`fetch_as` path and avoids building a full `serde_json::Map` for every row.
 
-The implementation keeps those paths separate: typed row mapping is metadata
-driven, raw row mapping is OID driven, and shared primitive readers live in the
-module root. Both currently go through a JSON bridge before serde
-deserialization. Direct row deserialization is a later performance project, not
-the first architecture slice.
+Metadata-driven JSON row mapping still exists for explicit JSON results and for
+tests that compare the direct path against the JSON contract. Raw queries keep a
+separate OID-driven JSON mapper because raw SQL has no rqb metadata.
+
+These paths are intentionally separate:
+
+- direct typed mapping: `Row + SelectColumn metadata -> serde visitor`
+- typed JSON mapping: `Row + SelectColumn metadata -> serde_json::Value`
+- raw JSON mapping: `Row + Postgres OIDs -> serde_json::Value`
+
+The row mapping modules deny wildcard enum match arms for `FieldType`,
+`ElemType`, and `TypeFamily`, and the Postgres integration suite includes a
+type matrix that compares typed JSON mapping with direct serde mapping. Adding a
+new Postgres type should therefore fail loudly if either path is not updated.
 
 ### CLI Is Product-Critical
 

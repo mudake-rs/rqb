@@ -96,11 +96,13 @@ impl Renderer {
             self.render_set_order(validated);
             if let Some(limit) = validated.limit {
                 self.sql.push_str(" LIMIT ");
-                self.sql.push_str(&limit.to_string());
+                let mut buffer = itoa::Buffer::new();
+                self.sql.push_str(buffer.format(limit));
             }
             if let Some(offset) = validated.offset {
                 self.sql.push_str(" OFFSET ");
-                self.sql.push_str(&offset.to_string());
+                let mut buffer = itoa::Buffer::new();
+                self.sql.push_str(buffer.format(offset));
             }
         }
         Ok(())

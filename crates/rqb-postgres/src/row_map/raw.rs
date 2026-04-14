@@ -11,8 +11,9 @@ use super::values::{
 };
 
 pub fn raw_row_to_json(row: &Row) -> Result<JsonValue> {
-    let mut object = Map::new();
-    for (idx, column) in row.columns().iter().enumerate() {
+    let columns = row.columns();
+    let mut object = Map::with_capacity(columns.len());
+    for (idx, column) in columns.iter().enumerate() {
         object.insert(
             column.name().to_owned(),
             raw_column_to_json(row, idx, column.type_())?,

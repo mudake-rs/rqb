@@ -1,6 +1,6 @@
-use rqb_core::{ResolvedField, TextSearchConfig, ValidatedLikePattern, Value};
+use rqb_core::{ResolvedField, TextSearchConfig, ValidatedLikePattern};
 
-use crate::helpers::{escape_like, quote_literal};
+use crate::helpers::{write_escaped_like, write_quoted_literal};
 
 use super::super::Renderer;
 
@@ -28,7 +28,7 @@ impl Renderer {
         } else {
             self.sql.push_str(" ~* ");
         }
-        self.push_owned_param(Value::String(value.to_owned()));
+        self.push_text_param(value);
     }
 
     pub(super) fn render_text_search(&mut self, field: &ResolvedField, value: &str) {
@@ -36,13 +36,13 @@ impl Renderer {
             unreachable!("validated by rqb-core");
         };
         self.sql.push_str("to_tsvector(");
-        self.sql.push_str(&quote_literal(config));
+        write_quoted_literal(&mut self.sql, config);
         self.sql.push_str(", ");
         self.render_text_target(field);
         self.sql.push_str(") @@ websearch_to_tsquery(");
-        self.sql.push_str(&quote_literal(config));
+        write_quoted_literal(&mut self.sql, config);
         self.sql.push_str(", ");
-        self.push_owned_param(Value::String(value.to_owned()));
+        self.push_text_param(value);
         self.sql.push(')');
     }
 
@@ -60,8 +60,11 @@ impl Renderer {
             self.sql.push_str("NOT ");
         }
         self.sql.push_str("ILIKE ");
-        let pattern = format!("{prefix}{}{suffix}", escape_like(value));
-        self.push_owned_param(Value::String(pattern));
+        let mut pattern = String::with_capacity(prefix.len() + value.len() + suffix.len());
+        pattern.push_str(prefix);
+        write_escaped_like(&mut pattern, value);
+        pattern.push_str(suffix);
+        self.push_owned_text_param(pattern);
         self.sql.push_str(" ESCAPE '\\'");
     }
 }

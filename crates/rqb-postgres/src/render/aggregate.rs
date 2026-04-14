@@ -1,7 +1,7 @@
 use rqb_core::{FieldType, ResolvedField, TypeFamily, ValidatedAggregate, ValidatedExpr};
 
 use crate::Result;
-use crate::helpers::{quote_literal, write_quoted_ident};
+use crate::helpers::{write_quoted_ident, write_quoted_literal};
 use crate::type_sql::postgres_selection_cast;
 
 use super::Renderer;
@@ -118,7 +118,7 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    self.sql.push_str(&quote_literal(field.object_key()));
+                    write_quoted_literal(&mut self.sql, field.object_key());
                     self.sql.push_str(", ");
                     self.render_column_name(field);
                     if let Some(cast) = postgres_selection_cast(field.ty) {
@@ -187,7 +187,7 @@ impl Renderer {
                     self.sql.push_str(cast);
                 }
                 self.sql.push_str(", ");
-                self.sql.push_str(&quote_literal(separator));
+                write_quoted_literal(&mut self.sql, separator);
                 if let Some(sort) = order_by {
                     self.sql.push_str(" ORDER BY ");
                     self.render_column_name(&sort.field);

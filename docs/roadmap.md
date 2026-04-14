@@ -260,9 +260,20 @@ source work:
 
 These are valuable but should follow correctness and API shape:
 
-- Direct row deserialization without the intermediate JSON map.
-- Benchmarks for rendering, execution overhead, row mapping, raw query, and
-  common API endpoints.
+- The query build/render benchmark harness exists in
+  `crates/rqb-postgres/benches/query_build.rs` and compares rqb with
+  `sqlx::QueryBuilder`, SeaQuery, and Diesel debug rendering.
+- Generated schemas use borrowed static dataset metadata, so normal
+  `dataset()` calls do not allocate field descriptors.
+- `fetch_as` uses a direct serde row deserializer over typed Postgres values.
+  It keeps the `serde::Deserialize` API but no longer builds a full JSON object
+  or per-column JSON scalar for normal typed columns. JSONB columns still use
+  `serde_json::Value`, as expected.
+- Runtime execution passes `BindParam` values directly to `tokio-postgres`
+  instead of cloning them through an extra parameter enum.
+- Query-build benchmarks and optional live `fetch_as` benchmarks exist for
+  rendering, execution overhead, and row mapping.
+- Add more benchmark scenarios for common API endpoints.
 - Smaller allocation passes in rendering and row mapping when they are proven by
   benchmarks.
 - Optional decimal crate integrations, while keeping string-backed exact numeric

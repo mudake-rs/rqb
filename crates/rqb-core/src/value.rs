@@ -92,10 +92,12 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
 
+    #[inline]
     pub fn is_scalar(&self) -> bool {
         matches!(
             self,
@@ -103,10 +105,12 @@ impl Value {
         )
     }
 
+    #[inline]
     pub fn is_number(&self) -> bool {
         matches!(self, Self::I64(_) | Self::F64(_))
     }
 
+    #[inline]
     pub fn is_array(&self) -> bool {
         matches!(self, Self::Array(_))
     }

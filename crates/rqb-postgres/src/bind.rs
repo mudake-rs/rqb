@@ -102,6 +102,13 @@ impl BindParam {
             },
         }
     }
+
+    pub fn from_typed_array_values(values: &[Value], field_type: FieldType) -> Self {
+        let FieldType::Array(elem_type) = field_type else {
+            unreachable!("array field type is validated before rendering");
+        };
+        typed_array_from_values(values, elem_type)
+    }
 }
 
 impl From<&str> for BindParam {
@@ -137,6 +144,72 @@ impl From<serde_json::Value> for BindParam {
 impl From<Value> for BindParam {
     fn from(value: Value) -> Self {
         Self::from_value(&value)
+    }
+}
+
+#[cfg(feature = "runtime-tokio-postgres")]
+impl tokio_postgres::types::ToSql for BindParam {
+    fn to_sql(
+        &self,
+        ty: &tokio_postgres::types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        self.to_sql_checked(ty, out)
+    }
+
+    fn accepts(_ty: &tokio_postgres::types::Type) -> bool {
+        // BindParam may represent typed NULLs and values that are cast by the
+        // renderer. Non-null variants still delegate to the inner ToSql checked
+        // implementation below, so protocol encoding keeps the real type check.
+        true
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &tokio_postgres::types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        use tokio_postgres::types::IsNull;
+
+        match self {
+            Self::Null(_) => Ok(IsNull::Yes),
+            Self::Bool(value) => value.to_sql_checked(ty, out),
+            Self::Int4(value) => value.to_sql_checked(ty, out),
+            Self::Int8(value) => value.to_sql_checked(ty, out),
+            Self::Float8(value) => value.to_sql_checked(ty, out),
+            Self::Text(value) => value.to_sql_checked(ty, out),
+            Self::Bytes(value) => value.to_sql_checked(ty, out),
+            Self::Json(value) => value.to_sql_checked(ty, out),
+            Self::BoolArray(value) => value.to_sql_checked(ty, out),
+            Self::Int4Array(value) => value.to_sql_checked(ty, out),
+            Self::Int8Array(value) => value.to_sql_checked(ty, out),
+            Self::Float8Array(value) => value.to_sql_checked(ty, out),
+            Self::TextArray(value) => value.to_sql_checked(ty, out),
+            Self::BytesArray(value) => value.to_sql_checked(ty, out),
+            Self::JsonArray(value) => value.to_sql_checked(ty, out),
+        }
+    }
+
+    fn encode_format(&self, ty: &tokio_postgres::types::Type) -> tokio_postgres::types::Format {
+        use tokio_postgres::types::Format;
+
+        match self {
+            Self::Null(_) => Format::Binary,
+            Self::Bool(value) => value.encode_format(ty),
+            Self::Int4(value) => value.encode_format(ty),
+            Self::Int8(value) => value.encode_format(ty),
+            Self::Float8(value) => value.encode_format(ty),
+            Self::Text(value) => value.encode_format(ty),
+            Self::Bytes(value) => value.encode_format(ty),
+            Self::Json(value) => value.encode_format(ty),
+            Self::BoolArray(value) => value.encode_format(ty),
+            Self::Int4Array(value) => value.encode_format(ty),
+            Self::Int8Array(value) => value.encode_format(ty),
+            Self::Float8Array(value) => value.encode_format(ty),
+            Self::TextArray(value) => value.encode_format(ty),
+            Self::BytesArray(value) => value.encode_format(ty),
+            Self::JsonArray(value) => value.encode_format(ty),
+        }
     }
 }
 
@@ -187,6 +260,10 @@ fn typed_array_from_value(value: &Value, elem_type: ElemType) -> BindParam {
         unreachable!("array value shape is validated before rendering");
     };
 
+    typed_array_from_values(values, elem_type)
+}
+
+fn typed_array_from_values(values: &[Value], elem_type: ElemType) -> BindParam {
     match elem_type {
         ElemType::Bool => BindParam::BoolArray(values.iter().map(expect_bool).collect()),
         ElemType::Int => BindParam::Int4Array(values.iter().map(expect_int4).collect()),

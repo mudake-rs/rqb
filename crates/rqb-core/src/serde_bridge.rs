@@ -26,7 +26,7 @@ where
                 .find(|field| field.api_name == key || field.db_name == key)
                 .copied()
                 .ok_or_else(|| Error::UnknownField {
-                    dataset: dataset.api_name.clone(),
+                    dataset: dataset.api_name.to_string(),
                     field: key.clone(),
                 })?;
             Ok((field, json_to_field_value(field, value.clone())))

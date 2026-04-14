@@ -38,8 +38,8 @@ fn render_relation(relation: &Relation) -> proc_macro2::TokenStream {
     );
     let db_name = &relation.name;
     let dataset_ctor = match relation.kind {
-        RelationKind::Table => quote! { Dataset::table(#db_name) },
-        RelationKind::View => quote! { Dataset::view(#db_name) },
+        RelationKind::Table => quote! { Dataset::static_table(#db_name) },
+        RelationKind::View => quote! { Dataset::static_view(#db_name) },
     };
     let fields = relation
         .columns
@@ -70,8 +70,10 @@ fn render_relation(relation: &Relation) -> proc_macro2::TokenStream {
 
             #(#fields)*
 
+            pub const FIELDS: &[Field] = &[#(#field_names),*];
+
             pub fn dataset() -> Dataset {
-                #dataset_ctor.fields([#(#field_names),*])
+                #dataset_ctor.static_fields(FIELDS)
             }
 
             #relation_ctor
@@ -414,7 +416,7 @@ mod tests {
         assert!(code.contains("\"created_at\""));
         assert!(code.contains("Field::mapped"));
         assert!(code.contains("FieldType::Timestamp"));
-        assert!(code.contains("Dataset::view(\"order_search_view\")"));
+        assert!(code.contains("Dataset::static_view(\"order_search_view\")"));
         assert!(code.contains("pub fn view() -> Relation"));
         assert!(!code.contains("pub fn relation()"));
         assert!(code.contains("pub fn created_at(&self) -> FieldRef"));

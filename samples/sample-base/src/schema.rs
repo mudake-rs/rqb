@@ -143,8 +143,7 @@ pub mod app_users {
         .json_paths(JsonPathPolicy::Dynamic);
     pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
-    pub fn dataset() -> Dataset {
-        Dataset::table("app_users").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             ORGANIZATION_ID,
             EMAIL,
@@ -152,7 +151,9 @@ pub mod app_users {
             PROFILE,
             TAGS,
             CREATED_AT,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_table("app_users").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -191,8 +192,9 @@ pub mod events {
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
+    pub const FIELDS: &[Field] = &[ID, ORDER_ID, EVENT_TYPE, PAYLOAD, CREATED_AT];
     pub fn dataset() -> Dataset {
-        Dataset::table("events").fields([ID, ORDER_ID, EVENT_TYPE, PAYLOAD, CREATED_AT])
+        Dataset::static_table("events").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -227,15 +229,16 @@ pub mod order_items {
     pub const METADATA: Field = Field::new("metadata", FieldType::Jsonb)
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
-    pub fn dataset() -> Dataset {
-        Dataset::table("order_items").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             ORDER_ID,
             PRODUCT_ID,
             QUANTITY,
             UNIT_PRICE_CENTS,
             METADATA,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_table("order_items").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -283,8 +286,7 @@ pub mod order_search_view {
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
     pub const ITEMS_COUNT: Field = Field::mapped("itemsCount", "items_count", FieldType::BigInt);
     pub const TOTAL_CENTS: Field = Field::mapped("totalCents", "total_cents", FieldType::BigInt);
-    pub fn dataset() -> Dataset {
-        Dataset::view("order_search_view").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             EMAIL,
             ORGANIZATION_ID,
@@ -296,7 +298,9 @@ pub mod order_search_view {
             CREATED_AT,
             ITEMS_COUNT,
             TOTAL_CENTS,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_view("order_search_view").static_fields(FIELDS)
     }
     pub fn view() -> Relation {
         Relation::new(dataset())
@@ -355,8 +359,7 @@ pub mod orders {
         .json_paths(JsonPathPolicy::Dynamic);
     pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
-    pub fn dataset() -> Dataset {
-        Dataset::table("orders").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             USER_ID,
             STATUS,
@@ -365,7 +368,9 @@ pub mod orders {
             METADATA,
             TAGS,
             CREATED_AT,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_table("orders").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -407,8 +412,9 @@ pub mod organizations {
         .sortable(false)
         .json_paths(JsonPathPolicy::Dynamic);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
+    pub const FIELDS: &[Field] = &[ID, SLUG, NAME, SETTINGS, CREATED_AT];
     pub fn dataset() -> Dataset {
-        Dataset::table("organizations").fields([ID, SLUG, NAME, SETTINGS, CREATED_AT])
+        Dataset::static_table("organizations").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -457,8 +463,7 @@ pub mod pg_type_examples {
     pub const CREATED_LOCAL: Field =
         Field::mapped("createdLocal", "created_local", FieldType::Timestamp);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
-    pub fn dataset() -> Dataset {
-        Dataset::table("pg_type_examples").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             DISPLAY_NAME,
             PAYLOAD,
@@ -469,7 +474,9 @@ pub mod pg_type_examples {
             BILLING_DATES,
             CREATED_LOCAL,
             CREATED_AT,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_table("pg_type_examples").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -519,8 +526,7 @@ pub mod products {
         .json_paths(JsonPathPolicy::Dynamic);
     pub const TAGS: Field = Field::new("tags", FieldType::Array(ElemType::Text)).sortable(false);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
-    pub fn dataset() -> Dataset {
-        Dataset::table("products").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             SKU,
             NAME,
@@ -528,7 +534,9 @@ pub mod products {
             ATTRIBUTES,
             TAGS,
             CREATED_AT,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_table("products").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())
@@ -572,15 +580,16 @@ pub mod withdrawals {
     pub const WALLET_ADDRESS: Field =
         Field::mapped("walletAddress", "wallet_address", FieldType::Text);
     pub const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
-    pub fn dataset() -> Dataset {
-        Dataset::table("withdrawals").fields([
+    pub const FIELDS: &[Field] = &[
             ID,
             USER_ID,
             AMOUNT,
             AMOUNT_HISTORY,
             WALLET_ADDRESS,
             CREATED_AT,
-        ])
+        ];
+    pub fn dataset() -> Dataset {
+        Dataset::static_table("withdrawals").static_fields(FIELDS)
     }
     pub fn table() -> Relation {
         Relation::new(dataset())

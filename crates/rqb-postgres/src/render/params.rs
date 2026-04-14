@@ -15,10 +15,19 @@ impl Renderer {
         self.push_bind_param(BindParam::from_value(&value));
     }
 
+    pub(super) fn push_text_param(&mut self, value: &str) {
+        self.push_bind_param(BindParam::Text(value.to_owned()));
+    }
+
+    pub(super) fn push_owned_text_param(&mut self, value: String) {
+        self.push_bind_param(BindParam::Text(value));
+    }
+
     pub(super) fn push_bind_param(&mut self, value: BindParam) {
         self.params.push(value);
         self.sql.push('$');
-        self.sql.push_str(&self.params.len().to_string());
+        let mut buffer = itoa::Buffer::new();
+        self.sql.push_str(buffer.format(self.params.len()));
     }
 
     pub(super) fn push_typed_param(&mut self, value: &Value, field_type: FieldType) {
@@ -114,10 +123,7 @@ impl Renderer {
                 write_postgres_cast(&mut self.sql, field_type);
             }
             _ => {
-                self.push_bind_param(BindParam::from_typed_value(
-                    &Value::Array(values.to_vec()),
-                    field_type,
-                ));
+                self.push_bind_param(BindParam::from_typed_array_values(values, field_type));
                 write_postgres_cast(&mut self.sql, field_type);
             }
         }

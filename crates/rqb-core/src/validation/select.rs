@@ -131,7 +131,7 @@ fn apply_root_output_aliases(query: &SelectQuery, fields: &mut [ResolvedField]) 
     let root_qualifier = query.dataset.sql_qualifier();
     for field in fields {
         if field.alias.is_none() && field.qualifier.as_deref() == Some(root_qualifier) {
-            field.alias = Some(field.api_name.clone());
+            field.alias = Some(field.api_name.to_string());
         }
     }
 }
@@ -195,7 +195,7 @@ fn validate_joins(
             (None, true) => {
                 return Err(Error::MissingJoinCondition {
                     kind: join.kind.as_sql().to_owned(),
-                    dataset: join.dataset.api_name.clone(),
+                    dataset: join.dataset.api_name.to_string(),
                 });
             }
             (None, false) => None,
@@ -222,7 +222,7 @@ fn validate_source(dataset: &Dataset, outer_datasets: &[Dataset]) -> Result<Vali
             validate_subquery_source_columns(dataset, query.columns())?;
             Ok(ValidatedSource::Subquery {
                 query: Box::new(query),
-                alias: alias.clone(),
+                alias: alias.to_string(),
             })
         }
         source => Ok(ValidatedSource::Plain(source.clone())),

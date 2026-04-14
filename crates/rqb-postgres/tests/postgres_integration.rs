@@ -8,7 +8,7 @@ use rqb_core::{
 };
 use rqb_postgres::{
     BuildPostgres, BuiltQuery, Error as PgError, ExecutePostgres, ExecuteRawPostgres,
-    ExecuteWritePostgres, PgExecutor, ResultExt, StatementCache,
+    ExecuteWritePostgres, PgExecutor, ResultExt, StatementCache, row_to_json,
 };
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{Client, Row, types::ToSql};
@@ -228,6 +228,254 @@ mod pg_type_examples {
     }
 }
 
+fn row_mapping_matrix_fields() -> Vec<Field> {
+    vec![
+        Field::mapped("textValue", "text_value", FieldType::Text),
+        Field::mapped("citextValue", "citext_value", FieldType::Citext),
+        Field::mapped("inetValue", "inet_value", FieldType::Inet),
+        Field::mapped("cidrValue", "cidr_value", FieldType::Cidr),
+        Field::mapped(
+            "timestamptzRange",
+            "timestamptz_range",
+            FieldType::Range(ElemType::Timestamptz),
+        ),
+        Field::mapped(
+            "timestampRange",
+            "timestamp_range",
+            FieldType::Range(ElemType::Timestamp),
+        ),
+        Field::mapped("dateRange", "date_range", FieldType::Range(ElemType::Date)),
+        Field::mapped(
+            "enumValue",
+            "enum_value",
+            FieldType::Enum(order_search::ORDER_STATUS),
+        ),
+        Field::mapped("uuidValue", "uuid_value", FieldType::Uuid),
+        Field::mapped("timestampValue", "timestamp_value", FieldType::Timestamp),
+        Field::mapped(
+            "timestamptzValue",
+            "timestamptz_value",
+            FieldType::Timestamptz,
+        ),
+        Field::mapped("dateValue", "date_value", FieldType::Date),
+        Field::mapped("intValue", "int_value", FieldType::Integer),
+        Field::mapped("bigintValue", "bigint_value", FieldType::BigInt),
+        Field::mapped("floatValue", "float_value", FieldType::Float),
+        Field::mapped("numericValue", "numeric_value", FieldType::Numeric),
+        Field::mapped("boolValue", "bool_value", FieldType::Bool),
+        Field::mapped("jsonValue", "json_value", FieldType::Jsonb),
+        Field::mapped("bytesValue", "bytes_value", FieldType::Bytea),
+        Field::mapped(
+            "customNumericValue",
+            "custom_numeric_value",
+            FieldType::Custom(&withdrawals_table::UINT_256),
+        ),
+        Field::mapped("textArray", "text_array", FieldType::Array(ElemType::Text)),
+        Field::mapped(
+            "enumArray",
+            "enum_array",
+            FieldType::Array(ElemType::Enum(order_search::ORDER_STATUS)),
+        ),
+        Field::mapped("uuidArray", "uuid_array", FieldType::Array(ElemType::Uuid)),
+        Field::mapped(
+            "timestampArray",
+            "timestamp_array",
+            FieldType::Array(ElemType::Timestamp),
+        ),
+        Field::mapped(
+            "timestamptzArray",
+            "timestamptz_array",
+            FieldType::Array(ElemType::Timestamptz),
+        ),
+        Field::mapped("dateArray", "date_array", FieldType::Array(ElemType::Date)),
+        Field::mapped("intArray", "int_array", FieldType::Array(ElemType::Int)),
+        Field::mapped(
+            "bigintArray",
+            "bigint_array",
+            FieldType::Array(ElemType::BigInt),
+        ),
+        Field::mapped(
+            "floatArray",
+            "float_array",
+            FieldType::Array(ElemType::Float),
+        ),
+        Field::mapped(
+            "numericArray",
+            "numeric_array",
+            FieldType::Array(ElemType::Numeric),
+        ),
+        Field::mapped("boolArray", "bool_array", FieldType::Array(ElemType::Bool)),
+        Field::mapped(
+            "customNumericArray",
+            "custom_numeric_array",
+            FieldType::Array(ElemType::Custom(&withdrawals_table::UINT_256)),
+        ),
+    ]
+}
+
+fn row_mapping_matrix_query(sql: &'static str) -> rqb_core::SelectBuilder {
+    let fields = row_mapping_matrix_fields();
+    select(Dataset::raw(sql, "matrix").fields(fields.clone())).fields(fields)
+}
+
+async fn assert_row_mapping_paths_match(client: &TestDb, sql: &'static str) -> TestResult {
+    let built = row_mapping_matrix_query(sql).build_pg()?.rows;
+    let rows = query(client, &built).await?;
+    assert_eq!(rows.len(), 1);
+
+    let json_path = row_to_json(&rows[0], &built.columns)?;
+    let direct_path: serde_json::Value = row_mapping_matrix_query(sql).fetch_one_as(client).await?;
+
+    assert_eq!(direct_path, json_path);
+    Ok(())
+}
+
+const ROW_MAPPING_NON_NULL_SQL: &str = r#"
+SELECT
+    'hello'::text AS text_value,
+    'Ada'::citext AS citext_value,
+    '10.1.2.3'::inet AS inet_value,
+    '10.1.0.0/16'::cidr AS cidr_value,
+    '[2026-02-01T00:00:00Z,2026-03-01T00:00:00Z)'::tstzrange AS timestamptz_range,
+    '[2026-02-01 00:00:00,2026-03-01 00:00:00)'::tsrange AS timestamp_range,
+    '[2026-02-01,2026-03-01)'::daterange AS date_range,
+    'paid'::order_status AS enum_value,
+    '10000000-0000-0000-0000-000000000001'::uuid AS uuid_value,
+    '2026-02-01 12:30:00'::timestamp AS timestamp_value,
+    '2026-02-01T12:30:00Z'::timestamptz AS timestamptz_value,
+    '2026-02-01'::date AS date_value,
+    42::int AS int_value,
+    9007199254740993::bigint AS bigint_value,
+    1.25::double precision AS float_value,
+    '9007199254740993.123'::numeric AS numeric_value,
+    true AS bool_value,
+    '{"k":"v","n":7}'::jsonb AS json_value,
+    decode('DEADBEEF', 'hex') AS bytes_value,
+    '900719925474099312345678901234567890'::uint_256 AS custom_numeric_value,
+    ARRAY['a','b']::text[] AS text_array,
+    ARRAY['draft','paid']::order_status[] AS enum_array,
+    ARRAY['10000000-0000-0000-0000-000000000001'::uuid] AS uuid_array,
+    ARRAY['2026-02-01 12:30:00'::timestamp] AS timestamp_array,
+    ARRAY['2026-02-01T12:30:00Z'::timestamptz] AS timestamptz_array,
+    ARRAY['2026-02-01'::date] AS date_array,
+    ARRAY[1,2]::int[] AS int_array,
+    ARRAY[9007199254740993,9007199254740994]::bigint[] AS bigint_array,
+    ARRAY[1.25,2.5]::double precision[] AS float_array,
+    ARRAY['9007199254740993.123','42']::numeric[] AS numeric_array,
+    ARRAY[true,false]::bool[] AS bool_array,
+    ARRAY['900719925474099312345678901234567890'::uint_256,'42'::uint_256] AS custom_numeric_array
+"#;
+
+const ROW_MAPPING_NULL_SQL: &str = r#"
+SELECT
+    NULL::text AS text_value,
+    NULL::citext AS citext_value,
+    NULL::inet AS inet_value,
+    NULL::cidr AS cidr_value,
+    NULL::tstzrange AS timestamptz_range,
+    NULL::tsrange AS timestamp_range,
+    NULL::daterange AS date_range,
+    NULL::order_status AS enum_value,
+    NULL::uuid AS uuid_value,
+    NULL::timestamp AS timestamp_value,
+    NULL::timestamptz AS timestamptz_value,
+    NULL::date AS date_value,
+    NULL::int AS int_value,
+    NULL::bigint AS bigint_value,
+    NULL::double precision AS float_value,
+    NULL::numeric AS numeric_value,
+    NULL::bool AS bool_value,
+    NULL::jsonb AS json_value,
+    NULL::bytea AS bytes_value,
+    NULL::numeric AS custom_numeric_value,
+    NULL::text[] AS text_array,
+    NULL::order_status[] AS enum_array,
+    NULL::uuid[] AS uuid_array,
+    NULL::timestamp[] AS timestamp_array,
+    NULL::timestamptz[] AS timestamptz_array,
+    NULL::date[] AS date_array,
+    NULL::int[] AS int_array,
+    NULL::bigint[] AS bigint_array,
+    NULL::double precision[] AS float_array,
+    NULL::numeric[] AS numeric_array,
+    NULL::bool[] AS bool_array,
+    NULL::numeric[] AS custom_numeric_array
+"#;
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RowMappingNonNull {
+    text_value: String,
+    citext_value: String,
+    inet_value: String,
+    cidr_value: String,
+    timestamptz_range: String,
+    timestamp_range: String,
+    date_range: String,
+    enum_value: order_search::OrderStatus,
+    uuid_value: String,
+    timestamp_value: String,
+    timestamptz_value: String,
+    date_value: String,
+    int_value: i32,
+    bigint_value: i64,
+    float_value: f64,
+    numeric_value: String,
+    bool_value: bool,
+    json_value: serde_json::Value,
+    bytes_value: Vec<u8>,
+    custom_numeric_value: String,
+    text_array: Vec<String>,
+    enum_array: Vec<order_search::OrderStatus>,
+    uuid_array: Vec<String>,
+    timestamp_array: Vec<String>,
+    timestamptz_array: Vec<String>,
+    date_array: Vec<String>,
+    int_array: Vec<i32>,
+    bigint_array: Vec<i64>,
+    float_array: Vec<f64>,
+    numeric_array: Vec<String>,
+    bool_array: Vec<bool>,
+    custom_numeric_array: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RowMappingNullable {
+    text_value: Option<String>,
+    citext_value: Option<String>,
+    inet_value: Option<String>,
+    cidr_value: Option<String>,
+    timestamptz_range: Option<String>,
+    timestamp_range: Option<String>,
+    date_range: Option<String>,
+    enum_value: Option<order_search::OrderStatus>,
+    uuid_value: Option<String>,
+    timestamp_value: Option<String>,
+    timestamptz_value: Option<String>,
+    date_value: Option<String>,
+    int_value: Option<i32>,
+    bigint_value: Option<i64>,
+    float_value: Option<f64>,
+    numeric_value: Option<String>,
+    bool_value: Option<bool>,
+    json_value: Option<serde_json::Value>,
+    bytes_value: Option<Vec<u8>>,
+    custom_numeric_value: Option<String>,
+    text_array: Option<Vec<String>>,
+    enum_array: Option<Vec<order_search::OrderStatus>>,
+    uuid_array: Option<Vec<String>>,
+    timestamp_array: Option<Vec<String>>,
+    timestamptz_array: Option<Vec<String>>,
+    date_array: Option<Vec<String>>,
+    int_array: Option<Vec<i32>>,
+    bigint_array: Option<Vec<i64>>,
+    float_array: Option<Vec<f64>>,
+    numeric_array: Option<Vec<String>>,
+    bool_array: Option<Vec<bool>>,
+    custom_numeric_array: Option<Vec<String>>,
+}
+
 #[tokio::test]
 async fn executes_view_query_with_jsonb_arrays_projection_and_count() -> TestResult {
     let Some(client) = begin_test_transaction().await? else {
@@ -409,6 +657,74 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
     assert_eq!(row.billing_dates, "[2026-02-01,2026-03-01)");
     assert_eq!(row.created_local, "2026-02-01 12:30:00");
     assert!(row.created_at.starts_with("2026-02-01T12:30:00"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn row_mapping_paths_stay_consistent_for_supported_type_matrix() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    assert_row_mapping_paths_match(&client, ROW_MAPPING_NON_NULL_SQL).await?;
+    assert_row_mapping_paths_match(&client, ROW_MAPPING_NULL_SQL).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn direct_row_mapping_deserializes_supported_type_matrix_into_structs() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    let built = row_mapping_matrix_query(ROW_MAPPING_NON_NULL_SQL)
+        .build_pg()?
+        .rows;
+    let rows = query(&client, &built).await?;
+    assert_eq!(rows.len(), 1);
+    let expected = row_to_json(&rows[0], &built.columns)?;
+
+    let row: RowMappingNonNull = row_mapping_matrix_query(ROW_MAPPING_NON_NULL_SQL)
+        .fetch_one_as(&client)
+        .await?;
+    assert_eq!(row.enum_value, order_search::OrderStatus::Paid);
+    assert_eq!(
+        row.enum_array,
+        vec![
+            order_search::OrderStatus::Draft,
+            order_search::OrderStatus::Paid
+        ]
+    );
+    assert_eq!(row.bytes_value, vec![0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(row.numeric_value, "9007199254740993.123");
+    assert_eq!(row.custom_numeric_array[1], "42");
+    assert_eq!(serde_json::to_value(&row)?, expected);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn direct_row_mapping_deserializes_typed_nulls_into_options() -> TestResult {
+    let Some(client) = begin_test_transaction().await? else {
+        return Ok(());
+    };
+
+    let built = row_mapping_matrix_query(ROW_MAPPING_NULL_SQL)
+        .build_pg()?
+        .rows;
+    let rows = query(&client, &built).await?;
+    assert_eq!(rows.len(), 1);
+    let expected = row_to_json(&rows[0], &built.columns)?;
+
+    let row: RowMappingNullable = row_mapping_matrix_query(ROW_MAPPING_NULL_SQL)
+        .fetch_one_as(&client)
+        .await?;
+    assert!(row.text_value.is_none());
+    assert!(row.enum_value.is_none());
+    assert!(row.bytes_value.is_none());
+    assert!(row.custom_numeric_array.is_none());
+    assert_eq!(serde_json::to_value(&row)?, expected);
 
     Ok(())
 }
@@ -885,6 +1201,12 @@ async fn raw_query_executes_maps_rows_and_validates_binds() -> TestResult {
         .await?;
     assert_eq!(escaped.literal, "?");
     assert_eq!(escaped.value, "bound");
+
+    let null_int: Option<i32> = raw_query("SELECT ?::int")
+        .bind(Value::Null)
+        .fetch_one_scalar(&client)
+        .await?;
+    assert_eq!(null_int, None);
 
     let updated = raw_query("UPDATE app_users SET profile = profile || ?::jsonb WHERE email = ?")
         .bind(serde_json::json!({ "rawQuery": true }))

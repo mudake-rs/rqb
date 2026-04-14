@@ -76,25 +76,30 @@ pub enum FieldType {
 }
 
 impl FieldType {
+    #[inline]
     pub fn is_jsonb(self) -> bool {
         matches!(self, Self::Jsonb)
             || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Jsonb)
     }
 
+    #[inline]
     pub fn is_array(self) -> bool {
         matches!(self, Self::Array(_))
     }
 
+    #[inline]
     pub fn is_range(self) -> bool {
         matches!(self, Self::Range(_))
             || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Range)
     }
 
+    #[inline]
     pub fn is_network(self) -> bool {
         matches!(self, Self::Inet | Self::Cidr)
             || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Network)
     }
 
+    #[inline]
     pub fn is_numeric(self) -> bool {
         matches!(
             self,
@@ -102,6 +107,7 @@ impl FieldType {
         ) || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Numeric)
     }
 
+    #[inline]
     pub fn is_temporal(self) -> bool {
         matches!(self, Self::Timestamp | Self::Timestamptz | Self::Date)
             || matches!(
@@ -114,6 +120,7 @@ impl FieldType {
             )
     }
 
+    #[inline]
     pub fn is_text(self) -> bool {
         matches!(self, Self::Text | Self::Citext)
             || matches!(self, Self::Custom(type_spec) if type_spec.family == TypeFamily::Text)

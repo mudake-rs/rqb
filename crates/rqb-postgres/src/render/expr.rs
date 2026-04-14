@@ -47,7 +47,7 @@ impl Renderer {
             ValidatedSqlExpr::Field(field) => self.render_column_name(field),
             ValidatedSqlExpr::Excluded(field) => {
                 self.sql.push_str("EXCLUDED.");
-                write_quoted_ident(&mut self.sql, &field.db_name);
+                write_quoted_ident(&mut self.sql, field.db_name.as_ref());
             }
             ValidatedSqlExpr::Value { value, ty } => self.push_typed_param(value, *ty),
             ValidatedSqlExpr::Raw { raw, .. } => self.render_raw(raw),
@@ -144,7 +144,7 @@ impl Renderer {
         match path {
             JsonAccessPath::Key(key) => {
                 self.sql.push_str(if text { " ->> " } else { " -> " });
-                self.push_owned_param(Value::String(key.clone()));
+                self.push_text_param(key);
             }
             JsonAccessPath::Index(index) => {
                 self.sql.push_str(if text { " ->> " } else { " -> " });

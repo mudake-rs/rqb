@@ -1,6 +1,6 @@
 use rqb_core::{
     FieldType, RawSql, ResolvedField, Source, ValidatedReturningItem, ValidatedSelectItem,
-    ValidatedSort, ValidatedSource, ValidatedWriteValue, Value,
+    ValidatedSort, ValidatedSource, ValidatedWriteValue,
 };
 
 use crate::helpers::{value_to_json, write_quoted_ident, write_quoted_qualified};
@@ -27,7 +27,7 @@ impl Renderer {
             || field.api_name != field.db_name
         {
             self.sql.push_str(" AS ");
-            write_quoted_ident(&mut self.sql, &field.output_alias());
+            self.render_output_alias(field);
         }
     }
 
@@ -139,7 +139,7 @@ impl Renderer {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
-            write_quoted_ident(&mut self.sql, &field.db_name);
+            write_quoted_ident(&mut self.sql, field.db_name.as_ref());
         }
         self.sql.push(')');
     }
@@ -189,9 +189,19 @@ impl Renderer {
         if let Some(qualifier) = &field.qualifier {
             write_quoted_ident(&mut self.sql, qualifier);
             self.sql.push('.');
-            write_quoted_ident(&mut self.sql, &field.db_name);
+            write_quoted_ident(&mut self.sql, field.db_name.as_ref());
         } else {
-            write_quoted_qualified(&mut self.sql, &field.db_name);
+            write_quoted_qualified(&mut self.sql, field.db_name.as_ref());
+        }
+    }
+
+    fn render_output_alias(&mut self, field: &ResolvedField) {
+        if let Some(alias) = &field.alias {
+            write_quoted_ident(&mut self.sql, alias);
+        } else if let Some(qualifier) = &field.explicit_qualifier {
+            write_quoted_ident(&mut self.sql, &format!("{qualifier}_{}", field.api_name));
+        } else {
+            write_quoted_ident(&mut self.sql, field.api_name.as_ref());
         }
     }
 
@@ -201,7 +211,7 @@ impl Renderer {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
-            self.push_param(&Value::String(segment.clone()));
+            self.push_text_param(segment);
         }
         self.sql.push_str("]::text[]");
     }

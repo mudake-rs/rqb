@@ -9,17 +9,28 @@ pub(crate) fn quote_ident(ident: &str) -> String {
 
 pub(crate) fn write_quoted_ident(output: &mut String, ident: &str) {
     output.push('"');
-    for ch in ident.chars() {
-        if ch == '"' {
-            output.push('"');
+    if !ident.contains('"') {
+        output.push_str(ident);
+    } else {
+        for ch in ident.chars() {
+            if ch == '"' {
+                output.push('"');
+            }
+            output.push(ch);
         }
-        output.push(ch);
     }
     output.push('"');
 }
 
-pub(crate) fn quote_literal(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
+pub(crate) fn write_quoted_literal(output: &mut String, value: &str) {
+    output.push('\'');
+    for ch in value.chars() {
+        if ch == '\'' {
+            output.push('\'');
+        }
+        output.push(ch);
+    }
+    output.push('\'');
 }
 
 pub(crate) fn needs_count_subquery(validated: &ValidatedSelect) -> bool {
@@ -50,11 +61,16 @@ pub(crate) fn write_quoted_qualified(output: &mut String, name: &str) {
     }
 }
 
-pub(crate) fn escape_like(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_")
+pub(crate) fn write_escaped_like(output: &mut String, value: &str) {
+    for ch in value.chars() {
+        match ch {
+            '\\' | '%' | '_' => {
+                output.push('\\');
+                output.push(ch);
+            }
+            _ => output.push(ch),
+        }
+    }
 }
 
 pub(crate) fn value_to_json(value: &Value) -> Value {

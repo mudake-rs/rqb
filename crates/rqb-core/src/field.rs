@@ -184,6 +184,8 @@ impl Field {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -206,8 +208,8 @@ mod tests {
     #[test]
     fn resolved_field_output_alias_prefers_explicit_alias() {
         let field = ResolvedField {
-            api_name: "totalCents".to_owned(),
-            db_name: "total_cents".to_owned(),
+            api_name: Cow::Borrowed("totalCents"),
+            db_name: Cow::Borrowed("total_cents"),
             ty: FieldType::BigInt,
             caps: Capabilities::all(),
             json_path: Vec::new(),

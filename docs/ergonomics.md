@@ -435,8 +435,10 @@ struct OrderSummary {
 let user = select(users().alias("u"))
     .left_join(orders().alias("o"), USER_ID.on("o").eq_col(ID.on("u")))
     .fields([ID.on("u"), EMAIL.on("u")])
-    .json_agg("orders", [ORDER_ID.on("o"), STATUS.on("o")])
-    .filter_agg("orders", ORDER_ID.on("o").is_not_null())
+    .agg(
+        json_agg("orders", [ORDER_ID.on("o"), STATUS.on("o")])
+            .filter(ORDER_ID.on("o").is_not_null())
+    )
     .fetch_one_as::<UserWithOrders>(&db)
     .await?;
 ```

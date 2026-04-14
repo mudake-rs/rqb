@@ -2,15 +2,21 @@
 
 These are useful follow-ups that came out of the REST sample and API review. They are not required for the current API to work, but they are good candidates for the next round of ergonomics work.
 
-## Aggregate Filters
+## Aggregate Modifiers
 
-`json_agg("orders", fields)` returns an empty array instead of `null`, but left joins still need an explicit aggregate filter such as:
+Inline aggregate modifiers are available:
 
 ```rust
-.filter_agg("orders", order.id().is_not_null())
+.agg(
+    json_agg("orders", [order.id(), order.status()])
+        .filter(order.id().is_not_null())
+        .order_by(order.created_at().desc())
+)
 ```
 
-A cleaner API would let the aggregate builder accept the filter directly, or infer a non-null marker field for common left-join JSON aggregate cases.
+Alias-based `filter_agg` and `order_within` remain useful for builder-style
+composition, but examples should prefer inline modifiers when the aggregate is
+created in the same expression.
 
 ## Generated Validators
 

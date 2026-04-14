@@ -24,8 +24,8 @@ pub use rqb_core::{
     SelectRepr, Sort, SortDir, Source, SubqueryOperator, SubqueryPredicate, TextSearchConfig,
     TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr, WriteAssignment,
     WriteValue, all, any, array_agg, avg, count, count_distinct, count_field, cte, delete, exists,
-    field, insert, max, max_agg, min, min_agg, not, not_exists, raw, raw_query, select, string_agg,
-    sum, update,
+    field, insert, json_agg, json_agg_nullable, max, max_agg, min, min_agg, not, not_exists, raw,
+    raw_query, select, string_agg, sum, update,
 };
 pub use rqb_postgres as postgres;
 #[cfg(feature = "pool")]

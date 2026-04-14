@@ -42,14 +42,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nested = select(users)
         .left_join(orders, USER_ID.on("u").eq_col(ORDER_USER_ID.on("o")))
         .fields([USER_ID.on("u"), USER_EMAIL.on("u")])
-        .json_agg(
-            "orders",
-            [
-                ORDER_ID.on("o").alias("id"),
-                ORDER_STATUS.on("o").alias("status"),
-            ],
+        .agg(
+            json_agg(
+                "orders",
+                [
+                    ORDER_ID.on("o").alias("id"),
+                    ORDER_STATUS.on("o").alias("status"),
+                ],
+            )
+            .filter(ORDER_ID.on("o").is_not_null()),
         )
-        .filter_agg("orders", ORDER_ID.on("o").is_not_null())
         .filter(USER_EMAIL.on("u").contains("@example.com"))
         .build_pg()?;
 

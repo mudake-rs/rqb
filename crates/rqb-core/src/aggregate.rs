@@ -213,6 +213,40 @@ pub fn array_agg(field: impl Into<FieldRef>, alias: impl Into<String>) -> Aggreg
     }
 }
 
+pub fn json_agg<I, F>(alias: impl Into<String>, fields: I) -> Aggregate
+where
+    I: IntoIterator<Item = F>,
+    F: Into<FieldRef>,
+{
+    json_agg_with_default(alias, fields, true)
+}
+
+pub fn json_agg_nullable<I, F>(alias: impl Into<String>, fields: I) -> Aggregate
+where
+    I: IntoIterator<Item = F>,
+    F: Into<FieldRef>,
+{
+    json_agg_with_default(alias, fields, false)
+}
+
+pub(crate) fn json_agg_with_default<I, F>(
+    alias: impl Into<String>,
+    fields: I,
+    default_empty: bool,
+) -> Aggregate
+where
+    I: IntoIterator<Item = F>,
+    F: Into<FieldRef>,
+{
+    Aggregate::JsonAgg {
+        alias: alias.into(),
+        fields: fields.into_iter().map(Into::into).collect(),
+        order_by: None,
+        filter: None,
+        default_empty,
+    }
+}
+
 pub fn string_agg(
     field: impl Into<FieldRef>,
     separator: impl Into<String>,
@@ -224,5 +258,45 @@ pub fn string_agg(
         alias: alias.into(),
         order_by: None,
         filter: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::expr::field;
+
+    #[test]
+    fn json_agg_function_builds_filterable_aggregate() {
+        let aggregate = json_agg("orders", [field("o.id"), field("o.status")])
+            .filter(field("o.id").is_not_null())
+            .order_by(field("o.createdAt").desc());
+
+        let Aggregate::JsonAgg {
+            alias,
+            fields,
+            order_by,
+            filter,
+            default_empty,
+        } = aggregate
+        else {
+            panic!("expected JsonAgg");
+        };
+
+        assert_eq!(alias, "orders");
+        assert_eq!(fields.len(), 2);
+        assert!(order_by.is_some());
+        assert!(filter.is_some());
+        assert!(default_empty);
+    }
+
+    #[test]
+    fn json_agg_nullable_function_preserves_sql_null_contract() {
+        let Aggregate::JsonAgg { default_empty, .. } = json_agg_nullable("orders", [field("o.id")])
+        else {
+            panic!("expected JsonAgg");
+        };
+
+        assert!(!default_empty);
     }
 }

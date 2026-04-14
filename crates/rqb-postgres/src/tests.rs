@@ -5,8 +5,8 @@ use pretty_assertions::assert_eq;
 use rqb_core::{
     Dataset, ElemType, EnumType, Field, FieldType, JsonPathPolicy, SearchRequest, SelectColumn,
     SelectRepr, Sort, TypeFamily, TypeSpec, Value, ValueRepr, all, array_agg, avg, count,
-    count_distinct, delete, exists, field, insert, max, min, not_exists, raw, raw_query, select,
-    string_agg, sum, update,
+    count_distinct, delete, exists, field, insert, json_agg, max, min, not_exists, raw, raw_query,
+    select, string_agg, sum, update,
 };
 use serde::Serialize;
 use tokio_postgres::{Row, types::ToSql};
@@ -1677,9 +1677,11 @@ fn renders_json_agg_with_order_and_filter() {
             field("o.userId").eq_col(field("u.id")),
         )
         .fields([field("u.email")])
-        .json_agg("orders", [field("o.id"), field("o.status")])
-        .order_within("orders", Sort::desc("o.createdAt"))
-        .filter_agg("orders", field("o.status").eq("paid"))
+        .agg(
+            json_agg("orders", [field("o.id"), field("o.status")])
+                .order_by(Sort::desc("o.createdAt"))
+                .filter(field("o.status").eq("paid")),
+        )
         .group_by([field("u.email")])
         .build_rows_pg()
         .unwrap();
@@ -1700,8 +1702,10 @@ fn renders_json_agg_default_empty_auto_group_by_and_root_aliases() {
             field("u.id").eq_col(field("o.userId")),
         )
         .fields([field("u.id"), field("u.email")])
-        .json_agg("orders", [field("o.id"), field("o.status")])
-        .filter_agg("orders", field("o.id").is_not_null())
+        .agg(
+            json_agg("orders", [field("o.id"), field("o.status")])
+                .filter(field("o.id").is_not_null()),
+        )
         .build_rows_pg()
         .unwrap();
 

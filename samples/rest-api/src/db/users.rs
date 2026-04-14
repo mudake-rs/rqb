@@ -119,16 +119,18 @@ impl UserService {
         // `u.id`, while root output aliases are stripped back to `id`, `email`, etc. for serde.
         select(&user)
             .left_join(&order, user.id().eq_col(order.user_id()))
-            .json_agg(
-                "orders",
-                [
-                    order.id(),
-                    order.status(),
-                    order.channel(),
-                    order.created_at(),
-                ],
+            .agg(
+                json_agg(
+                    "orders",
+                    [
+                        order.id(),
+                        order.status(),
+                        order.channel(),
+                        order.created_at(),
+                    ],
+                )
+                .filter(order.id().is_not_null()),
             )
-            .filter_agg("orders", order.id().is_not_null())
             .filter(user.id().eq(id))
             .fetch_one_as(exec)
             .await

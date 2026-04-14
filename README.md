@@ -283,13 +283,15 @@ Available lock modes: `.for_update()`, `.for_no_key_update()`, `.for_share()`, `
 let rows = select(users().alias("u"))
     .left_join(orders().alias("o"), USER_ID.on("o").eq_col(ID.on("u")))
     .fields([ID.on("u"), EMAIL.on("u")])
-    .json_agg("orders", [ORDER_ID.on("o"), STATUS.on("o")])
-    .filter_agg("orders", ORDER_ID.on("o").is_not_null())
+    .agg(
+        json_agg("orders", [ORDER_ID.on("o"), STATUS.on("o")])
+            .filter(ORDER_ID.on("o").is_not_null())
+    )
     .fetch_as::<UserWithOrders>(&db)
     .await?;
 ```
 
-Other aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `string_agg`.
+Other aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `json_agg`, and `string_agg`.
 
 ## Writes
 

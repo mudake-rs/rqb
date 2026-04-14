@@ -10,14 +10,14 @@ mod query;
 mod select;
 mod update;
 
-use rqb_core::{SelectColumn, Value};
+use rqb_core::SelectColumn;
 
-use crate::BuiltQuery;
+use crate::{BindParam, BuiltQuery};
 
 #[derive(Default)]
 pub(crate) struct Renderer {
     sql: String,
-    params: Vec<Value>,
+    params: Vec<BindParam>,
     columns: Vec<SelectColumn>,
     cacheable: bool,
 }

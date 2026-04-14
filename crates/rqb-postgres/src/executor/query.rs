@@ -1,8 +1,9 @@
-use rqb_core::Value;
 use serde::de::DeserializeOwned;
 use tokio_postgres::{Row, types::FromSqlOwned};
 
-use crate::{BuiltQuery, BuiltSelect, Error, PgParams, Result, raw_row_to_json, row_to_json};
+use crate::{
+    BindParam, BuiltQuery, BuiltSelect, Error, PgParams, Result, raw_row_to_json, row_to_json,
+};
 
 use super::driver::{Page, PgExecutor, StatementCache};
 
@@ -28,10 +29,10 @@ pub(super) async fn execute_query(exec: &impl PgExecutor, built: BuiltQuery) -> 
 async fn query_all_parts(
     exec: &impl PgExecutor,
     sql: &str,
-    params: &[Value],
+    params: &[BindParam],
     cacheable: bool,
 ) -> Result<Vec<Row>> {
-    let pg = PgParams::from_values(params);
+    let pg = PgParams::from_binds(params);
     let refs = pg.as_refs();
     exec.query(sql, &refs, StatementCache::from_cacheable(cacheable))
         .await
@@ -40,10 +41,10 @@ async fn query_all_parts(
 async fn query_optional_parts(
     exec: &impl PgExecutor,
     sql: &str,
-    params: &[Value],
+    params: &[BindParam],
     cacheable: bool,
 ) -> Result<Option<Row>> {
-    let pg = PgParams::from_values(params);
+    let pg = PgParams::from_binds(params);
     let refs = pg.as_refs();
     exec.query_opt(sql, &refs, StatementCache::from_cacheable(cacheable))
         .await
@@ -52,10 +53,10 @@ async fn query_optional_parts(
 async fn execute_parts(
     exec: &impl PgExecutor,
     sql: &str,
-    params: &[Value],
+    params: &[BindParam],
     cacheable: bool,
 ) -> Result<u64> {
-    let pg = PgParams::from_values(params);
+    let pg = PgParams::from_binds(params);
     let refs = pg.as_refs();
     exec.execute_sql(sql, &refs, StatementCache::from_cacheable(cacheable))
         .await

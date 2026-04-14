@@ -7,6 +7,7 @@
 
 #![allow(clippy::result_large_err)]
 
+mod bind;
 mod build;
 mod built;
 mod error;
@@ -26,6 +27,7 @@ mod row_map;
 mod tests;
 mod type_sql;
 
+pub use bind::{BindParam, BindType};
 pub use build::{BuildPostgres, BuildRowsPostgres, Postgres};
 pub use built::{BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql};
 pub use error::Error;

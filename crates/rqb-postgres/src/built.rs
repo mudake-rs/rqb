@@ -1,16 +1,17 @@
 use std::fmt;
 
-use rqb_core::{SelectColumn, Value};
+use rqb_core::SelectColumn;
 
 #[cfg(feature = "runtime-tokio-postgres")]
 use crate::PgParams;
+use crate::bind::BindParam;
 
 /// A single rendered Postgres statement with collected bind parameters.
 #[derive(Clone, Debug, PartialEq)]
 #[must_use]
 pub struct BuiltQuery {
     pub sql: String,
-    pub params: Vec<Value>,
+    pub params: Vec<BindParam>,
     pub columns: Vec<SelectColumn>,
     pub cacheable: bool,
 }
@@ -36,7 +37,7 @@ impl fmt::Display for DebugSql<'_> {
 #[cfg(feature = "runtime-tokio-postgres")]
 impl BuiltQuery {
     pub fn params(&self) -> PgParams {
-        PgParams::from_values(&self.params)
+        PgParams::from_binds(&self.params)
     }
 }
 

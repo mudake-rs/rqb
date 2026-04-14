@@ -3,8 +3,9 @@ use crate::{
     ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType,
     IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr,
     Sort, SubqueryOperator, TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce,
-    count, count_field, date_trunc, excluded, field, gen_random_uuid, greatest, insert, least,
-    length, lower, max, min, now, nullif, set_default, set_expr, string_agg, sum,
+    count, count_field, date_trunc, dense_rank, excluded, field, gen_random_uuid, greatest, insert,
+    lag, lead, least, length, lower, max, min, now, nullif, partition_by, rank, row_number,
+    set_default, set_expr, string_agg, sum, window,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -247,6 +248,135 @@ fn validates_json_access_expression_types() {
     assert_eq!(validated.select_items[2].ty, FieldType::Jsonb);
     assert_eq!(validated.select_items[3].ty, FieldType::Jsonb);
     assert_eq!(validated.select_items[4].ty, FieldType::Text);
+}
+
+#[test]
+fn validates_window_function_expression_types() {
+    let query = crate::select(dataset())
+        .select_expr(
+            row_number()
+                .over(partition_by(field("state")).order_by(field("createdAt").desc()))
+                .alias("rowNumber"),
+        )
+        .select_expr(
+            rank()
+                .over(window().order_by(field("score").desc()))
+                .alias("scoreRank"),
+        )
+        .select_expr(
+            dense_rank()
+                .over(window().order_by(field("score").desc()))
+                .alias("denseScoreRank"),
+        )
+        .select_expr(
+            lag(field("score"))
+                .offset(1)
+                .default(0)
+                .over(partition_by(field("state")).order_by(field("createdAt").asc()))
+                .alias("previousScore"),
+        )
+        .select_expr(
+            lead(field("score"))
+                .over(window().order_by(field("createdAt").asc()))
+                .alias("nextScore"),
+        )
+        .build();
+
+    let validated = ValidatedSelect::new(query).unwrap();
+
+    let columns = validated
+        .columns
+        .iter()
+        .map(crate::SelectColumn::alias)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        columns,
+        [
+            "rowNumber",
+            "scoreRank",
+            "denseScoreRank",
+            "previousScore",
+            "nextScore",
+        ]
+    );
+    assert_eq!(validated.select_items[0].ty, FieldType::BigInt);
+    assert_eq!(validated.select_items[1].ty, FieldType::BigInt);
+    assert_eq!(validated.select_items[2].ty, FieldType::BigInt);
+    assert_eq!(validated.select_items[3].ty, FieldType::Integer);
+    assert_eq!(validated.select_items[4].ty, FieldType::Integer);
+}
+
+#[test]
+fn rejects_invalid_window_function_expressions() {
+    let bad_offset = crate::select(dataset())
+        .select_expr(
+            lag(field("score"))
+                .offset("two")
+                .over(window().order_by(field("createdAt").asc()))
+                .alias("bad"),
+        )
+        .build();
+    let err = ValidatedSelect::new(bad_offset).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "lag" && operator == "window" && message.contains("expected integer offset")
+    ));
+
+    let bad_default = crate::select(dataset())
+        .select_expr(
+            lag(field("score"))
+                .default("none")
+                .over(window().order_by(field("createdAt").asc()))
+                .alias("bad"),
+        )
+        .build();
+    let err = ValidatedSelect::new(bad_default).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "lag" && operator == "window" && message.contains("default value type")
+    ));
+
+    let bad_offset_range = crate::select(dataset())
+        .select_expr(
+            lag(field("score"))
+                .offset(i64::from(i32::MAX) + 1)
+                .over(window().order_by(field("createdAt").asc()))
+                .alias("bad"),
+        )
+        .build();
+    let err = ValidatedSelect::new(bad_offset_range).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "lag" && operator == "window" && message.contains("outside the integer range")
+    ));
+
+    let returning = crate::update(dataset())
+        .set("score", 1)
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .returning_expr(row_number().over(window()).alias("rn"))
+        .build()
+        .unwrap();
+    let err = ValidatedUpdate::new(returning).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::InvalidValue {
+            field,
+            operator,
+            message,
+        } if field == "row_number" && operator == "window" && message.contains("only valid in select")
+    ));
 }
 
 #[test]
@@ -987,6 +1117,50 @@ fn rejects_scalar_values_that_do_not_match_field_types() {
             "unexpected error for {field}: {err}"
         );
     }
+}
+
+#[test]
+fn rejects_integer_values_outside_postgres_int4_range() {
+    let too_large = i64::from(i32::MAX) + 1;
+    let too_small = i64::from(i32::MIN) - 1;
+    for (expr, field) in [
+        (field("score").eq(too_large), "score"),
+        (field("score").eq(too_small), "score"),
+    ] {
+        let query = crate::select(dataset()).filter(expr).build();
+        let err = ValidatedSelect::new(query).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::InvalidValue {
+                    field: ref actual,
+                    ref message,
+                    ..
+                } if actual == field && message.contains("outside the PostgreSQL integer range")
+            ),
+            "unexpected error for {field}: {err}"
+        );
+    }
+
+    let scores = Dataset::table("scores").fields([
+        Field::new("id", FieldType::Uuid),
+        Field::new("values", FieldType::Array(ElemType::Int)).sortable(false),
+    ]);
+    let query = crate::select(scores)
+        .filter(field("values").contains_all([1, too_large]))
+        .build();
+    let err = ValidatedSelect::new(query).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::InvalidValue {
+                ref field,
+                ref message,
+                ..
+            } if field == "values" && message.contains("outside the PostgreSQL integer range")
+        ),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]

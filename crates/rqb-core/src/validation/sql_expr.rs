@@ -1,6 +1,9 @@
 use crate::error::{Error, Result};
 use crate::field::ResolvedField;
-use crate::sql_expr::{BuiltinFunction, FunctionNameStyle, JsonAccessPath, SelectItem, SqlExpr};
+use crate::sql_expr::{
+    BuiltinFunction, FunctionNameStyle, JsonAccessPath, SelectItem, SqlExpr, WindowFunction,
+    WindowSpec,
+};
 use crate::types::{FieldType, TypeFamily};
 use crate::value::Value;
 
@@ -8,13 +11,16 @@ use super::expr::validate_expr;
 use super::operators::count_raw_placeholders;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
+use super::sort::validate_sort;
 use super::{
     ValidatedCaseBranch, ValidatedExpr, ValidatedPredicate, ValidatedSelectItem, ValidatedSqlExpr,
+    ValidatedWindowSpec,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SqlExprContext {
     Select,
+    Returning,
     Write,
     ConflictUpdate,
 }
@@ -23,10 +29,25 @@ pub(super) fn validate_select_item(
     scope: &QueryScope,
     item: &SelectItem,
 ) -> Result<ValidatedSelectItem> {
+    validate_select_item_in_context(scope, item, SqlExprContext::Select)
+}
+
+pub(super) fn validate_returning_select_item(
+    scope: &QueryScope,
+    item: &SelectItem,
+) -> Result<ValidatedSelectItem> {
+    validate_select_item_in_context(scope, item, SqlExprContext::Returning)
+}
+
+fn validate_select_item_in_context(
+    scope: &QueryScope,
+    item: &SelectItem,
+    context: SqlExprContext,
+) -> Result<ValidatedSelectItem> {
     if item.alias.trim().is_empty() {
         return Err(Error::EmptyExpressionAlias);
     }
-    let expr = validate_sql_expr_in_context(scope, &item.expr, SqlExprContext::Select)?;
+    let expr = validate_sql_expr_in_context(scope, &item.expr, context)?;
     let ty = expr.ty();
     Ok(ValidatedSelectItem {
         expr,
@@ -128,6 +149,11 @@ fn validate_sql_expr_in_context(
                 },
             }
         }
+        SqlExpr::Window {
+            function,
+            args,
+            spec,
+        } => validate_window_function(scope, *function, args, spec, context)?,
         SqlExpr::Coalesce(args) => {
             if args.is_empty() {
                 return Err(Error::UnknownExpressionType {
@@ -193,6 +219,17 @@ pub(super) fn collect_sql_expr_fields(expr: &ValidatedSqlExpr, output: &mut Vec<
             }
         }
         ValidatedSqlExpr::JsonAccess { expr, .. } => collect_sql_expr_fields(expr, output),
+        ValidatedSqlExpr::Window { args, spec, .. } => {
+            for arg in args {
+                collect_sql_expr_fields(arg, output);
+            }
+            for field in &spec.partition_by {
+                push_unique_field(output, field.clone());
+            }
+            for sort in &spec.order_by {
+                push_unique_field(output, sort.field.clone());
+            }
+        }
         ValidatedSqlExpr::Case {
             branches,
             otherwise,
@@ -339,6 +376,144 @@ fn validate_json_access_path(path: &JsonAccessPath) -> Result<()> {
     Ok(())
 }
 
+fn validate_window_function(
+    scope: &QueryScope,
+    function: WindowFunction,
+    args: &[SqlExpr],
+    spec: &WindowSpec,
+    context: SqlExprContext,
+) -> Result<ValidatedSqlExpr> {
+    if context != SqlExprContext::Select {
+        return Err(Error::InvalidValue {
+            field: function.sql_name().to_owned(),
+            operator: "window".to_owned(),
+            message: "window functions are only valid in select expressions".to_owned(),
+        });
+    }
+
+    let args = validate_sql_exprs(scope, args, context)?;
+    let (args, ty) = validate_window_function_signature(function, args)?;
+    let spec = validate_window_spec(scope, spec)?;
+    Ok(ValidatedSqlExpr::Window {
+        function,
+        args,
+        spec,
+        ty,
+    })
+}
+
+fn validate_window_function_signature(
+    function: WindowFunction,
+    mut args: Vec<ValidatedSqlExpr>,
+) -> Result<(Vec<ValidatedSqlExpr>, FieldType)> {
+    match function {
+        WindowFunction::RowNumber | WindowFunction::Rank | WindowFunction::DenseRank => {
+            require_window_arity(function, &args, 0)?;
+            Ok((args, FieldType::BigInt))
+        }
+        WindowFunction::Lag | WindowFunction::Lead => {
+            if !(1..=3).contains(&args.len()) {
+                return Err(invalid_window_arg(
+                    function,
+                    format!("expected 1 to 3 argument(s), got {}", args.len()),
+                ));
+            }
+            if args.len() >= 2 {
+                args[1] = normalize_window_offset_arg(function, args[1].clone())?;
+            }
+            if args.len() == 3 {
+                compatible_type(args[0].ty(), args[2].ty()).ok_or_else(|| {
+                    invalid_window_arg(
+                        function,
+                        format!(
+                            "default value type `{}` is incompatible with value type `{}`",
+                            args[2].ty().display_name(),
+                            args[0].ty().display_name()
+                        ),
+                    )
+                })?;
+            }
+            let ty = args[0].ty();
+            Ok((args, ty))
+        }
+    }
+}
+
+fn validate_window_spec(scope: &QueryScope, spec: &WindowSpec) -> Result<ValidatedWindowSpec> {
+    let partition_by = spec
+        .partition_by
+        .iter()
+        .map(|field| {
+            let field = resolve_field_in_scope(scope, field)?;
+            validate_sql_expr_field(&field, SqlExprContext::Select)?;
+            Ok(field)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let order_by = spec
+        .order_by
+        .iter()
+        .map(|sort| validate_sort(scope, sort))
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ValidatedWindowSpec {
+        partition_by,
+        order_by,
+    })
+}
+
+fn require_window_arity(
+    function: WindowFunction,
+    args: &[ValidatedSqlExpr],
+    expected: usize,
+) -> Result<()> {
+    if args.len() == expected {
+        return Ok(());
+    }
+    Err(invalid_window_arg(
+        function,
+        format!("expected {expected} argument(s), got {}", args.len()),
+    ))
+}
+
+fn normalize_window_offset_arg(
+    function: WindowFunction,
+    arg: ValidatedSqlExpr,
+) -> Result<ValidatedSqlExpr> {
+    if let ValidatedSqlExpr::Value {
+        value: Value::I64(value),
+        ty: FieldType::BigInt,
+    } = arg
+    {
+        if i32::try_from(value).is_err() {
+            return Err(invalid_window_arg(
+                function,
+                format!("offset value `{value}` is outside the integer range"),
+            ));
+        }
+        return Ok(ValidatedSqlExpr::Value {
+            value: Value::I64(value),
+            ty: FieldType::Integer,
+        });
+    }
+
+    if arg.ty() == FieldType::Integer {
+        return Ok(arg);
+    }
+
+    Err(invalid_window_arg(
+        function,
+        format!("expected integer offset, got `{}`", arg.ty().display_name()),
+    ))
+}
+
+fn invalid_window_arg(function: WindowFunction, message: String) -> Error {
+    Error::InvalidValue {
+        field: function.sql_name().to_owned(),
+        operator: "window".to_owned(),
+        message,
+    }
+}
+
 fn require_arity(
     function: BuiltinFunction,
     args: &[ValidatedSqlExpr],
@@ -396,7 +571,9 @@ fn validate_sql_expr_field(field: &ResolvedField, context: SqlExprContext) -> Re
             field: field.display_name(),
         });
     }
-    if context == SqlExprContext::Select && !field.caps.selectable {
+    if matches!(context, SqlExprContext::Select | SqlExprContext::Returning)
+        && !field.caps.selectable
+    {
         return Err(Error::NotSelectable {
             field: field.display_name(),
         });

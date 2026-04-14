@@ -5,7 +5,7 @@ use crate::field::ResolvedField;
 use crate::query::SetOperator;
 use crate::raw::RawSql;
 use crate::request::RowLock;
-use crate::sql_expr::{FunctionNameStyle, JsonAccessPath};
+use crate::sql_expr::{FunctionNameStyle, JsonAccessPath, WindowFunction};
 use crate::types::FieldType;
 use crate::value::Value;
 
@@ -105,6 +105,12 @@ pub enum ValidatedSqlExpr {
         text: bool,
         ty: FieldType,
     },
+    Window {
+        function: WindowFunction,
+        args: Vec<ValidatedSqlExpr>,
+        spec: ValidatedWindowSpec,
+        ty: FieldType,
+    },
     Coalesce {
         args: Vec<ValidatedSqlExpr>,
         ty: FieldType,
@@ -128,11 +134,18 @@ impl ValidatedSqlExpr {
             | Self::Raw { ty, .. }
             | Self::Function { ty, .. }
             | Self::JsonAccess { ty, .. }
+            | Self::Window { ty, .. }
             | Self::Coalesce { ty, .. }
             | Self::Case { ty, .. }
             | Self::Cast { ty, .. } => *ty,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedWindowSpec {
+    pub partition_by: Vec<ResolvedField>,
+    pub order_by: Vec<ValidatedSort>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

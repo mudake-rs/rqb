@@ -41,8 +41,8 @@ services:
       bash -lc '
         . /usr/local/cargo/env;
         until (echo > /dev/tcp/postgres/5432) >/dev/null 2>&1; do sleep 0.5; done;
-        cargo test --workspace &&
-        cargo test --workspace --all-features
+        cargo test --workspace --all-features &&
+        cargo check --workspace --no-default-features
       '
 
 volumes:

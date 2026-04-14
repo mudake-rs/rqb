@@ -23,5 +23,5 @@ pub use model::{
     ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedQueryExpr,
     ValidatedReturningItem, ValidatedSelect, ValidatedSelectItem, ValidatedSetQuery,
     ValidatedSetSort, ValidatedSort, ValidatedSource, ValidatedSqlExpr, ValidatedUpdate,
-    ValidatedWriteValue,
+    ValidatedWindowSpec, ValidatedWriteValue,
 };

@@ -764,6 +764,19 @@ match error {
 
 Use `fetch_optional` or `fetch_optional_as` when zero rows are a valid result. Use `is_retryable`, `constraint_name`, `table_name`, `column_name`, `code`, `detail`, and `hint` to map database errors into API errors. Direct enum matches remain the clearest choice for single variants such as `QueryCanceled`, `InsufficientPrivilege`, or `NotFound`.
 
+For named business conflicts, keep the mapping next to the write:
+
+```rust
+insert(app_users())
+    .value(&new_user)
+    .execute(&db)
+    .await
+    .on_constraint("app_users_email_key", |_| AppError::EmailTaken)?;
+```
+
+For retryable transaction failures, retry the whole transaction body after
+`is_retryable()` returns true.
+
 ## Code Generation
 
 ```bash

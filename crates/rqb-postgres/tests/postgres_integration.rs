@@ -1108,6 +1108,20 @@ async fn maps_postgres_execution_errors_and_result_ext() -> TestResult {
     assert!(fk.is_foreign_key_violation());
     client.batch_execute("ROLLBACK TO SAVEPOINT bad_fk").await?;
 
+    client
+        .batch_execute("SAVEPOINT query_timeout; SET LOCAL statement_timeout = '1ms'")
+        .await?;
+    let canceled = raw_query("SELECT pg_sleep(0.05)")
+        .fetch_one(&client)
+        .await
+        .unwrap_err();
+    assert!(matches!(canceled, PgError::QueryCanceled { .. }));
+    assert_eq!(canceled.code(), Some("57014"));
+    assert!(!canceled.is_retryable());
+    client
+        .batch_execute("ROLLBACK TO SAVEPOINT query_timeout")
+        .await?;
+
     let not_found = select(order_search::dataset())
         .fields([order_search::EMAIL])
         .filter(order_search::EMAIL.eq("nobody@example.com"))

@@ -1,5 +1,3 @@
-use std::fmt;
-
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -7,11 +5,6 @@ use crate::field::{Field, FieldRef};
 use crate::raw::RawSql;
 use crate::request::SelectQuery;
 use crate::value::Value;
-
-mod operator;
-
-pub(crate) use operator::OperatorCategory;
-pub use operator::{ColumnOperator, Operator};
 
 macro_rules! impl_as_str {
     ($ty:ident { $($variant:ident => $value:expr),* $(,)? }) => {
@@ -23,13 +16,18 @@ macro_rules! impl_as_str {
             }
         }
 
-        impl fmt::Display for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        impl std::fmt::Display for $ty {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.write_str((*self).as_str())
             }
         }
     };
 }
+
+mod operator;
+
+pub(crate) use operator::OperatorCategory;
+pub use operator::{ColumnOperator, Operator};
 
 pub fn field(name: impl Into<String>) -> FieldRef {
     FieldRef::named(name)

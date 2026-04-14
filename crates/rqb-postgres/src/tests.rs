@@ -1605,6 +1605,7 @@ fn postgres_error_helpers_classify_variants() {
     };
     assert!(unique.is_unique_violation());
     assert!(unique.is_constraint("users_email_key"));
+    assert_eq!(unique.code(), Some("23505"));
     assert_eq!(unique.constraint_name(), Some("users_email_key"));
     assert_eq!(unique.detail(), Some("duplicate key"));
 
@@ -1621,13 +1622,68 @@ fn postgres_error_helpers_classify_variants() {
         }
         .is_not_null_violation()
     );
+    assert_eq!(
+        Error::NotNullViolation {
+            column: Some("email".to_owned()),
+        }
+        .column_name(),
+        Some("email")
+    );
     assert!(
         Error::CheckViolation {
             constraint: Some("orders_total_positive".to_owned()),
         }
         .is_check_violation()
     );
+
+    let restrict = Error::RestrictViolation {
+        constraint: Some("orders_user_id_fkey".to_owned()),
+        detail: Some("still referenced".to_owned()),
+    };
+    assert_eq!(restrict.code(), Some("23001"));
+    assert!(restrict.is_constraint("orders_user_id_fkey"));
+    assert_eq!(restrict.detail(), Some("still referenced"));
+
+    let serialization = Error::SerializationFailure {
+        message: "could not serialize access".to_owned(),
+        detail: None,
+        hint: Some("retry the transaction".to_owned()),
+    };
+    assert!(serialization.is_retryable());
+    assert_eq!(serialization.code(), Some("40001"));
+    assert_eq!(serialization.hint(), Some("retry the transaction"));
+
+    let deadlock = Error::DeadlockDetected {
+        message: "deadlock detected".to_owned(),
+        detail: Some("process waits".to_owned()),
+        hint: None,
+    };
+    assert!(deadlock.is_retryable());
+    assert_eq!(deadlock.code(), Some("40P01"));
+    assert_eq!(deadlock.detail(), Some("process waits"));
+
+    let canceled = Error::QueryCanceled {
+        message: "canceling statement due to statement timeout".to_owned(),
+        detail: None,
+        hint: None,
+    };
+    assert_eq!(canceled.code(), Some("57014"));
+    assert!(!canceled.is_retryable());
+
+    let privilege = Error::InsufficientPrivilege {
+        message: "permission denied".to_owned(),
+        detail: None,
+        hint: Some("check grants".to_owned()),
+        table: Some("orders".to_owned()),
+        column: Some("status".to_owned()),
+    };
+    assert_eq!(privilege.code(), Some("42501"));
+    assert_eq!(privilege.table_name(), Some("orders"));
+    assert_eq!(privilege.column_name(), Some("status"));
+    assert_eq!(privilege.hint(), Some("check grants"));
+
     assert!(Error::Connection("closed".to_owned()).is_connection());
+    assert!(Error::Connection("closed".to_owned()).is_retryable());
 }
 
 #[cfg(feature = "runtime-tokio-postgres")]

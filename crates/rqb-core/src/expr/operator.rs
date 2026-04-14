@@ -1,24 +1,4 @@
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
-
-macro_rules! impl_as_str {
-    ($ty:ident { $($variant:ident => $value:expr),* $(,)? }) => {
-        impl $ty {
-            pub fn as_str(self) -> &'static str {
-                match self {
-                    $(Self::$variant => $value,)*
-                }
-            }
-        }
-
-        impl fmt::Display for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str((*self).as_str())
-            }
-        }
-    };
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

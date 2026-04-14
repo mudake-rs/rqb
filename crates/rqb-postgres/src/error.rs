@@ -25,6 +25,13 @@ pub enum Error {
     },
 
     #[cfg(feature = "runtime-tokio-postgres")]
+    #[error("restrict violation{}", constraint_suffix(.constraint))]
+    RestrictViolation {
+        constraint: Option<String>,
+        detail: Option<String>,
+    },
+
+    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("not null violation{}", column_suffix(.column))]
     NotNullViolation { column: Option<String> },
 
@@ -37,6 +44,40 @@ pub enum Error {
     ExclusionViolation {
         constraint: Option<String>,
         detail: Option<String>,
+    },
+
+    #[cfg(feature = "runtime-tokio-postgres")]
+    #[error("serialization failure: {message}")]
+    SerializationFailure {
+        message: String,
+        detail: Option<String>,
+        hint: Option<String>,
+    },
+
+    #[cfg(feature = "runtime-tokio-postgres")]
+    #[error("deadlock detected: {message}")]
+    DeadlockDetected {
+        message: String,
+        detail: Option<String>,
+        hint: Option<String>,
+    },
+
+    #[cfg(feature = "runtime-tokio-postgres")]
+    #[error("query canceled: {message}")]
+    QueryCanceled {
+        message: String,
+        detail: Option<String>,
+        hint: Option<String>,
+    },
+
+    #[cfg(feature = "runtime-tokio-postgres")]
+    #[error("insufficient privilege: {message}")]
+    InsufficientPrivilege {
+        message: String,
+        detail: Option<String>,
+        hint: Option<String>,
+        table: Option<String>,
+        column: Option<String>,
     },
 
     #[cfg(feature = "runtime-tokio-postgres")]
@@ -92,13 +133,19 @@ impl From<tokio_postgres::Error> for Error {
         let code = db.code();
         let constraint = db.constraint().map(ToOwned::to_owned);
         let detail = db.detail().map(ToOwned::to_owned);
+        let hint = db.hint().map(ToOwned::to_owned);
         let column = db.column().map(ToOwned::to_owned);
+        let table = db.table().map(ToOwned::to_owned);
+        let message = db.message().to_owned();
 
         if *code == SqlState::UNIQUE_VIOLATION {
             return Self::UniqueViolation { constraint, detail };
         }
         if *code == SqlState::FOREIGN_KEY_VIOLATION {
             return Self::ForeignKeyViolation { constraint, detail };
+        }
+        if *code == SqlState::RESTRICT_VIOLATION {
+            return Self::RestrictViolation { constraint, detail };
         }
         if *code == SqlState::NOT_NULL_VIOLATION {
             return Self::NotNullViolation { column };
@@ -109,14 +156,44 @@ impl From<tokio_postgres::Error> for Error {
         if *code == SqlState::EXCLUSION_VIOLATION {
             return Self::ExclusionViolation { constraint, detail };
         }
+        if *code == SqlState::T_R_SERIALIZATION_FAILURE {
+            return Self::SerializationFailure {
+                message,
+                detail,
+                hint,
+            };
+        }
+        if *code == SqlState::T_R_DEADLOCK_DETECTED {
+            return Self::DeadlockDetected {
+                message,
+                detail,
+                hint,
+            };
+        }
+        if *code == SqlState::QUERY_CANCELED {
+            return Self::QueryCanceled {
+                message,
+                detail,
+                hint,
+            };
+        }
+        if *code == SqlState::INSUFFICIENT_PRIVILEGE {
+            return Self::InsufficientPrivilege {
+                message,
+                detail,
+                hint,
+                table,
+                column,
+            };
+        }
 
         Self::Database {
             code: code.code().to_owned(),
-            message: db.message().to_owned(),
+            message,
             detail,
-            hint: db.hint().map(ToOwned::to_owned),
+            hint,
             constraint,
-            table: db.table().map(ToOwned::to_owned),
+            table,
             column,
         }
     }
@@ -171,21 +248,69 @@ impl Error {
         matches!(self, Self::CheckViolation { .. })
     }
 
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            Self::SerializationFailure { .. } | Self::DeadlockDetected { .. }
+        ) || self.is_connection()
+    }
+
     pub fn is_constraint(&self, name: &str) -> bool {
         self.constraint_name() == Some(name)
     }
 
     pub fn is_connection(&self) -> bool {
-        matches!(self, Self::Connection(_))
+        match self {
+            Self::Connection(_) => true,
+            #[cfg(feature = "pool")]
+            Self::Pool(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn code(&self) -> Option<&str> {
+        match self {
+            Self::UniqueViolation { .. } => Some("23505"),
+            Self::ForeignKeyViolation { .. } => Some("23503"),
+            Self::RestrictViolation { .. } => Some("23001"),
+            Self::NotNullViolation { .. } => Some("23502"),
+            Self::CheckViolation { .. } => Some("23514"),
+            Self::ExclusionViolation { .. } => Some("23P01"),
+            Self::SerializationFailure { .. } => Some("40001"),
+            Self::DeadlockDetected { .. } => Some("40P01"),
+            Self::InsufficientPrivilege { .. } => Some("42501"),
+            Self::QueryCanceled { .. } => Some("57014"),
+            Self::Database { code, .. } => Some(code),
+            _ => None,
+        }
     }
 
     pub fn constraint_name(&self) -> Option<&str> {
         match self {
             Self::UniqueViolation { constraint, .. }
             | Self::ForeignKeyViolation { constraint, .. }
+            | Self::RestrictViolation { constraint, .. }
             | Self::CheckViolation { constraint }
             | Self::ExclusionViolation { constraint, .. }
             | Self::Database { constraint, .. } => constraint.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn table_name(&self) -> Option<&str> {
+        match self {
+            Self::InsufficientPrivilege { table, .. } | Self::Database { table, .. } => {
+                table.as_deref()
+            }
+            _ => None,
+        }
+    }
+
+    pub fn column_name(&self) -> Option<&str> {
+        match self {
+            Self::NotNullViolation { column }
+            | Self::InsufficientPrivilege { column, .. }
+            | Self::Database { column, .. } => column.as_deref(),
             _ => None,
         }
     }
@@ -194,8 +319,24 @@ impl Error {
         match self {
             Self::UniqueViolation { detail, .. }
             | Self::ForeignKeyViolation { detail, .. }
+            | Self::RestrictViolation { detail, .. }
             | Self::ExclusionViolation { detail, .. }
+            | Self::SerializationFailure { detail, .. }
+            | Self::DeadlockDetected { detail, .. }
+            | Self::InsufficientPrivilege { detail, .. }
+            | Self::QueryCanceled { detail, .. }
             | Self::Database { detail, .. } => detail.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn hint(&self) -> Option<&str> {
+        match self {
+            Self::SerializationFailure { hint, .. }
+            | Self::DeadlockDetected { hint, .. }
+            | Self::InsufficientPrivilege { hint, .. }
+            | Self::QueryCanceled { hint, .. }
+            | Self::Database { hint, .. } => hint.as_deref(),
             _ => None,
         }
     }

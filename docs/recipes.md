@@ -360,7 +360,7 @@ async fn run_serializable(db: &Db) -> Result<(), rqb::Error> {
         }
         .await;
 
-        if result.is_ok() || attempt == 2 {
+        if !matches!(&result, Err(error) if error.is_retryable()) || attempt == 2 {
             return result;
         }
     }
@@ -368,7 +368,7 @@ async fn run_serializable(db: &Db) -> Result<(), rqb::Error> {
 }
 ```
 
-The current error type stores unknown database errors as `Database { code, .. }`; match SQLSTATE `40001` there if you need strict serialization-only retries.
+`is_retryable()` covers serialization failures, deadlocks, and connection-level failures. Use `error.code()` when you need to distinguish SQLSTATE `40001` from `40P01`.
 
 ## Raw SQL Escape Hatch
 

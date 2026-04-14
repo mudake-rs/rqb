@@ -553,12 +553,13 @@ match error {
     rqb::Error::NotFound => HttpStatus::NotFound,
     e if e.is_unique_violation() => HttpStatus::Conflict,
     e if e.is_foreign_key_violation() => HttpStatus::Conflict,
+    e if e.is_retryable() => HttpStatus::ServiceUnavailable,
     e if e.is_constraint("app_users_email_key") => HttpStatus::Conflict,
     _ => HttpStatus::InternalServerError,
 }
 ```
 
-Use `fetch_optional` or `fetch_optional_as` when zero rows are a valid result. Use `is_not_found`, `is_unique_violation`, `is_foreign_key_violation`, `is_not_null_violation`, `is_check_violation`, `is_constraint`, `constraint_name`, and `detail` to map database errors into API errors.
+Use `fetch_optional` or `fetch_optional_as` when zero rows are a valid result. Use `is_retryable`, `is_constraint`, `constraint_name`, `table_name`, `column_name`, `code`, `detail`, and `hint` to map database errors into API errors. Direct enum matches remain the clearest choice for single variants such as `QueryCanceled`, `InsufficientPrivilege`, or `NotFound`.
 
 ## Code Generation
 

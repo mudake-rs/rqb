@@ -26,10 +26,10 @@ impl From<rqb::Error> for AppError {
         match error {
             rqb::Error::NotFound => Self::NotFound,
             rqb::Error::UniqueViolation { constraint, .. } => {
-                Self::Conflict(constraint.unwrap_or_else(|| "unique constraint".to_owned()))
+                Self::Conflict(constraint.unwrap_or_else(|| "unique constraint".into()))
             }
             rqb::Error::ForeignKeyViolation { constraint, .. } => Self::Conflict(
-                constraint.unwrap_or_else(|| "foreign key constraint".to_owned()),
+                constraint.unwrap_or_else(|| "foreign key constraint".into()),
             ),
             rqb::Error::Core(error) => Self::BadRequest(error.to_string()),
             error => Self::Internal(error.to_string()),

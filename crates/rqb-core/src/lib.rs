@@ -43,8 +43,9 @@ pub use raw::{RawQuery, RawSql, raw, raw_query};
 pub use request::{LockMode, LockWait, RowLock, SearchRequest, SelectQuery};
 pub use serde_bridge::fields_from_serializable;
 pub use sql_expr::{
-    CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, IntoSqlExpr, SelectItem, SqlExpr,
-    case_when, cast, coalesce, excluded, func, raw_expr,
+    BuiltinFunction, CaseBranch, CaseBuilder, CaseThenBuilder, FunctionBuilder, FunctionNameStyle,
+    IntoSqlExpr, SelectItem, SqlExpr, case_when, cast, coalesce, date_trunc, excluded, func,
+    gen_random_uuid, greatest, least, length, lower, now, nullif, raw_expr, trim, upper,
 };
 pub use types::{
     DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,
@@ -80,9 +81,10 @@ pub mod prelude {
         SetOperator, SetQuery, Sort, SortDir, SqlExpr, SubqueryOperator, SubqueryPredicate,
         TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr,
         WriteAssignment, WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count,
-        count_distinct, count_field, cte, delete, except, except_all, excluded, exists, field,
-        func, insert, intersect, intersect_all, json_agg, json_agg_nullable, max, max_agg, min,
-        min_agg, not, not_exists, raw, raw_expr, raw_query, select, set, set_col, set_default,
-        set_expr, set_raw, string_agg, sum, union, union_all, update,
+        count_distinct, count_field, cte, date_trunc, delete, except, except_all, excluded, exists,
+        field, func, gen_random_uuid, greatest, insert, intersect, intersect_all, json_agg,
+        json_agg_nullable, least, length, lower, max, max_agg, min, min_agg, not, not_exists, now,
+        nullif, raw, raw_expr, raw_query, select, set, set_col, set_default, set_expr, set_raw,
+        string_agg, sum, trim, union, union_all, update, upper,
     };
 }

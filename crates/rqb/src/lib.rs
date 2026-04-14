@@ -15,21 +15,22 @@
 //! `docs/ergonomics.md` for end-to-end examples.
 
 pub use rqb_core::{
-    Aggregate, AggregateType, Capabilities, CaseBranch, CaseBuilder, CaseThenBuilder,
-    ColumnOperator, ColumnPredicate, ConflictAction, ConflictClause, ConflictTarget, Cte, CteBody,
-    Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType, Error as CoreError,
-    ExistsPredicate, Expr, Field, FieldRef, FieldType, FunctionBuilder, InsertBuilder,
-    InsertConflictBuilder, InsertQuery, IntoFieldRefs, IntoSqlExpr, Join, JoinKind, JsonPathPolicy,
-    LockMode, LockWait, LogicalExpr, LogicalOp, NullsOrder, Operator, Predicate, QueryExpr,
-    RawQuery, RawSql, Relation, Result as CoreResult, ReturningMode, RowLock, SearchRequest,
-    SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr, SetOperator, SetQuery, Sort,
-    SortDir, Source, SqlExpr, SubqueryOperator, SubqueryPredicate, TextSearchConfig, TypeFamily,
-    TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr, WriteAssignment, WriteValue, all, any,
-    array_agg, avg, case_when, cast, coalesce, count, count_distinct, count_field, cte, delete,
-    except, except_all, excluded, exists, field, func, insert, intersect, intersect_all, json_agg,
-    json_agg_nullable, max, max_agg, min, min_agg, not, not_exists, raw, raw_expr, raw_query,
-    select, set, set_col, set_default, set_expr, set_raw, string_agg, sum, union, union_all,
-    update,
+    Aggregate, AggregateType, BuiltinFunction, Capabilities, CaseBranch, CaseBuilder,
+    CaseThenBuilder, ColumnOperator, ColumnPredicate, ConflictAction, ConflictClause,
+    ConflictTarget, Cte, CteBody, Dataset, DbEnum, DeleteBuilder, DeleteQuery, ElemType, EnumType,
+    Error as CoreError, ExistsPredicate, Expr, Field, FieldRef, FieldType, FunctionBuilder,
+    InsertBuilder, InsertConflictBuilder, InsertQuery, IntoFieldRefs, IntoSqlExpr, Join, JoinKind,
+    JsonPathPolicy, LockMode, LockWait, LogicalExpr, LogicalOp, NullsOrder, Operator, Predicate,
+    QueryExpr, RawQuery, RawSql, Relation, Result as CoreResult, ReturningMode, RowLock,
+    SearchRequest, SelectBuilder, SelectColumn, SelectItem, SelectQuery, SelectRepr, SetOperator,
+    SetQuery, Sort, SortDir, Source, SqlExpr, SubqueryOperator, SubqueryPredicate,
+    TextSearchConfig, TypeFamily, TypeSpec, UpdateBuilder, UpdateQuery, Value, ValueRepr,
+    WriteAssignment, WriteValue, all, any, array_agg, avg, case_when, cast, coalesce, count,
+    count_distinct, count_field, cte, date_trunc, delete, except, except_all, excluded, exists,
+    field, func, gen_random_uuid, greatest, insert, intersect, intersect_all, json_agg,
+    json_agg_nullable, least, length, lower, max, max_agg, min, min_agg, not, not_exists, now,
+    nullif, raw, raw_expr, raw_query, select, set, set_col, set_default, set_expr, set_raw,
+    string_agg, sum, trim, union, union_all, update, upper,
 };
 pub use rqb_postgres as postgres;
 #[cfg(feature = "pool")]

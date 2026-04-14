@@ -367,10 +367,10 @@ Writes can use SQL defaults, server-owned expressions, and computed `RETURNING` 
 ```rust
 let row = update(users())
     .set_default(PROFILE)
-    .set_expr(EMAIL, func("lower", [EMAIL.expr()]).returns(FieldType::Text))
+    .set_expr(EMAIL, lower(EMAIL))
     .filter(ID.eq(user_id))
     .returning([ID])
-    .returning_expr(func("lower", [EMAIL.expr()]).returns(FieldType::Text).alias("emailLower"))
+    .returning_expr(lower(EMAIL).alias("emailLower"))
     .fetch_one_as::<UserWriteResult>(&db)
     .await?;
 ```

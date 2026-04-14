@@ -1,9 +1,9 @@
 use super::*;
 use crate::{
-    ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType, Join,
-    JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr, Sort, SubqueryOperator,
-    TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce, count, count_field,
-    field, insert, max, min, string_agg, sum,
+    ColumnOperator, Dataset, DbEnum, ElemType, EnumType, Error, Expr, Field, FieldType,
+    IntoSqlExpr, Join, JoinKind, JsonPathPolicy, LogicalExpr, LogicalOp, Operator, SelectRepr,
+    Sort, SubqueryOperator, TypeFamily, TypeSpec, Value, ValueRepr, avg, case_when, cast, coalesce,
+    count, count_field, field, insert, max, min, string_agg, sum,
 };
 use pretty_assertions::assert_eq;
 use serde::{Serialize, Serializer};
@@ -1072,6 +1072,51 @@ fn accepts_jsonb_array_write_values() {
 }
 
 #[test]
+fn accepts_write_expressions_defaults_and_returning_expressions() {
+    let update = crate::update(dataset())
+        .set_expr(
+            "score",
+            coalesce([field("score").expr(), 0.into_sql_expr()]),
+        )
+        .set_default("properties")
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .returning(["id"])
+        .returning_expr(field("name").expr().alias("label"))
+        .build()
+        .unwrap();
+    let validated = ValidatedUpdate::new(update).unwrap();
+    assert_eq!(validated.assignments.len(), 2);
+    assert_eq!(validated.returning.len(), 2);
+
+    let insert = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .set_expr(
+            "name",
+            coalesce(["generated".into_sql_expr(), "fallback".into_sql_expr()]),
+        )
+        .set_default("properties")
+        .returning_expr(field("name").expr().alias("label"))
+        .build()
+        .unwrap();
+    ValidatedInsert::new(insert).unwrap();
+}
+
+#[test]
+fn rejects_insert_expressions_that_reference_target_fields() {
+    let insert = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .set_expr("name", field("name").expr())
+        .build()
+        .unwrap();
+
+    let err = ValidatedInsert::new(insert).unwrap_err();
+
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "name" && message == "insert expressions cannot reference target fields")
+    );
+}
+
+#[test]
 fn rejects_write_values_that_do_not_match_field_types() {
     let update = crate::update(dataset())
         .set("score", "42")
@@ -1097,6 +1142,33 @@ fn rejects_write_values_that_do_not_match_field_types() {
     let err = ValidatedUpdate::new(update).unwrap_err();
     assert!(
         matches!(err, Error::InvalidValue { field, message, .. } if field == "properties" && message == "non-finite numbers are not supported")
+    );
+}
+
+#[test]
+fn rejects_write_expressions_with_incompatible_types() {
+    let update = crate::update(dataset())
+        .set_expr("score", field("name").expr())
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+
+    let err = ValidatedUpdate::new(update).unwrap_err();
+
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "score" && message == "expected expression compatible with integer, got text")
+    );
+
+    let lossy_numeric = crate::update(dataset())
+        .set_expr("score", 1.5)
+        .filter(field("id").eq("10000000-0000-0000-0000-000000000001"))
+        .build()
+        .unwrap();
+
+    let err = ValidatedUpdate::new(lossy_numeric).unwrap_err();
+
+    assert!(
+        matches!(err, Error::InvalidValue { field, message, .. } if field == "score" && message == "expected expression compatible with integer, got float")
     );
 }
 
@@ -1141,6 +1213,26 @@ fn rejects_returning_hidden_fields() {
 }
 
 #[test]
+fn rejects_returning_expressions_that_leak_hidden_fields_or_duplicate_aliases() {
+    let hidden = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .returning_expr(field("blobName").expr().alias("secret"))
+        .build()
+        .unwrap();
+    let err = ValidatedInsert::new(hidden).unwrap_err();
+    assert!(matches!(err, Error::NotSelectable { field } if field == "blobName"));
+
+    let duplicate = insert(dataset())
+        .set("id", "10000000-0000-0000-0000-000000000001")
+        .returning(["id"])
+        .returning_expr(field("name").expr().alias("id"))
+        .build()
+        .unwrap();
+    let err = ValidatedInsert::new(duplicate).unwrap_err();
+    assert!(matches!(err, Error::DuplicateOutputAlias { alias } if alias == "id"));
+}
+
+#[test]
 fn rejects_insert_from_select_mixed_sources_and_unknown_targets() {
     let mixed = insert(dataset())
         .set("id", "10000000-0000-0000-0000-000000000001")
@@ -1176,6 +1268,22 @@ fn rejects_insert_from_select_mixed_sources_and_unknown_targets() {
         ValidatedInsert::new(type_mismatch).unwrap_err(),
         Error::IncompatibleColumnTypes { left, left_type, right, right_type, .. }
             if left == "name" && left_type == "text" && right == "name" && right_type == "integer"
+    ));
+
+    let target = Dataset::table("target").fields([Field::new("score", FieldType::Integer)]);
+    let expression_type_mismatch = insert(target)
+        .from_select(
+            crate::select(dataset())
+                .select_expr(1.5.into_sql_expr().alias("score"))
+                .build(),
+        )
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        ValidatedInsert::new(expression_type_mismatch).unwrap_err(),
+        Error::InvalidValue { field, message, .. }
+            if field == "score" && message == "expected source column compatible with integer, got float"
     ));
 }
 

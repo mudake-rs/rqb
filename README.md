@@ -314,6 +314,19 @@ let user = insert(users())
 
 Write `fetch_*` methods return all selectable fields by default. Use `.returning([ID, EMAIL])` to narrow the projection, or `.execute()` when no rows should be returned.
 
+Writes can use SQL defaults, server-owned expressions, and computed `RETURNING` values:
+
+```rust
+let row = update(users())
+    .set_default(PROFILE)
+    .set_expr(EMAIL, func("lower", [EMAIL.expr()]).returns(FieldType::Text))
+    .filter(ID.eq(user_id))
+    .returning([ID])
+    .returning_expr(func("lower", [EMAIL.expr()]).returns(FieldType::Text).alias("emailLower"))
+    .fetch_one_as::<UserWriteResult>(&db)
+    .await?;
+```
+
 Partial updates:
 
 ```rust

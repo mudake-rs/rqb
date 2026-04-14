@@ -1,25 +1,28 @@
+use crate::aggregate::{AggregateType, SelectColumn};
 use crate::dataset::{Dataset, Source};
 use crate::error::{Error, Result};
 use crate::expr::{ColumnOperator, Expr, Operator};
 use crate::field::{FieldRef, ResolvedField};
+use crate::types::{FieldType, TypeFamily, TypeSpec};
 use crate::value::Value;
 use crate::write::{
-    ConflictAction, ConflictClause, ConflictTarget, DeleteQuery, InsertQuery, ReturningMode,
-    UpdateQuery, WriteAssignment, WriteValue,
+    ConflictAction, ConflictClause, ConflictTarget, DeleteQuery, InsertQuery, ReturningFields,
+    ReturningMode, UpdateQuery, WriteAssignment, WriteValue,
 };
 
 use super::expr::validate_expr;
 use super::operators::count_raw_placeholders;
 use super::resolve::resolve_field_in_scope;
 use super::scope::{ExprContext, QueryScope};
+use super::sql_expr::{collect_sql_expr_fields, validate_select_item, validate_write_sql_expr};
 use super::value_type::{
     enum_type_for_array, enum_type_for_field, require_enum_array, require_enum_scalar,
     validate_column_operator, validate_value_for_field_type,
 };
 use super::{
     ValidatedAssignment, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
-    ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedSelect, ValidatedUpdate,
-    ValidatedWriteValue,
+    ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedReturningItem, ValidatedSelect,
+    ValidatedUpdate, ValidatedWriteValue,
 };
 
 impl ValidatedInsert {
@@ -37,7 +40,7 @@ impl ValidatedInsert {
 
         let rows = raw_rows
             .iter()
-            .map(|row| validate_assignments(&scope, row))
+            .map(|row| validate_assignments(&scope, row, WriteExprContext::Insert))
             .collect::<Result<Vec<_>>>()?;
         let from_select = source
             .as_ref()
@@ -59,9 +62,12 @@ impl ValidatedInsert {
 
         let target_fields = match &from_select {
             Some(select) => select
-                .selected_fields
+                .columns
                 .iter()
-                .map(|field| match_write_field_by_name(&scope, &field.api_name, &field.db_name))
+                .map(|column| {
+                    let alias = column.alias();
+                    match_write_field_by_name(&scope, &alias, &alias)
+                })
                 .collect::<Result<Vec<_>>>()?,
             None => rows
                 .first()
@@ -73,8 +79,8 @@ impl ValidatedInsert {
                 .unwrap_or_default(),
         };
         if let Some(select) = &from_select {
-            for (target, source) in target_fields.iter().zip(&select.selected_fields) {
-                validate_column_operator(target, ColumnOperator::Equals, source)?;
+            for (target, source) in target_fields.iter().zip(&select.columns) {
+                validate_insert_select_column_type(target, source)?;
             }
         }
         let returning = resolve_returning(&scope, &raw_returning)?;
@@ -108,7 +114,7 @@ impl ValidatedUpdate {
         if raw_assignments.is_empty() {
             return Err(Error::EmptyUpdate);
         }
-        let assignments = validate_assignments(&scope, &raw_assignments)?;
+        let assignments = validate_assignments(&scope, &raw_assignments, WriteExprContext::Update)?;
         let filter = raw_filter
             .as_ref()
             .map(|expr| scope.validate_filter(expr))
@@ -151,6 +157,12 @@ struct WriteScope<'a> {
     query_scope: QueryScope,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WriteExprContext {
+    Insert,
+    Update,
+}
+
 impl<'a> WriteScope<'a> {
     fn new(dataset: &'a Dataset) -> Self {
         Self {
@@ -184,6 +196,7 @@ fn validate_write_source(dataset: &Dataset) -> Result<()> {
 fn validate_assignments(
     scope: &WriteScope<'_>,
     assignments: &[WriteAssignment],
+    context: WriteExprContext,
 ) -> Result<Vec<ValidatedAssignment>> {
     assignments
         .iter()
@@ -209,6 +222,13 @@ fn validate_assignments(
                     validate_column_operator(&field, ColumnOperator::Equals, &source)?;
                     ValidatedWriteValue::Column(source)
                 }
+                WriteValue::Expr(expr) => {
+                    let expr = validate_write_sql_expr(&scope.query_scope, expr)?;
+                    validate_write_expr_context(&field, &expr, context)?;
+                    validate_write_expr_type(&field, &expr)?;
+                    ValidatedWriteValue::Expr(expr)
+                }
+                WriteValue::Default => ValidatedWriteValue::Default,
             };
             Ok(ValidatedAssignment { field, value })
         })
@@ -227,6 +247,122 @@ fn validate_write_value(field: &ResolvedField, value: &Value) -> Result<()> {
     }
     validate_value_for_field_type(field, "write", value)?;
     Ok(())
+}
+
+fn validate_write_expr_context(
+    field: &ResolvedField,
+    expr: &super::ValidatedSqlExpr,
+    context: WriteExprContext,
+) -> Result<()> {
+    if context == WriteExprContext::Update {
+        return Ok(());
+    }
+    let mut fields = Vec::new();
+    collect_sql_expr_fields(expr, &mut fields);
+    if fields.is_empty() {
+        return Ok(());
+    }
+    Err(Error::InvalidValue {
+        field: field.display_name(),
+        operator: "insert".to_owned(),
+        message: "insert expressions cannot reference target fields".to_owned(),
+    })
+}
+
+fn validate_write_expr_type(field: &ResolvedField, expr: &super::ValidatedSqlExpr) -> Result<()> {
+    let expr_type = expr.ty();
+    if write_expr_type_assignable(field.ty, expr_type) {
+        return Ok(());
+    }
+    Err(Error::InvalidValue {
+        field: field.display_name(),
+        operator: "write".to_owned(),
+        message: format!(
+            "expected expression compatible with {}, got {}",
+            field.ty.display_name(),
+            expr_type.display_name()
+        ),
+    })
+}
+
+fn write_expr_type_assignable(target: FieldType, expr: FieldType) -> bool {
+    if target == expr {
+        return true;
+    }
+    if target.is_text() && expr.is_text() {
+        return true;
+    }
+    match target {
+        FieldType::Integer | FieldType::BigInt => {
+            matches!(expr, FieldType::Integer | FieldType::BigInt)
+        }
+        FieldType::Numeric => matches!(
+            expr,
+            FieldType::Integer | FieldType::BigInt | FieldType::Numeric
+        ),
+        FieldType::Float => expr.is_numeric(),
+        FieldType::Custom(type_spec) => target_custom_type_assignable(*type_spec, expr),
+        _ => false,
+    }
+}
+
+fn target_custom_type_assignable(type_spec: TypeSpec, expr: FieldType) -> bool {
+    if matches!(expr, FieldType::Custom(expr_spec) if *expr_spec == type_spec) {
+        return true;
+    }
+    match type_spec.family {
+        TypeFamily::Text => expr.is_text(),
+        TypeFamily::Numeric => matches!(
+            expr,
+            FieldType::Integer | FieldType::BigInt | FieldType::Numeric
+        ),
+        TypeFamily::Bool => expr == FieldType::Bool,
+        TypeFamily::Jsonb => expr == FieldType::Jsonb,
+        TypeFamily::Bytes => expr == FieldType::Bytea,
+        TypeFamily::Uuid
+        | TypeFamily::Timestamp
+        | TypeFamily::Timestamptz
+        | TypeFamily::Date
+        | TypeFamily::Network
+        | TypeFamily::Range => false,
+    }
+}
+
+fn validate_insert_select_column_type(field: &ResolvedField, column: &SelectColumn) -> Result<()> {
+    if let SelectColumn::Field(source) = column {
+        return validate_column_operator(field, ColumnOperator::Equals, source);
+    }
+    let source_type = select_column_type(column);
+    if write_expr_type_assignable(field.ty, source_type) {
+        return Ok(());
+    }
+    Err(Error::InvalidValue {
+        field: field.display_name(),
+        operator: "insert".to_owned(),
+        message: format!(
+            "expected source column compatible with {}, got {}",
+            field.ty.display_name(),
+            source_type.display_name()
+        ),
+    })
+}
+
+fn select_column_type(column: &SelectColumn) -> FieldType {
+    match column {
+        SelectColumn::Field(field) => field.ty,
+        SelectColumn::Aggregate { ty, .. } => aggregate_type_to_field_type(ty),
+        SelectColumn::Expression { ty, .. } => *ty,
+    }
+}
+
+fn aggregate_type_to_field_type(ty: &AggregateType) -> FieldType {
+    match ty {
+        AggregateType::Count => FieldType::BigInt,
+        AggregateType::Sum | AggregateType::Avg => FieldType::Float,
+        AggregateType::Min(ty) | AggregateType::Max(ty) => *ty,
+        AggregateType::Json => FieldType::Jsonb,
+        AggregateType::String => FieldType::Text,
+    }
 }
 
 fn validate_insert_rows_shape(rows: &[Vec<ValidatedAssignment>]) -> Result<()> {
@@ -252,10 +388,20 @@ fn validate_insert_rows_shape(rows: &[Vec<ValidatedAssignment>]) -> Result<()> {
 fn resolve_returning(
     scope: &WriteScope<'_>,
     returning: &ReturningMode,
-) -> Result<Vec<ResolvedField>> {
+) -> Result<Vec<ValidatedReturningItem>> {
     let fields = match returning {
-        ReturningMode::None => return Ok(Vec::new()),
-        ReturningMode::All => scope
+        ReturningMode {
+            fields: ReturningFields::None,
+            expressions,
+        } if expressions.is_empty() => return Ok(Vec::new()),
+        ReturningMode {
+            fields: ReturningFields::None,
+            ..
+        } => Vec::new(),
+        ReturningMode {
+            fields: ReturningFields::All,
+            ..
+        } => scope
             .dataset
             .fields
             .iter()
@@ -263,10 +409,13 @@ fn resolve_returning(
             .filter(|field| field.caps.selectable)
             .map(FieldRef::from)
             .collect::<Vec<_>>(),
-        ReturningMode::Fields(fields) => fields.clone(),
+        ReturningMode {
+            fields: ReturningFields::Fields(fields),
+            ..
+        } => fields.clone(),
     };
 
-    fields
+    let mut items = fields
         .iter()
         .map(|field| {
             let resolved = scope.resolve_field(field)?;
@@ -275,9 +424,29 @@ fn resolve_returning(
                     field: resolved.display_name(),
                 });
             }
-            Ok(resolved)
+            Ok(ValidatedReturningItem::Field(resolved))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+
+    for item in &returning.expressions {
+        items.push(ValidatedReturningItem::Expression(validate_select_item(
+            &scope.query_scope,
+            item,
+        )?));
+    }
+    validate_returning_aliases(&items)?;
+    Ok(items)
+}
+
+fn validate_returning_aliases(items: &[ValidatedReturningItem]) -> Result<()> {
+    let mut aliases = std::collections::HashSet::with_capacity(items.len());
+    for item in items {
+        let alias = item.alias();
+        if !aliases.insert(alias.clone()) {
+            return Err(Error::DuplicateOutputAlias { alias });
+        }
+    }
+    Ok(())
 }
 
 fn match_write_field_by_name(

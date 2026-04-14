@@ -6,6 +6,7 @@ use crate::expr::Expr;
 use crate::field::FieldRef;
 use crate::request::SelectQuery;
 use crate::serde_bridge::fields_from_serializable;
+use crate::sql_expr::{IntoSqlExpr, SelectItem};
 use crate::value::Value;
 
 use super::{
@@ -28,18 +29,23 @@ pub struct InsertQuery {
 
 impl InsertQuery {
     pub fn returning(mut self, fields: impl IntoFieldRefs) -> Self {
-        self.returning = ReturningMode::Fields(fields.into_field_refs());
+        self.returning.set_fields(fields);
         self
     }
 
     pub fn returning_all(mut self) -> Self {
-        self.returning = ReturningMode::All;
+        self.returning.set_all();
+        self
+    }
+
+    pub fn returning_expr(mut self, item: SelectItem) -> Self {
+        self.returning.push_expr(item);
         self
     }
 
     pub fn returning_all_if_empty(mut self) -> Self {
         if self.returning.is_none() {
-            self.returning = ReturningMode::All;
+            self.returning.set_all();
         }
         self
     }
@@ -59,7 +65,7 @@ impl InsertBuilder {
                 dataset: dataset.into(),
                 rows: Vec::new(),
                 source: None,
-                returning: ReturningMode::None,
+                returning: ReturningMode::none(),
                 conflict: None,
             },
             errors: Vec::new(),
@@ -68,6 +74,26 @@ impl InsertBuilder {
 
     pub fn set(mut self, field: impl Into<FieldRef>, value: impl Into<Value>) -> Self {
         let assignment = WriteAssignment::value(field, value);
+        if let Some(row) = self.query.rows.last_mut() {
+            row.push(assignment);
+        } else {
+            self.query.rows.push(vec![assignment]);
+        }
+        self
+    }
+
+    pub fn set_expr(mut self, field: impl Into<FieldRef>, expr: impl IntoSqlExpr) -> Self {
+        let assignment = WriteAssignment::expr(field, expr);
+        if let Some(row) = self.query.rows.last_mut() {
+            row.push(assignment);
+        } else {
+            self.query.rows.push(vec![assignment]);
+        }
+        self
+    }
+
+    pub fn set_default(mut self, field: impl Into<FieldRef>) -> Self {
+        let assignment = WriteAssignment::default(field);
         if let Some(row) = self.query.rows.last_mut() {
             row.push(assignment);
         } else {

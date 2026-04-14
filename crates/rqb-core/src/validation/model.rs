@@ -273,6 +273,33 @@ pub enum ValidatedWriteValue {
     Value(Value),
     Raw(RawSql),
     Column(ResolvedField),
+    Expr(ValidatedSqlExpr),
+    Default,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValidatedReturningItem {
+    Field(ResolvedField),
+    Expression(ValidatedSelectItem),
+}
+
+impl ValidatedReturningItem {
+    pub fn alias(&self) -> String {
+        match self {
+            Self::Field(field) => field.output_alias(),
+            Self::Expression(item) => item.alias.clone(),
+        }
+    }
+
+    pub fn column(&self) -> SelectColumn {
+        match self {
+            Self::Field(field) => SelectColumn::Field(field.clone()),
+            Self::Expression(item) => SelectColumn::Expression {
+                alias: item.alias.clone(),
+                ty: item.ty,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -303,7 +330,7 @@ pub struct ValidatedInsert {
     pub target_fields: Vec<ResolvedField>,
     pub rows: Vec<Vec<ValidatedAssignment>>,
     pub from_select: Option<ValidatedSelect>,
-    pub returning: Vec<ResolvedField>,
+    pub returning: Vec<ValidatedReturningItem>,
     pub conflict: Option<ValidatedConflictClause>,
 }
 
@@ -312,14 +339,14 @@ pub struct ValidatedUpdate {
     pub dataset: Dataset,
     pub assignments: Vec<ValidatedAssignment>,
     pub filter: Option<ValidatedExpr>,
-    pub returning: Vec<ResolvedField>,
+    pub returning: Vec<ValidatedReturningItem>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedDelete {
     pub dataset: Dataset,
     pub filter: ValidatedExpr,
-    pub returning: Vec<ResolvedField>,
+    pub returning: Vec<ValidatedReturningItem>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

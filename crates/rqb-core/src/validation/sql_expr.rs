@@ -12,6 +12,12 @@ use super::{
     ValidatedCaseBranch, ValidatedExpr, ValidatedPredicate, ValidatedSelectItem, ValidatedSqlExpr,
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SqlExprContext {
+    Select,
+    Write,
+}
+
 pub(super) fn validate_select_item(
     scope: &QueryScope,
     item: &SelectItem,
@@ -19,7 +25,7 @@ pub(super) fn validate_select_item(
     if item.alias.trim().is_empty() {
         return Err(Error::EmptyExpressionAlias);
     }
-    let expr = validate_sql_expr(scope, &item.expr)?;
+    let expr = validate_sql_expr_in_context(scope, &item.expr, SqlExprContext::Select)?;
     let ty = expr.ty();
     Ok(ValidatedSelectItem {
         expr,
@@ -28,11 +34,22 @@ pub(super) fn validate_select_item(
     })
 }
 
-pub(super) fn validate_sql_expr(scope: &QueryScope, expr: &SqlExpr) -> Result<ValidatedSqlExpr> {
+pub(super) fn validate_write_sql_expr(
+    scope: &QueryScope,
+    expr: &SqlExpr,
+) -> Result<ValidatedSqlExpr> {
+    validate_sql_expr_in_context(scope, expr, SqlExprContext::Write)
+}
+
+fn validate_sql_expr_in_context(
+    scope: &QueryScope,
+    expr: &SqlExpr,
+    context: SqlExprContext,
+) -> Result<ValidatedSqlExpr> {
     Ok(match expr {
         SqlExpr::Field(field_ref) => {
             let field = resolve_field_in_scope(scope, field_ref)?;
-            validate_selectable_expr_field(&field)?;
+            validate_sql_expr_field(&field, context)?;
             ValidatedSqlExpr::Field(field)
         }
         SqlExpr::Value(value) => {
@@ -59,7 +76,7 @@ pub(super) fn validate_sql_expr(scope: &QueryScope, expr: &SqlExpr) -> Result<Va
         }
         SqlExpr::Function { name, args, ty } => ValidatedSqlExpr::Function {
             name: name.clone(),
-            args: validate_sql_exprs(scope, args)?,
+            args: validate_sql_exprs(scope, args, context)?,
             ty: *ty,
         },
         SqlExpr::Coalesce(args) => {
@@ -68,7 +85,7 @@ pub(super) fn validate_sql_expr(scope: &QueryScope, expr: &SqlExpr) -> Result<Va
                     expression: "coalesce".to_owned(),
                 });
             }
-            let args = validate_sql_exprs(scope, args)?;
+            let args = validate_sql_exprs(scope, args, context)?;
             let ty = common_expr_type("coalesce", args.iter().map(ValidatedSqlExpr::ty))?;
             ValidatedSqlExpr::Coalesce { args, ty }
         }
@@ -85,14 +102,16 @@ pub(super) fn validate_sql_expr(scope: &QueryScope, expr: &SqlExpr) -> Result<Va
                 .iter()
                 .map(|branch| {
                     let condition = validate_expr(scope, &branch.condition, ExprContext::Filter)?;
-                    validate_selectable_bool_expr_fields(&condition)?;
+                    if context == SqlExprContext::Select {
+                        validate_selectable_bool_expr_fields(&condition)?;
+                    }
                     Ok(ValidatedCaseBranch {
                         condition,
-                        value: validate_sql_expr(scope, &branch.value)?,
+                        value: validate_sql_expr_in_context(scope, &branch.value, context)?,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let otherwise = Box::new(validate_sql_expr(scope, otherwise)?);
+            let otherwise = Box::new(validate_sql_expr_in_context(scope, otherwise, context)?);
             let ty = common_expr_type(
                 "case",
                 branches
@@ -107,7 +126,7 @@ pub(super) fn validate_sql_expr(scope: &QueryScope, expr: &SqlExpr) -> Result<Va
             }
         }
         SqlExpr::Cast { expr, ty } => ValidatedSqlExpr::Cast {
-            expr: Box::new(validate_sql_expr(scope, expr)?),
+            expr: Box::new(validate_sql_expr_in_context(scope, expr, context)?),
             ty: *ty,
         },
     })
@@ -174,20 +193,24 @@ fn collect_predicate_fields(predicate: &ValidatedPredicate, output: &mut Vec<Res
     }
 }
 
-fn validate_sql_exprs(scope: &QueryScope, exprs: &[SqlExpr]) -> Result<Vec<ValidatedSqlExpr>> {
+fn validate_sql_exprs(
+    scope: &QueryScope,
+    exprs: &[SqlExpr],
+    context: SqlExprContext,
+) -> Result<Vec<ValidatedSqlExpr>> {
     exprs
         .iter()
-        .map(|expr| validate_sql_expr(scope, expr))
+        .map(|expr| validate_sql_expr_in_context(scope, expr, context))
         .collect()
 }
 
-fn validate_selectable_expr_field(field: &ResolvedField) -> Result<()> {
+fn validate_sql_expr_field(field: &ResolvedField, context: SqlExprContext) -> Result<()> {
     if field.is_json_path() {
         return Err(Error::NotSelectable {
             field: field.display_name(),
         });
     }
-    if !field.caps.selectable {
+    if context == SqlExprContext::Select && !field.caps.selectable {
         return Err(Error::NotSelectable {
             field: field.display_name(),
         });
@@ -199,12 +222,12 @@ fn validate_selectable_bool_expr_fields(expr: &ValidatedExpr) -> Result<()> {
     let mut fields = Vec::new();
     collect_bool_expr_fields(expr, &mut fields);
     for field in fields {
-        validate_selectable_expr_field(&field)?;
+        validate_sql_expr_field(&field, SqlExprContext::Select)?;
     }
     Ok(())
 }
 
-fn common_expr_type<I>(expression: &str, types: I) -> Result<FieldType>
+pub(super) fn common_expr_type<I>(expression: &str, types: I) -> Result<FieldType>
 where
     I: IntoIterator<Item = FieldType>,
 {
@@ -225,7 +248,7 @@ where
     Ok(common)
 }
 
-fn compatible_type(left: FieldType, right: FieldType) -> Option<FieldType> {
+pub(super) fn compatible_type(left: FieldType, right: FieldType) -> Option<FieldType> {
     if left == right {
         return Some(left);
     }

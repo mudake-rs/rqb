@@ -183,6 +183,20 @@ insert(orders())
 
 Write `fetch_*` methods return all selectable fields by default. Add `.returning([ID, STATUS])` when you want a narrower projection, or use `.execute()` when no rows should be returned.
 
+`INSERT` also accepts server-owned expressions and SQL defaults:
+
+```rust
+insert(events())
+    .set(ID, event_id)
+    .set(EVENT_TYPE, "created")
+    .set_default(PAYLOAD)
+    .set_expr(CREATED_AT, raw_expr(raw("now()"), FieldType::Timestamptz))
+    .returning([ID])
+    .returning_expr(func("lower", [EVENT_TYPE.expr()]).returns(FieldType::Text).alias("kind"));
+```
+
+Insert expressions cannot reference target fields because Postgres `VALUES` rows do not have a current target row. Use `.set(...)`, `.set_default(...)`, functions, or server-owned raw expressions.
+
 Struct inserts use serde:
 
 ```rust
@@ -224,14 +238,17 @@ insert(orders())
 ```rust
 update(orders())
     .set(STATUS, "paid")
+    .set_default(METADATA)
+    .set_expr(TOTAL_CENTS, coalesce([TOTAL_CENTS.expr(), 0.into_sql_expr()]))
     .set_raw(CREATED_AT, raw("now()"))
     .set_col(USER_ID, field("backup_user_id"))
     .filter(ID.eq(order_id))
+    .returning_expr(cast(TOTAL_CENTS.expr(), FieldType::Text).alias("total_text"))
     .fetch_optional_as::<Order>(&db)
     .await?;
 ```
 
-Use `.set_null(field)` when an update needs to assign SQL `NULL` without spelling `Value::Null`.
+Use `.set_null(field)` when an update needs to assign SQL `NULL` without spelling `Value::Null`. Use `.set_default(field)` for SQL `DEFAULT`. Use `.set_expr(field, expr)` for server-owned computed assignments; rqb validates the expression type and casts the top-level expression to the target field type.
 
 Partial update:
 

@@ -50,8 +50,8 @@ pub use validation::{
     ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
     ValidatedContainmentOperator, ValidatedContainmentTarget, ValidatedCte, ValidatedCteBody,
     ValidatedDelete, ValidatedExpr, ValidatedInsert, ValidatedJoin, ValidatedLikePattern,
-    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedSelect, ValidatedSelectItem,
-    ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
+    ValidatedNullSafeBinaryOperator, ValidatedPredicate, ValidatedReturningItem, ValidatedSelect,
+    ValidatedSelectItem, ValidatedSort, ValidatedSqlExpr, ValidatedUpdate, ValidatedWriteValue,
 };
 pub use value::Value;
 pub use write::{

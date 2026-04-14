@@ -1,6 +1,5 @@
 use rqb_core::{
-    SelectColumn, ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
-    ValidatedInsert,
+    ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget, ValidatedInsert,
 };
 
 use crate::helpers::write_quoted_ident;
@@ -41,12 +40,11 @@ impl Renderer {
         if let Some(conflict) = &validated.conflict {
             self.render_conflict(conflict)?;
         }
-        self.render_returning(&validated.returning);
+        self.render_returning(&validated.returning)?;
         self.columns = validated
             .returning
             .iter()
-            .cloned()
-            .map(SelectColumn::Field)
+            .map(|item| item.column())
             .collect();
         Ok(self.finish())
     }

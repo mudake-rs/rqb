@@ -1,5 +1,6 @@
 use rqb_core::{
-    FieldType, RawSql, ResolvedField, Source, ValidatedSelectItem, ValidatedWriteValue, Value,
+    FieldType, RawSql, ResolvedField, Source, ValidatedReturningItem, ValidatedSelectItem,
+    ValidatedWriteValue, Value,
 };
 
 use crate::Result;
@@ -119,21 +120,33 @@ impl Renderer {
             ValidatedWriteValue::Value(value) => self.push_typed_param(value, field_type),
             ValidatedWriteValue::Raw(raw) => self.render_raw(raw),
             ValidatedWriteValue::Column(field) => self.render_column_name(field),
+            ValidatedWriteValue::Expr(expr) => {
+                self.sql.push_str("CAST(");
+                self.render_sql_expr(expr)?;
+                self.sql.push_str(" AS ");
+                crate::type_sql::write_postgres_type_name(&mut self.sql, field_type);
+                self.sql.push(')');
+            }
+            ValidatedWriteValue::Default => self.sql.push_str("DEFAULT"),
         }
         Ok(())
     }
 
-    pub(super) fn render_returning(&mut self, fields: &[ResolvedField]) {
-        if fields.is_empty() {
-            return;
+    pub(super) fn render_returning(&mut self, items: &[ValidatedReturningItem]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
         }
         self.sql.push_str(" RETURNING ");
-        for (idx, field) in fields.iter().enumerate() {
+        for (idx, item) in items.iter().enumerate() {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
-            self.render_selected_field(field);
+            match item {
+                ValidatedReturningItem::Field(field) => self.render_selected_field(field),
+                ValidatedReturningItem::Expression(item) => self.render_selected_expr(item)?,
+            }
         }
+        Ok(())
     }
 
     pub(super) fn render_column_name(&mut self, field: &ResolvedField) {

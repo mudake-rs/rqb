@@ -1798,7 +1798,6 @@ fn postgres_error_helpers_classify_variants() {
         dataset: "orders".to_owned(),
         field: "missing".to_owned(),
     });
-    assert!(core.is_core());
     assert_eq!(
         core.as_core(),
         Some(&rqb_core::Error::UnknownField {
@@ -1811,25 +1810,24 @@ fn postgres_error_helpers_classify_variants() {
         constraint: Some("users_email_key".to_owned()),
         detail: Some("duplicate key".to_owned()),
     };
-    assert!(unique.is_unique_violation());
-    assert!(unique.is_constraint("users_email_key"));
+    assert!(matches!(unique, Error::UniqueViolation { .. }));
     assert_eq!(unique.code(), Some("23505"));
     assert_eq!(unique.constraint_name(), Some("users_email_key"));
     assert_eq!(unique.detail(), Some("duplicate key"));
 
-    assert!(
+    assert!(matches!(
         Error::ForeignKeyViolation {
             constraint: None,
             detail: None,
-        }
-        .is_foreign_key_violation()
-    );
-    assert!(
+        },
+        Error::ForeignKeyViolation { .. }
+    ));
+    assert!(matches!(
         Error::NotNullViolation {
             column: Some("email".to_owned()),
-        }
-        .is_not_null_violation()
-    );
+        },
+        Error::NotNullViolation { .. }
+    ));
     assert_eq!(
         Error::NotNullViolation {
             column: Some("email".to_owned()),
@@ -1837,19 +1835,19 @@ fn postgres_error_helpers_classify_variants() {
         .column_name(),
         Some("email")
     );
-    assert!(
+    assert!(matches!(
         Error::CheckViolation {
             constraint: Some("orders_total_positive".to_owned()),
-        }
-        .is_check_violation()
-    );
+        },
+        Error::CheckViolation { .. }
+    ));
 
     let restrict = Error::RestrictViolation {
         constraint: Some("orders_user_id_fkey".to_owned()),
         detail: Some("still referenced".to_owned()),
     };
     assert_eq!(restrict.code(), Some("23001"));
-    assert!(restrict.is_constraint("orders_user_id_fkey"));
+    assert_eq!(restrict.constraint_name(), Some("orders_user_id_fkey"));
     assert_eq!(restrict.detail(), Some("still referenced"));
 
     let serialization = Error::SerializationFailure {

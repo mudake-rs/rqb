@@ -23,26 +23,16 @@ struct ErrorBody {
 
 impl From<rqb::Error> for AppError {
     fn from(error: rqb::Error) -> Self {
-        if error.is_not_found() {
-            Self::NotFound
-        } else if error.is_unique_violation() {
-            Self::Conflict(
-                error
-                    .constraint_name()
-                    .unwrap_or("unique constraint")
-                    .to_owned(),
-            )
-        } else if error.is_foreign_key_violation() {
-            Self::Conflict(
-                error
-                    .constraint_name()
-                    .unwrap_or("foreign key constraint")
-                    .to_owned(),
-            )
-        } else if error.is_core() {
-            Self::BadRequest(error.to_string())
-        } else {
-            Self::Internal(error.to_string())
+        match error {
+            rqb::Error::NotFound => Self::NotFound,
+            rqb::Error::UniqueViolation { constraint, .. } => {
+                Self::Conflict(constraint.unwrap_or_else(|| "unique constraint".to_owned()))
+            }
+            rqb::Error::ForeignKeyViolation { constraint, .. } => Self::Conflict(
+                constraint.unwrap_or_else(|| "foreign key constraint".to_owned()),
+            ),
+            rqb::Error::Core(error) => Self::BadRequest(error.to_string()),
+            error => Self::Internal(error.to_string()),
         }
     }
 }

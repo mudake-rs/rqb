@@ -220,43 +220,15 @@ impl Error {
         let Self::Core(error) = self;
         Some(error)
     }
-
-    pub fn is_core(&self) -> bool {
-        self.as_core().is_some()
-    }
 }
 
 #[cfg(feature = "runtime-tokio-postgres")]
 impl Error {
-    pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound)
-    }
-
-    pub fn is_unique_violation(&self) -> bool {
-        matches!(self, Self::UniqueViolation { .. })
-    }
-
-    pub fn is_foreign_key_violation(&self) -> bool {
-        matches!(self, Self::ForeignKeyViolation { .. })
-    }
-
-    pub fn is_not_null_violation(&self) -> bool {
-        matches!(self, Self::NotNullViolation { .. })
-    }
-
-    pub fn is_check_violation(&self) -> bool {
-        matches!(self, Self::CheckViolation { .. })
-    }
-
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
             Self::SerializationFailure { .. } | Self::DeadlockDetected { .. }
         ) || self.is_connection()
-    }
-
-    pub fn is_constraint(&self, name: &str) -> bool {
-        self.constraint_name() == Some(name)
     }
 
     pub fn is_connection(&self) -> bool {

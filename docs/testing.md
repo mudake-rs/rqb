@@ -77,7 +77,7 @@ Expected database errors inside a transaction must use a savepoint:
 ```rust
 client.batch_execute("SAVEPOINT duplicate").await?;
 let error = insert(table).set(ID, existing_id).execute(&client).await.unwrap_err();
-assert!(error.is_unique_violation());
+assert!(matches!(error, rqb::Error::UniqueViolation { .. }));
 client.batch_execute("ROLLBACK TO SAVEPOINT duplicate").await?;
 ```
 

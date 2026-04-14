@@ -1,9 +1,7 @@
 use rqb_core::{ElemType, FieldType, Value, ValueRepr};
 
 use crate::helpers::value_to_json;
-use crate::type_sql::{
-    array_field_type_for_scalar, write_postgres_array_cast_for_scalar, write_postgres_cast,
-};
+use crate::type_sql::{write_postgres_array_cast_for_scalar, write_postgres_cast};
 
 use super::Renderer;
 
@@ -64,7 +62,7 @@ impl Renderer {
         values: &[Value],
         field_type: FieldType,
     ) {
-        if let Some(array_type) = array_field_type_for_scalar(field_type) {
+        if let Some(array_type) = field_type.array_type_for_scalar() {
             self.push_typed_array_values_param(values, array_type);
             return;
         }

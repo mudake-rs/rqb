@@ -26,6 +26,9 @@ cargo run --manifest-path samples/transactions/Cargo.toml
 cargo run --manifest-path samples/cte-and-subqueries/Cargo.toml
 cargo run --manifest-path samples/generated-schema/Cargo.toml
 cargo run --manifest-path samples/error-handling/Cargo.toml
+cargo run --manifest-path samples/write-dtos/Cargo.toml
+cargo run --manifest-path samples/numeric/Cargo.toml
+cargo run --manifest-path samples/postgres-types/Cargo.toml
 cargo run --manifest-path samples/custom-types/Cargo.toml
 cargo run --manifest-path samples/raw-query/Cargo.toml
 ```

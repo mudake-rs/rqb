@@ -11,8 +11,7 @@
 //! 3. Optionally merge a JSON `SearchRequest` with `.request(request)`.
 //! 4. Render with `build_pg()` or execute with `fetch_*`/`execute`.
 //!
-//! See the repository `README.md`, `docs/guide.md`, `docs/recipes.md`, and
-//! `docs/ergonomics.md` for end-to-end examples.
+//! See the repository `README.md` and crate examples for end-to-end usage.
 
 pub use rqb_core::{
     __RqbWriteRecordResult, __rqb_json_write_value, Aggregate, AggregateType, BuiltinFunction,

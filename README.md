@@ -1,15 +1,23 @@
 # rqb
 
-Ergonomic Postgres query builder for Rust services that need both hand-written queries and safe JSON-driven search.
+Ergonomic Postgres query builder for Rust services.
 
-rqb is not an ORM and not a Diesel clone. The main idea is:
+rqb is not an ORM. It builds parameterized Postgres SQL from dataset metadata,
+validates query shapes before rendering, and can execute through
+`tokio-postgres` or `deadpool-postgres`.
 
-1. Describe datasets with field metadata: API name, DB column, type, and allowed operations.
-2. Build the trusted query shape in Rust: table/view/raw source, joins, CTEs, aggregates, locks, subqueries.
-3. Optionally apply a client `SearchRequest` with filters, sort, limit, and offset.
-4. Render parameterized Postgres SQL or execute it through `tokio-postgres`/`deadpool-postgres`.
+Use it when an application needs:
 
-That gives a Knex-like runtime composition model without exposing arbitrary SQL in JSON.
+- normal Rust query builders for service-owned SQL shape
+- safe JSON search over server-approved fields
+- async execution with pool-or-transaction ergonomics
+- serde row DTOs and small write DTOs
+- generated schema metadata from Postgres
+
+## Status
+
+rqb is pre-1.0 and the public API is still allowed to change when that makes the
+library simpler or clearer.
 
 ## Install
 
@@ -24,14 +32,13 @@ chrono = { version = "0.4", features = ["serde"] }
 
 Feature flags:
 
-| Feature | Enables | Use when |
-| --- | --- | --- |
-| `runtime-tokio-postgres` | SQL params, execution traits, row deserialization | You own a `tokio_postgres::Client` or transaction |
-| `runtime-deadpool` | `runtime-tokio-postgres` plus deadpool client support | You manage your own pool |
-| `pool` | `Db`, `connect`, `begin`, transactions, savepoints | You want the built-in pool facade |
+| Feature | Enables |
+| --- | --- |
+| `runtime-tokio-postgres` | execution traits, typed params, row deserialization |
+| `runtime-deadpool` | `runtime-tokio-postgres` plus deadpool client support |
+| `pool` | `Db`, `connect`, transactions, savepoints |
 
-UUID and chrono conversions are always available. Core query building and SQL
-rendering do not require a runtime feature.
+Query building and SQL rendering work without a runtime feature.
 
 ## Quick Start
 
@@ -44,7 +51,7 @@ use uuid::Uuid;
 const ID: Field = Field::new("id", FieldType::Uuid);
 const EMAIL: Field = Field::new("email", FieldType::Text);
 const STATUS: Field = Field::new("status", FieldType::Text);
-const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamp);
+const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
 
 fn users() -> Dataset {
     Dataset::table("app_users")
@@ -62,450 +69,207 @@ struct UserRow {
     created_at: DateTime<Utc>,
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let db = rqb::connect("postgres://rqb:rqb@localhost:55432/rqb").await?;
-
-    let rows = select(users())
+async fn active_users(db: &Db) -> rqb::Result<Vec<UserRow>> {
+    select(users())
         .filter(STATUS.eq("active"))
         .order_by(CREATED_AT.desc())
         .limit(20)
-        .fetch_all_as::<UserRow>(&db)
-        .await?;
-
-    Ok(())
+        .fetch_all_as::<UserRow>(db)
+        .await
 }
 ```
 
-`rqb::connect` uses `NoTls` for local development. Cloud Postgres users can pass a `tokio-postgres` TLS connector with `rqb::connect_with_tls` or `rqb::postgres::Db::connect_with_max_size_and_tls`.
+If `.fields(...)` is omitted, rqb selects every selectable field from the root
+dataset. Joined fields must be selected explicitly.
 
-## Default Projection
+## JSON Search
 
-You do not have to list fields for a normal `select(dataset())`. If `.fields(...)` is omitted, rqb selects every `selectable` field from the root dataset metadata:
-
-```rust
-let rows = select(users())
-    .filter(STATUS.eq("active"))
-    .fetch_all_as::<UserRow>(&db)
-    .await?;
-```
-
-Use `.fields([...])` when you want a narrower response, qualified join columns, a one-column subquery, or a stable DTO shape for a search endpoint.
-
-On joined queries, the default projection is still the root dataset only. Joined tables are available for filters, sort, aggregates, and explicit projections, but rqb does not silently return every joined column:
-
-```rust
-let rows = select(users().alias("u"))
-    .left_join(orders().alias("o"), ID.on("u").eq_col(USER_ID.on("o")))
-    .filter(STATUS.on("o").eq("paid"))
-    .fetch_all_as::<UserRow>(&db)
-    .await?;
-```
-
-This mirrors Diesel's usual ergonomics: a table query has a default selection, and `.select(...)` is only needed when changing the projection. Diesel tracks that selection in Rust types at compile time; rqb resolves it from dataset metadata at runtime.
-
-## Why rqb Feels Different
-
-For one static CRUD query, rqb and Diesel are close. The difference shows up when service code has optional filters, JSON search requests, nested response DTOs, and explicit async transaction boundaries:
-
-```rust
-let page = select(order_search_view())
-    .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
-    .filter(ORGANIZATION_ID.eq(current_org_id))
-    .filter_option(params.status, |status| STATUS.eq(status))
-    .filter_option(params.min_total, |min_total| TOTAL_CENTS.gte(min_total))
-    .request(request)
-    .page_as::<OrderSearchRow>(&db)
-    .await?;
-```
-
-The trusted query shape stays in Rust, while untrusted client search input is limited to metadata-approved fields and operators. See [docs/ergonomics.md](docs/ergonomics.md) for a Diesel-by-Diesel comparison with longer examples.
-
-## SearchRequest
-
-`SearchRequest` is the JSON API surface. It supports:
-
-- `filter`
-- `sort`
-- `limit`
-- `offset`
-
-Example HTTP body:
+`SearchRequest` is the client-facing JSON shape. It can filter, sort, limit, and
+offset. It cannot define joins, CTEs, raw SQL, subqueries, or response fields.
 
 ```json
 {
-  "sort": [{ "field": "createdAt", "dir": "desc" }],
   "filter": {
     "and": [
       { "field": "status", "operator": "equals", "value": "paid" },
       { "field": "metadata.score", "operator": "gte", "value": 80 }
     ]
   },
+  "sort": [{ "field": "createdAt", "dir": "desc" }],
   "limit": 20,
   "offset": 0
 }
 ```
 
-Apply it to a server-owned query:
+Apply it to a trusted Rust query:
 
 ```rust
-async fn search_orders(
-    db: &Db,
-    request: SearchRequest,
-) -> rqb::Result<Page<OrderSearchRow>> {
-    select(order_search_view())
-        .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
-        .filter(ORGANIZATION_ID.eq(current_org_id()))
-        .request(request)
-        .page_as::<OrderSearchRow>(db)
-        .await
-}
-```
-
-`.request(request)` merges the incoming request with existing builder state. Existing server filters are combined with the client filter using `AND`; request sort/limit/offset replace those parts when present. Use `.replace_request(request)` only when you intentionally want old replacement semantics.
-
-JSON does not define joins, CTEs, raw SQL, or subqueries. Build those in Rust, then apply `SearchRequest` on top.
-
-## Server-Owned Query Shapes
-
-### Joins
-
-```rust
-let users = Dataset::table("app_users").alias("u").fields([ID, EMAIL]);
-let orders = Dataset::table("orders").alias("o").fields([ORDER_ID, USER_ID, STATUS]);
-
-let rows = select(users)
-    .left_join(orders, ID.on("u").eq_col(USER_ID.on("o")))
-    .fields([ID.on("u"), EMAIL.on("u"), STATUS.on("o")])
-    .filter(STATUS.on("o").eq("paid"))
-    .fetch_all_as::<UserOrderRow>(&db)
+let page = select(order_search_view())
+    .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
+    .filter(ORGANIZATION_ID.eq(current_org_id))
+    .request(search_request)
+    .page_as::<OrderSearchRow>(&db)
     .await?;
 ```
 
-Generated schemas include `table().alias("u")` relation helpers so most code can use `user.id()` and `order.user_id()` instead of string aliases.
-
-### CTEs And Raw Sources
-
-```rust
-let recent = cte(
-    "recent_orders",
-    select(orders())
-        .fields([ID, USER_ID, STATUS])
-        .filter(CREATED_AT.gte("2026-01-01T00:00:00Z"))
-        .build(),
-);
-
-let rows = select(Dataset::cte("recent_orders").fields([ID, USER_ID, STATUS]))
-    .cte(recent)
-    .filter(STATUS.eq("paid"))
-    .fetch_all_as::<RecentOrderRow>(&db)
-    .await?;
-```
-
-Raw fragments are available for SQL shapes outside the builder:
-
-```rust
-let source = Dataset::raw(
-    "SELECT id, email, total_cents FROM order_search_view WHERE total_cents > 0",
-    "order_rollup",
-)
-.fields([ID, EMAIL, TOTAL_CENTS]);
-
-select(source).request(request);
-```
-
-`Dataset::raw` is for static server-owned source SQL with declared fields. For bind values, use `raw("... ? ...").bind(value)` in filters, assignments, or CTE bodies. Use `raw_query("... ? ...").bind(value)` when the whole statement is hand-written SQL and should execute through `&Db`, `&Tx`, or another `&impl PgExecutor`. Use `??` for a literal question mark in raw SQL.
-
-### Subquery Sources
-
-```rust
-let paid_orders = select(orders().alias("o"))
-    .fields([ID.on("o"), USER_ID.on("o")])
-    .filter(STATUS.on("o").eq("paid"))
-    .into_source("paid_orders")
-    .fields([ID, USER_ID]);
-
-let rows = select(paid_orders)
-    .fields([USER_ID])
-    .fetch_all_as::<UserIdRow>(&db)
-    .await?;
-```
-
-Use `left_join_lateral` when a subquery source references fields from the left
-side of the `FROM` list:
-
-```rust
-let latest_order = select(orders().alias("o"))
-    .fields([STATUS.on("o")])
-    .filter(USER_ID.on("o").eq_col(ID.on("u")))
-    .order_by(CREATED_AT.on("o").desc())
-    .limit(1)
-    .into_source("latest_order")
-    .fields([STATUS]);
-
-select(users().alias("u"))
-    .fields([EMAIL.on("u"), STATUS.on("latest_order").alias("latestStatus")])
-    .left_join_lateral(latest_order, raw("TRUE"));
-```
-
-### Subqueries
-
-Correlated `EXISTS`:
-
-```rust
-let rows = select(orders().alias("o"))
-    .filter(exists(
-        select(events().alias("e")).filter(all([
-            EVENT_ORDER_ID.on("e").eq_col(ID.on("o")),
-            EVENT_TYPE.on("e").eq("paid"),
-        ])),
-    ))
-    .fetch_all_as::<OrderRow>(&db)
-    .await?;
-```
-
-`IN (subquery)`:
-
-```rust
-let rows = select(users())
-    .filter(ID.in_subquery(
-        select(orders().alias("o"))
-            .fields([USER_ID.on("o")])
-            .filter(STATUS.on("o").eq("paid")),
-    ))
-    .fetch_all_as::<UserRow>(&db)
-    .await?;
-```
-
-Subquery expressions are Rust-only and skipped by serde. This is deliberate: JSON clients should not author arbitrary subqueries.
-
-### Set Operations
-
-```rust
-let rows = union_all(
-    select(users()).fields([EMAIL]).filter(STATUS.eq("active")),
-    select(users()).fields([EMAIL]).filter(STATUS.eq("disabled")),
-)
-.order_by(field("email").asc())
-.fetch_all_as::<EmailRow>(&db)
-.await?;
-```
-
-Set queries are regular query bodies: they work as top-level reads, CTE bodies,
-`EXISTS`, `IN (subquery)`, and `INSERT ... SELECT` sources. rqb validates column
-count and output type compatibility before rendering SQL.
-
-## Postgres Features
-
-### DISTINCT ON
-
-```rust
-select(orders())
-    .fields([USER_ID, CREATED_AT, STATUS])
-    .distinct_on([USER_ID])
-    .order_by(USER_ID.asc())
-    .order_by(CREATED_AT.desc());
-```
-
-Useful for "latest row per group" queries.
-
-### Row Locks
-
-```rust
-let jobs = select(job_queue())
-    .filter(STATUS.eq("ready"))
-    .order_by(CREATED_AT.asc())
-    .limit(100)
-    .for_update()
-    .skip_locked()
-    .fetch_all_as::<Job>(&tx)
-    .await?;
-```
-
-Available lock modes: `.for_update()`, `.for_no_key_update()`, `.for_share()`, `.for_key_share()`. Wait modes: `.nowait()`, `.skip_locked()`.
-
-### Aggregates And Nested JSON
-
-```rust
-let rows = select(users().alias("u"))
-    .left_join(orders().alias("o"), USER_ID.on("o").eq_col(ID.on("u")))
-    .fields([ID.on("u"), EMAIL.on("u")])
-    .agg(
-        json_agg("orders", [ORDER_ID.on("o"), STATUS.on("o")])
-            .filter(ORDER_ID.on("o").is_not_null())
-    )
-    .fetch_all_as::<UserWithOrders>(&db)
-    .await?;
-```
-
-Other aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `json_agg`, and `string_agg`.
+Server filters are preserved and combined with the client filter using `AND`.
+The dataset metadata decides which fields and operators are valid.
 
 ## Writes
 
-Struct writes use `WriteRecord`. The derive maps Rust field names to generated
-`Field` constants, so values reach validation directly instead of passing
-through an intermediate JSON object.
-
-```rust
-#[derive(rqb::WriteRecord)]
-#[rqb(fields = users)]
-struct NewUser {
-    id: Uuid,
-    email: String,
-    status: String,
-}
-
-let user = insert(users())
-    .value(&new_user)
-    .fetch_one_as::<UserRow>(&db)
-    .await?;
-```
-
-Write `fetch_*` methods return all selectable fields by default. Use `.returning([ID, EMAIL])` to narrow the projection, or `.execute()` when no rows should be returned.
-
-Writes can use SQL defaults, server-owned expressions, and computed `RETURNING` values:
-
-```rust
-let row = update(users())
-    .set_default(PROFILE)
-    .set_expr(EMAIL, lower(EMAIL))
-    .filter(ID.eq(user_id))
-    .returning([ID])
-    .returning_expr(lower(EMAIL).alias("emailLower"))
-    .fetch_one_as::<UserWriteResult>(&db)
-    .await?;
-```
-
-Custom upserts can use `excluded(...)`, `DEFAULT`, and partial-index conflict
-predicates without raw SQL:
-
-```rust
-insert(order_counters())
-    .set(ID, id)
-    .set(TOTAL_CENTS, total)
-    .on_conflict(ID)
-    .index_where(DELETED_AT.is_null())
-    .do_update_set([
-        set_expr(TOTAL_CENTS, excluded(TOTAL_CENTS)),
-        set_default(UPDATED_AT),
-    ])
-    .returning([ID, TOTAL_CENTS]);
-```
-
-Partial updates:
-
-```rust
-#[derive(rqb::WriteRecord)]
-#[rqb(fields = users, skip_none)]
-struct PatchUser {
-    email: Option<String>,
-    status: Option<String>,
-}
-
-update(users())
-    .set_from(&patch)
-    .filter(ID.eq(user_id))
-    .returning([ID])
-    .fetch_optional(&db)
-    .await?;
-```
-
-Upsert:
+Writes can be built field-by-field:
 
 ```rust
 insert(users())
-    .value(&new_user)
-    .on_conflict(EMAIL)
-    .do_update([STATUS])
-    .fetch_one_as::<UserRow>(&db)
+    .set(ID, user_id)
+    .set(EMAIL, "ada@example.com")
+    .set(STATUS, "active")
+    .returning([ID]);
+```
+
+For DTOs, derive `WriteRecord`:
+
+```rust
+mod user_fields {
+    use rqb::prelude::*;
+
+    pub const ID: Field = Field::new("id", FieldType::Uuid);
+    pub const EMAIL: Field = Field::new("email", FieldType::Text);
+    pub const STATUS: Field = Field::new("status", FieldType::Text);
+    pub const PROFILE: Field = Field::new("profile", FieldType::Jsonb);
+}
+
+fn writable_users() -> Dataset {
+    Dataset::table("app_users").fields([
+        user_fields::ID,
+        user_fields::EMAIL,
+        user_fields::STATUS,
+        user_fields::PROFILE,
+    ])
+}
+
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = user_fields)]
+struct NewUser {
+    id: uuid::Uuid,
+    email: String,
+    status: String,
+    profile: serde_json::Value,
+}
+
+#[derive(rqb::WriteRecord)]
+#[rqb(fields = user_fields, skip_none)]
+struct UserPatch {
+    status: Option<String>,
+    profile: Option<serde_json::Value>,
+}
+
+insert(writable_users()).value(&new_user).execute(&db).await?;
+
+update(writable_users())
+    .set_from(&patch)
+    .filter(user_fields::ID.eq(user_id))
+    .execute(&db)
     .await?;
 ```
 
-## Transactions
+`#[rqb(skip_none)]` skips absent patch fields. Without it, `None` writes SQL
+`NULL`. Use `#[rqb(field = user_fields::EMAIL)]` when a DTO field has a
+different Rust name than the generated field constant, and `#[rqb(skip)]` for
+request-only fields.
 
-Explicit begin/commit:
+## SQL Shape
+
+rqb supports Postgres-specific query shape in Rust:
+
+- joins and lateral joins
+- CTEs
+- subquery sources and `EXISTS`
+- `UNION`, `INTERSECT`, `EXCEPT`
+- `DISTINCT ON`
+- row locks
+- aggregates and grouped queries
+- `INSERT`, `UPDATE`, `DELETE`, upsert, `RETURNING`
+- server-owned raw SQL fragments
+
+Values are rendered as Postgres parameters. User input is not interpolated into
+SQL strings.
+
+## Raw SQL
+
+Use raw fragments inside validated queries when the builder does not cover a
+small expression:
+
+```rust
+select(users()).filter(raw("lower(email) = lower(?)").bind(email));
+```
+
+Use `raw_query` when the whole statement is hand-written SQL:
+
+```rust
+let count: i64 = raw_query("SELECT COUNT(*)::bigint FROM app_users WHERE status = ?")
+    .bind("active")
+    .fetch_one_scalar(&db)
+    .await?;
+```
+
+`?` placeholders are counted and rendered as Postgres `$N` parameters. Use `??`
+for a literal question mark.
+
+## Transactions
 
 ```rust
 let tx = db.begin().await?;
-insert(orders()).value(&new_order).execute(&tx).await?;
-insert(order_items()).values(&items).execute(&tx).await?;
+
+insert(users()).value(&new_user).execute(&tx).await?;
+update(users()).set(STATUS, "active").filter(ID.eq(user_id)).execute(&tx).await?;
+
 tx.commit().await?;
 ```
 
-Dropping a transaction without `commit()` rolls it back. Closure-style code is available when it is a better fit:
+The pool feature also provides savepoints and closure-style transactions through
+`txn!`.
 
-```rust
-db.transaction(txn!(|tx| {
-    insert(orders()).value(&new_order).execute(tx).await?;
-    insert(order_items()).values(&items).execute(tx).await?;
-    Ok(())
-}))
-.await?;
-```
+## Type Policy
 
-## Debug SQL
+`uuid`, `chrono`, JSON, arrays, enums, bytea, temporal types, ranges, network
+types, and custom domains are modeled in field metadata.
 
-```rust
-let built = select(orders())
-    .filter(STATUS.eq("paid"))
-    .build_pg()?;
-
-println!("{}", built.rows.debug_sql());
-println!("{}", built.count.debug_sql());
-```
-
-`debug_sql()` prints SQL plus the `Value` params. It is for development logs, not string interpolation.
+`FieldType::Float` means Postgres `double precision`. `FieldType::Numeric` and
+decimal-string custom domains keep exact values as strings by default, so large
+money, balance, and domain values do not silently pass through `f64`.
 
 ## Code Generation
 
-Generate field constants from a live Postgres schema:
+`rqb-cli` can introspect Postgres and generate schema metadata:
 
 ```bash
-make db-up
 cargo run -p rqb-cli -- generate \
   --database-url postgres://rqb:rqb@localhost:55432/rqb \
   --schema public \
-  --out target/generated/rqb_schema.rs
+  --out src/schema.rs
 ```
 
-The generated modules contain:
-
-- `Field` constants
-- `dataset()` functions
-- `table().alias("x")` relation helpers for ergonomic joins
-- Postgres enum metadata and serde-compatible Rust enum wrappers
-- JSONB path policy and array sorting defaults from introspection
-
-Generated enum wrappers serialize and deserialize as the exact Postgres labels, so they can be used directly in fixed-shape request, response, and DB DTOs.
-
-The REST sample uses generated schema metadata directly:
-
-```bash
-make generate-demo
-cargo run --manifest-path samples/rest-api/Cargo.toml
-```
+Generated schema includes field constants, dataset functions, enum metadata,
+relation helpers, JSON path policy, and array sorting defaults.
 
 ## Testing
 
 ```bash
+cargo test --workspace --all-features
 make docker-test
 ```
 
-This starts a dedicated Docker Compose project, puts Postgres data on tmpfs, runs the test suite in a Rust container, and tears the project down afterwards.
+`make docker-test` starts the repository Postgres test container, runs the
+workspace test suite, and tears the container down.
 
-## Documentation Map
+## Examples
 
-- [docs/guide.md](docs/guide.md): complete API guide
-- [docs/numeric-policy.md](docs/numeric-policy.md): exact numeric, float, and custom domain policy
-- [docs/recipes.md](docs/recipes.md): copyable service recipes
-- [docs/testing.md](docs/testing.md): test layout, naming, rendering assertions, and integration pattern
-- [docs/ergonomics.md](docs/ergonomics.md): longer comparison with Diesel from an application ergonomics angle
-- [docs/diesel-migration.md](docs/diesel-migration.md): mapping Diesel patterns to rqb
-- [docs/architecture.md](docs/architecture.md): internal capability spec and refactor direction
-- [docs/roadmap.md](docs/roadmap.md): follow-up ergonomics ideas from the sample
-- [PHILOSOPHY.md](PHILOSOPHY.md): project philosophy and API design principles
-- [crates/rqb/examples](crates/rqb/examples): small compile-checked builder examples
-- [samples](samples): standalone generated-schema samples for CRUD, JSON search, joins, transactions, CTEs, errors, raw SQL, and custom types
-- [samples/rest-api](samples/rest-api): actix-web sample with generated schema, services, transactions, validation, and JSON search
+- [`crates/rqb/examples`](crates/rqb/examples): small compile-checked examples
+- [`samples`](samples): standalone samples for CRUD, JSON search, joins,
+  transactions, CTEs, write DTOs, exact numerics, Postgres types, raw SQL,
+  errors, and custom types
+- [`samples/rest-api`](samples/rest-api): actix-web service sample
 
 ## License
 
@@ -515,5 +279,3 @@ Licensed under either of:
 - MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in rqb by you shall be dual licensed as above, without any additional terms or conditions.

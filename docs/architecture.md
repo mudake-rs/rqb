@@ -173,15 +173,14 @@ rqb-core
   ast: SelectQuery, SearchRequest, Expr, Operator, Aggregate, write ASTs, RawSql
   scope: field and qualifier resolution
   validate: AST -> concrete validated models
-  validation::mod: validated model structs currently live here
-  validation::ValidatedPredicate: lowered predicate shapes used by renderers
+  validation::model: render-ready validated structs and enums
+  validation::model::ValidatedPredicate: lowered predicate shapes used by renderers
   validation::aggregate: aggregate fields, filters, aliases, and grouping rules
   validation::expr: validated expression tree construction
   validation::sort: validated sort field construction
   validation::value_type: reusable value/type compatibility checks
   validation::value_guard: reusable runtime Value guards
   validation::write: write-specific scope and validated write construction
-  target: move validated model structs into a smaller validation/model module
 
 rqb-postgres
   build: validation + rendering entry points and BuildPostgres traits
@@ -238,10 +237,10 @@ every layer.
    facade uses an explicit ergonomic export list, so internal `Validated*`
    types stay in `rqb_core` instead of appearing under `rqb::*`.
 
-6. Split validated model definitions. Pending.
-   `validation/mod.rs` currently hosts all validated structs and enums. Move the
-   render-ready model definitions into a focused module such as
-   `validation/model.rs` once the predicate model settles.
+6. Split validated model definitions. Done.
+   Render-ready validated structs and enums live in `validation/model.rs`.
+   `validation/mod.rs` now wires validation modules together and re-exports the
+   validated model for backend crates.
 
 7. Revisit execution traits. Pending.
    Only after rendering and validation are cleaner, decide whether select/write

@@ -102,6 +102,12 @@ Extensibility should be boring. Adding a library-owned Postgres type or a
 project-specific domain should have an obvious path through metadata, validation,
 casts, params, row mapping, CLI, tests, and docs.
 
+Numeric correctness is part of the metadata contract. `Float` means Postgres
+`double precision` and may use `f64`; `Numeric` and decimal-string domains mean
+exact transport and must not silently pass through `f64`. The default exact path
+is text-backed binding/selection, not a mandatory `BigDecimal` or
+`rust_decimal` dependency. See `docs/numeric-policy.md`.
+
 ## Pressure Points
 
 ### Type Knowledge Is Scattered, But Bounded

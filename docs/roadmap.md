@@ -30,6 +30,29 @@ Endpoints that let clients choose arbitrary fields should keep returning `serde_
 
 The docs should keep drawing a clear line between typed fixed-shape endpoints and dynamic search endpoints.
 
+## Numeric Correctness
+
+`docs/numeric-policy.md` documents the target rule: `Float` is lossy
+`double precision`; `Numeric` and numeric-like domains use exact string-backed
+transport by default.
+
+Done:
+
+- `FieldType::Integer` and `ElemType::Int` reject values outside PostgreSQL
+  `int4` range before rendering.
+- Postgres rendering lowers integer metadata to typed bind params:
+  `BindParam::Int4` / `BindParam::Int4Array` with `::int` / `::int[]`.
+- Numeric and decimal-string domains bind through text and select as text.
+
+Open before beta:
+
+- `compatible_type` must stop promoting `Numeric + Float` to `Float`.
+- custom numeric domains must not lose identity during expression promotion.
+- `sum` and `avg` must preserve exact output for numeric and numeric-like inputs.
+- decide whether implicit `F64` values are rejected for `Numeric` fields or
+  allowed only through an explicit cast/escape hatch.
+- add `Value::from(u64)` ergonomics without precision loss.
+
 ## Web Extractors
 
 The sample calls `payload.validate()?` in handlers. That is explicit and easy to follow, but Actix users may want a small extractor wrapper that validates `Json<T>` and `Query<T>` automatically.

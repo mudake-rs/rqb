@@ -582,6 +582,11 @@ let rows = select(Dataset::table("app_users").alias("u").fields([ID, EMAIL]))
 
 When aggregates are present and `.group_by(...)` is omitted, rqb groups by selected fields. Aggregates: `count`, `count_field`, `count_distinct`, `sum`, `avg`, `min`, `max`, `array_agg`, `json_agg`, and `string_agg`.
 
+Pre-beta caveat: `sum` and `avg` are being tightened to preserve exact numeric
+output for `numeric` and numeric-like domains. See
+[`docs/numeric-policy.md`](numeric-policy.md) and
+[`docs/roadmap.md`](roadmap.md).
+
 `json_agg` defaults to `[]` for empty aggregate results. Use `json_agg_nullable` when a SQL `NULL` result is part of the API contract.
 Prefer inline aggregate modifiers such as `json_agg(...).filter(...)` and `array_agg(...).order_by(...)`. Alias-based modifiers such as `filter_agg` and `order_within` remain available and validate the aggregate alias; typos fail at build time instead of being ignored.
 
@@ -619,7 +624,7 @@ JSON path comparisons use `#>` for JSON equality and `#>>` for text/numeric oper
 | --- | --- | --- |
 | `&str`, `String` | `String` | text, uuid, timestamp, date, enum as needed |
 | integer types | `I64` | bigint, int |
-| `f32`, `f64` | `F64` | double precision, numeric |
+| `f32`, `f64` | `F64` | double precision; avoid for exact numeric |
 | exact numeric strings | `String` | numeric and numeric-like domains |
 | `Value::bytes(...)`, `&[u8]` | `Bytes` | bytea |
 | `bool` | `Bool` | boolean |
@@ -628,6 +633,27 @@ JSON path comparisons use `#>` for JSON equality and `#>>` for text/numeric oper
 | Rust enums implementing `DbEnum` | `String` | Postgres enum casts |
 
 UUID, timestamp, timestamptz, date, and enum inputs can be strings. With `with-uuid` and `with-chrono`, `uuid::Uuid`, `chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::DateTime<Tz>` can be passed directly. The renderer adds Postgres casts from the `FieldType`.
+
+### Exact Numeric Values
+
+`Float` and `Numeric` are separate concepts:
+
+```rust
+RATIO.eq(0.75);     // FieldType::Float, lossy floating point is intended
+AMOUNT.eq("19.99"); // FieldType::Numeric, exact decimal transport
+AMOUNT.eq(1999);    // FieldType::Numeric, exact integer transport
+```
+
+Use strings for money, balances, Postgres `numeric`, and numeric-like domains
+such as `uint_256`. rqb selects exact numeric fields as text so serde maps them
+to `String` or a string-backed newtype. Do not use `f64` unless the field is
+semantically floating-point.
+
+Current pre-release code still accepts `F64` for some `Numeric` paths, but the
+target API is stricter: exact numeric fields should reject implicit float values
+or require an explicit cast/escape hatch. See
+[`docs/numeric-policy.md`](numeric-policy.md) for the full policy and open
+pre-beta fixes.
 
 ### Output
 
@@ -663,7 +689,7 @@ println!("{}", built.rows.debug_sql());
 println!("{}", built.count.debug_sql());
 ```
 
-`debug_sql()` prints the SQL and the `Value` params. It is a development/debugging helper; execution still uses bind parameters.
+`debug_sql()` prints the SQL and lowered `BindParam` params. It is a development/debugging helper; execution still uses bind parameters.
 
 ## Connection And Pool
 

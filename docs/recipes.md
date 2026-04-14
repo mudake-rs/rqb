@@ -354,6 +354,11 @@ column names, not rqb field metadata, so cast and alias raw expressions in SQL.
 For exact numeric or custom domain values, cast to `text` unless lossy floating
 point output is intentionally acceptable.
 
+```sql
+SELECT SUM(amount)::text AS "totalAmount"      -- exact numeric API
+SELECT AVG(score)::float8 AS "averageScore"    -- explicit floating-point API
+```
+
 ## Latest Row Per Group
 
 Postgres `DISTINCT ON` is useful for one row per grouping key.

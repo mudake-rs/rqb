@@ -497,6 +497,7 @@ This starts a dedicated Docker Compose project, puts Postgres data on tmpfs, run
 ## Documentation Map
 
 - [docs/guide.md](docs/guide.md): complete API guide
+- [docs/numeric-policy.md](docs/numeric-policy.md): exact numeric, float, and custom domain policy
 - [docs/recipes.md](docs/recipes.md): copyable service recipes
 - [docs/testing.md](docs/testing.md): test layout, naming, rendering assertions, and integration pattern
 - [docs/ergonomics.md](docs/ergonomics.md): longer comparison with Diesel from an application ergonomics angle

@@ -1,92 +1,287 @@
 # Roadmap
 
-These are useful follow-ups that came out of the REST sample and API review. They are not required for the current API to work, but they are good candidates for the next round of ergonomics work.
+This is the working roadmap for rqb before a public beta. The project is still
+pre-release, so API compatibility is not sacred. Correctness, clarity, and
+ergonomics win over preserving awkward names or internal shapes.
 
-## Aggregate Modifiers
+## Current Baseline
 
-Inline aggregate modifiers are available:
+rqb is a Postgres-only runtime query builder for services that need both
+server-owned Rust query composition and metadata-constrained JSON search.
 
-```rust
-.agg(
-    json_agg("orders", [order.id(), order.status()])
-        .filter(order.id().is_not_null())
-        .order_by(order.created_at().desc())
-)
-```
+The current baseline includes:
 
-Alias-based `filter_agg` and `order_within` remain useful for builder-style
-composition, but examples should prefer inline modifiers when the aggregate is
-created in the same expression.
+- Postgres metadata for tables, views, CTEs, raw sources, subquery sources,
+  generated relations, fields, enums, ranges, domains, and custom type specs.
+- SELECT builders with joins, lateral joins, CTEs, subqueries, `EXISTS`,
+  `DISTINCT ON`, grouping, aggregates, row locks, set operations, computed
+  select items, typed functions, JSON expression accessors, and window
+  functions.
+- JSON `SearchRequest` for safe client filters, sorting, field selection,
+  limit, and offset on metadata-declared fields.
+- INSERT, UPDATE, DELETE, upsert, `RETURNING`, expression assignments,
+  `UPDATE ... FROM`, `DELETE ... USING`, and required DELETE filters.
+- Raw SQL escape hatch through `raw_query`, with bind count validation and
+  scalar/typed fetch helpers.
+- Postgres execution through `PgExecutor`, pooled `Db`, `Tx`, savepoints,
+  linear transactions, closure transactions, pages, and statement cache policy.
+- Structured Postgres errors for common constraint failures, retryable
+  transaction failures, cancellation, privilege errors, raw SQLSTATE access, and
+  table/column/detail/hint extractors.
+- CLI schema generation from live Postgres, including enums, domains, relation
+  helpers, arrays, JSONB policy, ranges, and common Postgres types.
+- Docker test flow, integration tests against Postgres, CLI introspection golden
+  tests, docs, recipes, and samples.
 
-## Generated Validators
+## Project Decisions
 
-The CLI emits Postgres enum metadata and serde-compatible Rust enum wrappers. Fixed-shape DTOs can use those generated enums directly.
+These decisions should guide feature work and reviews:
 
-Request DTOs that deliberately keep enum fields as strings still need application validation. A future generator pass could emit reusable validation helpers for those string-backed inputs.
+- rqb is Postgres-only. Do not add dialect abstractions, generic SQL backends, or
+  lowest-common-denominator APIs.
+- Validation owns semantics. Rendering should be mechanical over validated
+  models, not a second place where operator/type meaning is rediscovered.
+- Metadata is the contract between Rust builders, JSON search, rendering, row
+  mapping, CLI generation, docs, and tests.
+- Rust/server code may build powerful SQL: joins, CTEs, raw fragments,
+  expressions, windows, and custom sources. JSON clients stay constrained to
+  declared fields and safe filter/sort/page operations.
+- Exact numbers must stay exact. `Float` means Postgres `double precision`.
+  `Numeric` and decimal-string domains use lossless string-backed transport by
+  default. See `docs/numeric-policy.md`.
+- API names can break before beta. If a name is misleading, fix it now.
+- Every behavior change should bring validation tests, rendering tests, and an
+  integration test when Postgres behavior is involved.
 
-## Dynamic Response Shapes
+## P0: Before Beta
 
-Endpoints that let clients choose arbitrary fields should keep returning `serde_json::Value`, because the response shape is dynamic by design.
+P0 items are correctness or API-shape work that should be done before we try to
+make the library broadly consumable.
 
-The docs should keep drawing a clear line between typed fixed-shape endpoints and dynamic search endpoints.
-
-## Numeric Correctness
-
-`docs/numeric-policy.md` documents the target rule: `Float` is lossy
-`double precision`; `Numeric` and numeric-like domains use exact string-backed
-transport by default.
+### Numeric Correctness
 
 Done:
 
-- `FieldType::Integer` and `ElemType::Int` reject values outside PostgreSQL
+- `FieldType::Integer` and `ElemType::Int` reject values outside the Postgres
   `int4` range before rendering.
-- Postgres rendering lowers integer metadata to typed bind params:
-  `BindParam::Int4` / `BindParam::Int4Array` with `::int` / `::int[]`.
-- Numeric and decimal-string domains bind through text and select as text.
+- Typed Postgres bind params avoid noisy `::bigint::int` casts for integer
+  values and typed nulls.
+- `Numeric` and decimal-string custom domains bind and select through text so
+  precision is not lost.
+- The public numeric policy is documented in `docs/numeric-policy.md`.
 
-Open before beta:
+Remaining P0 work:
 
-- `compatible_type` must stop promoting `Numeric + Float` to `Float`.
-- custom numeric domains must not lose identity during expression promotion.
-- `sum` and `avg` must preserve exact output for numeric and numeric-like inputs.
-- decide whether implicit `F64` values are rejected for `Numeric` fields or
-  allowed only through an explicit cast/escape hatch.
-- add `Value::from(u64)` ergonomics without precision loss.
+- Reject implicit `Numeric + Float` and `Float -> Numeric` promotion. Users must
+  cast explicitly when they want lossy behavior.
+- Preserve custom numeric domain identity during expression promotion where the
+  result is still that domain.
+- Make `sum` and `avg` preserve exact output for `Integer`, `BigInt`, `Numeric`,
+  and decimal-string domains.
+- Add ergonomic checked support for unsigned inputs without pretending all
+  `u64` values fit into Postgres `int8`.
+- Expand numeric tests across validation, rendering, integration, expressions,
+  aggregates, arrays, domains, and raw SQL guidance.
 
-## Web Extractors
+### API Naming And Facade Cleanup
 
-The sample calls `payload.validate()?` in handlers. That is explicit and easy to follow, but Actix users may want a small extractor wrapper that validates `Json<T>` and `Query<T>` automatically.
+Fix misleading names while the API is still private:
 
-This belongs in sample/application code rather than core rqb.
+- Rename write-builder methods whose names collide with SELECT semantics.
+- Rename overloaded operators where one name hides materially different SQL
+  behavior, especially text containment versus range/network containment.
+- Replace overly generic JSON key names such as `has` / `not_has` with names
+  that describe the Postgres operation.
+- Decide whether `fetch_as` should mean "all rows" or become `fetch_all_as`.
+- Keep the facade explicit. User-facing types should be available from `rqb::*`
+  and `rqb::prelude::*`; internal validated models should not leak through the
+  facade.
 
-## Extensible Type Metadata
+### JSON Search API Shape
 
-`PHILOSOPHY.md` describes the target type model: rqb owns broad Postgres and common extension type support, while project-specific domains and scalars are declared through metadata.
+Break and clean the JSON DSL before beta:
 
-The first domain vertical slice is implemented: `TypeSpec` metadata, `FieldType::Custom`, `ElemType::Custom`, CLI domain introspection, exact decimal-string binding for scalar and array domains, text selection for exact numeric fields, and runtime tests against a `uint_256` domain.
+- Rename request `query` to `filter` if that is the final user-facing word.
+- Make logical expression shape consistent and easy to produce from clients.
+- Normalize sort direction casing.
+- Keep JSON SearchRequest away from joins, CTEs, raw SQL, computed aliases, and
+  arbitrary expressions.
+- Put SearchRequest serde support behind a default-on feature if it materially
+  helps users who only want the Rust builder.
 
-Remaining work before beta:
+### Error Ergonomics
 
-- richer per-domain validation rules beyond decimal shape
-- serde-friendly generated Rust newtypes for common exact domains
-- exact aggregate output for `sum` / `avg` when the result is numeric
-- richer range/network operator coverage beyond `contains`, `contained_by`, and `overlaps`
-- library-owned extension types such as `ltree`, `hstore`, `macaddr`, `bit`/`varbit`, and interval
-- `pgvector` and PostGIS through `TypeSpec`/custom operator metadata rather than a large hardcoded surface
+Done:
 
-The BFM `uint_256` domain is the reference use case for this work.
+- `SerializationFailure` and `DeadlockDetected` for retry loops.
+- `QueryCanceled` for statement timeouts and cancellations.
+- `InsufficientPrivilege` for RLS and permission failures.
+- `RestrictViolation` completes the important constraint family.
+- `is_retryable()`, raw SQLSTATE `code()`, `table_name()`, `column_name()`,
+  `detail()`, and `hint()` are available.
+- Single-variant `is_*` helpers were pruned where they did not carry real
+  ergonomic value.
 
-## Architecture Refactor Status
+Remaining P0 work:
 
-The current architecture refactor is complete enough for the next feature work:
+- Decide the facade-level error path: whether application code should write
+  `rqb::Result<T>` instead of `rqb::postgres::Result<T>`.
+- Show retryable error handling and constraint mapping in docs and samples.
 
-- validation carries resolved SELECT and write shapes into the renderer
-- write validation uses a write-specific scope instead of throwaway selects
-- operators lower into concrete validated predicate shapes before rendering
-- type classification, array metadata, and custom representation helpers are centralized in the type model
-- Postgres cast, selection, and type-name behavior has a dedicated `type_sql` module
-- the public facade hides internal validated structs while `rqb-postgres` can still consume them
+### Docs And Samples
 
-Future query features should preserve this shape: validation decides semantics,
-rendering stays mechanical, and new type/operator behavior goes through the
-metadata contract instead of scattered renderer checks.
+The docs should be copyable, not just descriptive:
+
+- Rewrite the README around a short hero example, rendered SQL, JSON search, and
+  server-owned queries.
+- Add rendered SQL blocks to guide and recipes where they clarify behavior.
+- Add crate-level docs for docs.rs.
+- Keep samples on one generated sample schema instead of repeating hand-written
+  schemas.
+- Preserve standalone examples for basic CRUD, JSON search, joins and
+  aggregates, transactions, CTEs/subqueries, generated schema, raw query, custom
+  types, and error handling.
+- Show both transaction styles: explicit `begin` / `commit` and closure-style
+  transaction.
+- Include a custom type sample based on a decimal-string domain such as
+  `uint_256`.
+- Include manual complex query examples using `and`, `or`, `not`, subqueries,
+  expressions, and typed result mapping, including selecting only IDs.
+
+### Test Coverage As Spec
+
+Tests should function as the executable spec:
+
+- Every operator has validation and rendering coverage.
+- Every type has read/write/filter coverage where the database semantics matter.
+- Every public builder method has at least one behavior test.
+- Every error variant that claims to be reachable has an integration or unit
+  test proving how it is reached.
+- CLI generation has golden tests against live Postgres for enums, domains,
+  arrays, ranges, custom types, and relation helpers.
+- `make docker-test` remains the one command that brings up Postgres and runs
+  the full test suite.
+
+## P1: Postgres Depth
+
+P1 is the next feature layer after the P0 correctness/API pass.
+
+### Type Coverage
+
+Already covered well:
+
+- UUID, booleans, integer/bigint/float/numeric, text, citext, JSONB, bytea,
+  timestamp/timestamptz/date, arrays, enums, ranges, inet/cidr, and custom
+  domains through `TypeSpec`.
+
+Add next:
+
+- `time`, `timetz`, and `interval`.
+- `json` in addition to `jsonb`, with honest operator limitations.
+- `macaddr` and `macaddr8`.
+- `tsvector` and `tsquery` for indexed full-text search columns.
+- Multirange types for PG 14+.
+- `bit` and `varbit`.
+- `hstore` and `ltree` as common extensions.
+- `pgvector` through type metadata and focused operators rather than a giant
+  hardcoded surface.
+- PostGIS later, after the extension-type story is settled.
+
+### Operators
+
+Add missing Postgres operators where they are common and safe:
+
+- Case-sensitive LIKE and regex variants.
+- JSONB containment and contained-by for arbitrary JSON values.
+- PG 12 JSON path operators `@?` and `@@`.
+- Range adjacency, left/right, union, intersection, and difference where the API
+  can stay clear.
+- Network strict containment and overlap operators.
+- `IS TRUE`, `IS FALSE`, and `IS UNKNOWN` for nullable boolean fields.
+- Array subscript and expression-level indexing where it fits the expression
+  model.
+
+### Expressions And Functions
+
+The expression core is in place. Continue expanding it through typed helpers:
+
+- Finish core function helpers: `concat`, `replace`, `regexp_replace`,
+  `split_part`, `extract`, `age`, `abs`, `ceil`, `floor`, `round`, `power`, and
+  `sqrt`.
+- Add JSON functions such as `jsonb_set`, `jsonb_build_object`, and
+  `jsonb_array_elements` where result typing is clear.
+- Add array functions such as `array_length`, `unnest`, `array_append`, and
+  `array_remove`.
+- Provide an explicit generic `func()` escape hatch that requires a return type.
+- Keep computed aliases server-owned. JSON SearchRequest should not filter on
+  computed aliases unless they are exposed through dataset metadata, usually via
+  a view.
+
+### Aggregates And Analytics
+
+- Make aggregate output types exact and metadata-aware.
+- Add ordered-set aggregates such as `percentile_cont`, `percentile_disc`, and
+  `mode`.
+- Add aggregate window usage where it shares the existing window model cleanly.
+- Add window frame specs after the current function/partition/order model is
+  stable.
+- Add `GROUPING SETS`, `CUBE`, and `ROLLUP` if the API can stay readable.
+
+### Sources And Query Shapes
+
+The current architecture supports query bodies and set operations. Remaining
+source work:
+
+- `VALUES` as a table source.
+- Function calls as table sources.
+- Materialized and not-materialized CTE hints.
+- Scalar subqueries in SELECT expressions where they share the expression model.
+- ANY/ALL/SOME with subqueries beyond `IN` / `NOT IN`.
+
+### Writes And Bulk Work
+
+- Custom `ON CONFLICT ... WHERE` for partial unique indexes.
+- Richer `ON CONFLICT DO UPDATE SET` expressions.
+- CTEs in write queries.
+- Batch update through `VALUES`.
+- Auto-chunked multi-row insert.
+- COPY FROM STDIN for high-volume ingest.
+
+## P2: Performance And Polish
+
+These are valuable but should follow correctness and API shape:
+
+- Direct row deserialization without the intermediate JSON map.
+- Benchmarks for rendering, execution overhead, row mapping, raw query, and
+  common API endpoints.
+- Smaller allocation passes in rendering and row mapping when they are proven by
+  benchmarks.
+- Optional decimal crate integrations, while keeping string-backed exact numeric
+  transport as the default.
+- Optional LRU statement-cache policy only if the current per-connection cache
+  becomes a measured problem.
+
+## Release Readiness
+
+Before publishing broadly:
+
+- README and docs must match the current API.
+- Samples must run against the generated sample schema.
+- `cargo test --workspace --all-features`, no-default-features checks, clippy,
+  rustdoc, examples, and `make docker-test` must pass.
+- License, repository metadata, and contribution instructions must be clean.
+- The public API can still be pre-1.0, but the design should be internally
+  coherent enough that new features do not require another architecture cleanup.
+
+## Non-Goals
+
+- rqb is not an ORM. No identity map, association loader, model lifecycle, or
+  migration system.
+- rqb is not Diesel. It does not try to encode every SQL expression in Rust's
+  compile-time type system.
+- rqb is not sqlx. Raw SQL is supported, but the primary value is metadata-driven
+  query construction and validation.
+- rqb will not accept arbitrary SQL from JSON clients.
+- rqb will not make `BigDecimal` or `rust_decimal` mandatory for exact numeric
+  transport.
+- rqb will not preserve awkward pre-beta APIs for compatibility.

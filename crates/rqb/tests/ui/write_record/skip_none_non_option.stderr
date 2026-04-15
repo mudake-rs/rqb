@@ -1,0 +1,5 @@
+error: #[rqb(skip_none)] can only be used on Option<T> fields
+  --> tests/ui/write_record/skip_none_non_option.rs:13:12
+   |
+13 |     email: String,
+   |            ^^^^^^

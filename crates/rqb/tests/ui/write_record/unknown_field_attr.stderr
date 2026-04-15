@@ -1,0 +1,5 @@
+error: unsupported rqb field attribute
+  --> tests/ui/write_record/unknown_field_attr.rs:12:11
+   |
+12 |     #[rqb(unknown)]
+   |           ^^^^^^^

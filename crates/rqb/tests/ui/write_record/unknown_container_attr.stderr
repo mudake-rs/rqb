@@ -1,0 +1,5 @@
+error: unsupported rqb container attribute
+  --> tests/ui/write_record/unknown_container_attr.rs:10:23
+   |
+10 | #[rqb(fields = users, unknown)]
+   |                       ^^^^^^^

@@ -23,6 +23,7 @@ serde_json.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+trybuild.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [[example]]

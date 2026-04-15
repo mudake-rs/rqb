@@ -1,0 +1,5 @@
+error: WriteRecord can only be derived for structs with named fields
+  --> tests/ui/write_record/non_named_struct.rs:11:8
+   |
+11 | struct TupleUser(String);
+   |        ^^^^^^^^^

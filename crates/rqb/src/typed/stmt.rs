@@ -305,6 +305,12 @@ impl Insert {
         self
     }
 
+    pub fn returning_all(mut self) -> Self {
+        self.returning.clear();
+        push_all_source_fields(&self.target, &mut self.returning);
+        self
+    }
+
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self
@@ -355,6 +361,12 @@ impl Update {
         self
     }
 
+    pub fn returning_all(mut self) -> Self {
+        self.returning.clear();
+        push_all_source_fields(&self.target, &mut self.returning);
+        self
+    }
+
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self
@@ -402,6 +414,12 @@ impl Delete {
 
     pub fn returning<T>(mut self, field: Field<T>) -> Self {
         self.returning.push(select_item_for_field(field));
+        self
+    }
+
+    pub fn returning_all(mut self) -> Self {
+        self.returning.clear();
+        push_all_source_fields(&self.target, &mut self.returning);
         self
     }
 
@@ -494,6 +512,18 @@ fn select_item_for_field<T>(field: Field<T>) -> SelectItem {
     }
 }
 
+fn select_item_for_meta(meta: Meta) -> SelectItem {
+    let alias = field_alias(&meta);
+    SelectItem {
+        expr: ValueExpr::Field(meta),
+        alias,
+    }
+}
+
+fn push_all_source_fields(source: &Source, items: &mut Vec<SelectItem>) {
+    source.for_each_field(|meta| items.push(select_item_for_meta(*meta)));
+}
+
 fn field_alias(meta: &Meta) -> Option<String> {
     (meta.api != meta.db).then(|| meta.api.to_owned())
 }
@@ -501,7 +531,8 @@ fn field_alias(meta: &Meta) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use crate::typed::{
-        BoolExpr, BoolOp, Field, Meta, OpSet, OrderItem, Select, SelectItem, Source, ValueExpr,
+        BoolExpr, BoolOp, Field, Insert, Meta, OpSet, OrderItem, Select, SelectItem, Source,
+        ValueExpr,
     };
 
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -578,5 +609,45 @@ mod tests {
             stmt.validate().unwrap_err(),
             crate::Error::TypedDeleteWithoutFilter
         ));
+    }
+
+    #[test]
+    fn returning_all_uses_source_fields_with_api_aliases() {
+        static NAME_META: Meta = Meta::new("displayName", "display_name", "text");
+        static RETURN_FIELDS: [&Meta; 2] = [&ID_META, &NAME_META];
+        let source = Source::Table {
+            name: "public.users",
+            fields: &RETURN_FIELDS,
+        };
+
+        let stmt = Insert::into(source).set(ID.set(1)).returning_all();
+        let built = stmt.build().unwrap();
+
+        assert_eq!(
+            built.sql,
+            "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"id\", \"display_name\" AS \"displayName\""
+        );
+    }
+
+    #[test]
+    fn returning_all_replaces_existing_returning_fields() {
+        static NAME_META: Meta = Meta::new("displayName", "display_name", "text");
+        static RETURN_FIELDS: [&Meta; 2] = [&ID_META, &NAME_META];
+        let source = Source::Table {
+            name: "public.users",
+            fields: &RETURN_FIELDS,
+        };
+
+        let stmt = Insert::into(source)
+            .set(ID.set(1))
+            .returning(ID)
+            .returning_all()
+            .returning_all();
+        let built = stmt.build().unwrap();
+
+        assert_eq!(
+            built.sql,
+            "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"id\", \"display_name\" AS \"displayName\""
+        );
     }
 }

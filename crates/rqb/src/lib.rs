@@ -7,6 +7,7 @@
 #![allow(clippy::result_large_err)]
 
 mod error;
+mod tx;
 pub mod typed;
 
 pub use chrono;
@@ -50,5 +51,31 @@ mod tests {
             Error::InvalidTypedOperator { field, operator }
                 if field == "id" && operator == "gt"
         ));
+    }
+
+    #[test]
+    fn tx_macro_type_checks_with_pool_reference_and_value_return() {
+        fn assert_type_checks(pool: sqlx::PgPool) {
+            let future = crate::tx!(&pool, |conn| {
+                let _: &mut sqlx::PgConnection = conn;
+                Ok::<_, Error>(123_i32)
+            });
+            drop(future);
+        }
+
+        let _ = assert_type_checks as fn(sqlx::PgPool);
+    }
+
+    #[test]
+    fn tx_macro_type_checks_with_owned_pool_expression() {
+        fn assert_type_checks(pool: sqlx::PgPool) {
+            let future = crate::tx!(pool.clone(), |conn| {
+                let _: &mut sqlx::PgConnection = conn;
+                Ok::<_, Error>(())
+            });
+            drop(future);
+        }
+
+        let _ = assert_type_checks as fn(sqlx::PgPool);
     }
 }

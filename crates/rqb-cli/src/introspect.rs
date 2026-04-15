@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail};
-use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase};
+use heck::{ToShoutySnakeCase, ToSnakeCase};
 use sqlx::{PgPool, Row};
 
 use crate::ident::{sanitize_ident, unique_ident_strings};
@@ -85,7 +85,7 @@ pub(crate) async fn introspect(
         let data_type: String = row.try_get("data_type")?;
         let udt_name: String = row.try_get("udt_name")?;
         relation.columns.push(Column {
-            api_name: name.to_lower_camel_case(),
+            api_name: name.clone(),
             rust_name: sanitize_ident(&name.to_snake_case()),
             const_name: sanitize_ident(&name.to_shouty_snake_case()),
             meta_name: sanitize_ident(&format!("{}_META", name.to_shouty_snake_case())),

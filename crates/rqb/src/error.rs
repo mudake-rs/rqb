@@ -153,6 +153,12 @@ pub enum Error {
     #[error("sqlx error: {0}")]
     Sqlx(sqlx::Error),
 
+    #[error("transaction rollback failed after error: {error}; rollback error: {rollback}")]
+    TransactionRollbackFailed {
+        error: Box<Error>,
+        rollback: Box<Error>,
+    },
+
     #[error("parameter encode error: {0}")]
     Encode(String),
 

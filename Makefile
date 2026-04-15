@@ -25,6 +25,7 @@ doc:
 verify: check doc
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/basic-queries/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/json-search/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/rest-api/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/writes-and-types/Cargo.toml
 
 generate-schema: docker-infra-up

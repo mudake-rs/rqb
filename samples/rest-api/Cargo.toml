@@ -1,0 +1,16 @@
+[package]
+name = "rqb-sample-rest-api"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["json", "tokio"] }
+rqb = { path = "../../crates/rqb" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "uuid", "chrono", "json", "runtime-tokio-rustls", "derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1", features = ["v4"] }

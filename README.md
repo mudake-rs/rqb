@@ -99,10 +99,10 @@ response fields.
   "filter": {
     "and": [
       { "field": "status", "operator": "equals", "value": "paid" },
-      { "field": "totalCents", "operator": "gte", "value": 5000 }
+      { "field": "total_cents", "operator": "gte", "value": 5000 }
     ]
   },
-  "sort": [{ "field": "createdAt", "dir": "desc" }],
+  "sort": [{ "field": "created_at", "dir": "desc" }],
   "limit": 20,
   "offset": 0
 }
@@ -142,6 +142,39 @@ update(users())
 
 `DELETE` without a filter is rejected during validation.
 
+## Transactions
+
+rqb executes through sqlx. Use a pool for ordinary calls and a transaction
+connection for multi-step writes:
+
+```rust
+let mut tx = pool.begin().await?;
+let conn = &mut *tx;
+
+insert(users())
+    .set(ID.set(user_id))
+    .set(EMAIL.set("ada@example.com"))
+    .execute(&mut *conn)
+    .await?;
+
+tx.commit().await?;
+```
+
+Closure-style transactions are available without wrapping sqlx pools:
+
+```rust
+rqb::tx!(&pool, |conn| {
+    let created_id = insert(users())
+        .set(ID.set(user_id))
+        .set(EMAIL.set("ada@example.com"))
+        .returning(ID)
+        .fetch_one_scalar::<_, rqb::uuid::Uuid>(conn)
+        .await?;
+    Ok(created_id)
+})
+.await?;
+```
+
 ## CLI
 
 `rqb-cli` introspects Postgres and writes a schema module with `Meta` and
@@ -157,6 +190,9 @@ cargo run -p rqb-cli -- generate \
 Known sqlx-supported Postgres types generate typed `Field<T>` constants.
 Unknown extension types stay raw-only metadata: they can be part of server-owned
 SQL shape, but they are hidden from JSON requests by default.
+
+Generated field names match database column names. HTTP JSON casing belongs in
+application DTOs, not in generated schema metadata.
 
 ## Crates
 

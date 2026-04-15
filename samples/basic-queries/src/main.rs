@@ -12,7 +12,7 @@ mod users {
     pub static STATUS_META: Meta = Meta::new("status", "status", "text")
         .ops(OpSet::ordered())
         .json(JsonKind::Text);
-    pub static CREATED_AT_META: Meta = Meta::new("createdAt", "created_at", "timestamptz")
+    pub static CREATED_AT_META: Meta = Meta::new("created_at", "created_at", "timestamptz")
         .ops(OpSet::ordered())
         .json(JsonKind::Timestamptz);
 

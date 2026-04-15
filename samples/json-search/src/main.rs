@@ -8,14 +8,14 @@ mod orders {
         .ops(OpSet::ordered())
         .json(JsonKind::Uuid);
     pub static ORGANIZATION_ID_META: Meta =
-        Meta::new("organizationId", "organization_id", "uuid").ops(OpSet::equality());
+        Meta::new("organization_id", "organization_id", "uuid").ops(OpSet::equality());
     pub static STATUS_META: Meta = Meta::new("status", "status", "text")
         .ops(OpSet::ordered())
         .json(JsonKind::Text);
-    pub static TOTAL_CENTS_META: Meta = Meta::new("totalCents", "total_cents", "int8")
+    pub static TOTAL_CENTS_META: Meta = Meta::new("total_cents", "total_cents", "int8")
         .ops(OpSet::ordered())
         .json(JsonKind::BigInt);
-    pub static CREATED_AT_META: Meta = Meta::new("createdAt", "created_at", "timestamptz")
+    pub static CREATED_AT_META: Meta = Meta::new("created_at", "created_at", "timestamptz")
         .ops(OpSet::ordered())
         .json(JsonKind::Timestamptz);
 
@@ -42,10 +42,10 @@ fn main() -> rqb::Result<()> {
         "filter": {
             "and": [
                 { "field": "status", "operator": "equals", "value": "paid" },
-                { "field": "totalCents", "operator": "gte", "value": 5000 }
+                { "field": "total_cents", "operator": "gte", "value": 5000 }
             ]
         },
-        "sort": [{ "field": "createdAt", "dir": "desc" }],
+        "sort": [{ "field": "created_at", "dir": "desc" }],
         "limit": 20,
         "offset": 0
     }))
@@ -61,7 +61,7 @@ fn main() -> rqb::Result<()> {
 
     assert_eq!(
         built.sql,
-        "SELECT \"id\", \"status\", \"total_cents\" AS \"totalCents\" FROM \"public\".\"order_search\" WHERE (\"organization_id\" = $1 AND (\"status\" = $2 AND \"total_cents\" >= $3)) ORDER BY \"created_at\" DESC LIMIT $4 OFFSET $5"
+        "SELECT \"id\", \"status\", \"total_cents\" FROM \"public\".\"order_search\" WHERE (\"organization_id\" = $1 AND (\"status\" = $2 AND \"total_cents\" >= $3)) ORDER BY \"created_at\" DESC LIMIT $4 OFFSET $5"
     );
 
     println!("{}", built.sql);

@@ -8,16 +8,16 @@ mod invoices {
     pub static ID_META: Meta = Meta::new("id", "id", "uuid")
         .ops(OpSet::ordered())
         .json(JsonKind::Uuid);
-    pub static CUSTOMER_ID_META: Meta = Meta::new("customerId", "customer_id", "uuid")
+    pub static CUSTOMER_ID_META: Meta = Meta::new("customer_id", "customer_id", "uuid")
         .ops(OpSet::ordered())
         .json(JsonKind::Uuid);
     pub static AMOUNT_META: Meta = Meta::new("amount", "amount", "numeric")
         .ops(OpSet::ordered())
         .json(JsonKind::NumericString);
-    pub static DUE_ON_META: Meta = Meta::new("dueOn", "due_on", "date")
+    pub static DUE_ON_META: Meta = Meta::new("due_on", "due_on", "date")
         .ops(OpSet::ordered())
         .json(JsonKind::Date);
-    pub static PAID_AT_META: Meta = Meta::new("paidAt", "paid_at", "timestamptz")
+    pub static PAID_AT_META: Meta = Meta::new("paid_at", "paid_at", "timestamptz")
         .ops(OpSet::ordered())
         .json(JsonKind::Timestamptz);
     pub static METADATA_META: Meta = Meta::new("metadata", "metadata", "jsonb")

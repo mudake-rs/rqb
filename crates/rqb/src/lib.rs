@@ -1,32 +1,28 @@
-//! Public facade for rqb.
+//! sqlx-first Postgres query builder for Rust services.
 //!
-//! rqb is a sqlx-first Postgres query builder. Application code describes
-//! server-owned query shape with typed fields, renders parameterized SQL, and
-//! executes through any `sqlx::Executor<Database = Postgres>`.
+//! Application code describes server-owned query shape with typed fields,
+//! renders parameterized SQL, and executes through any
+//! `sqlx::Executor<Database = Postgres>`.
+
+#![allow(clippy::result_large_err)]
+
+mod error;
+pub mod typed;
 
 pub use chrono;
-pub use rqb_postgres as postgres;
-pub use rqb_postgres::{
-    Assignment, BoolExpr, BoolOp, BuiltQuery, DbErrorInfo, DbErrorPosition, Delete, ErasedParam,
-    Error, Field, Insert, JsonKind, Meta, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt,
-    Result, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
-    SelectItem, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw,
-    select, table, update, view,
-};
+pub use error::{DbErrorInfo, DbErrorPosition, Error};
 pub use serde;
 pub use serde_json;
 pub use sqlx;
+pub use typed::{
+    Assignment, BoolExpr, BoolOp, BuiltQuery, Delete, ErasedParam, Field, Insert, JsonKind, Meta,
+    OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, SearchFilter, SearchOperator,
+    SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SortDirection, Source, Stmt,
+    Update, ValueExpr, ValueOp, delete_from, insert, raw, select, table, update, view,
+};
 pub use uuid;
 
-pub mod typed {
-    pub use rqb_postgres::typed::{
-        Assignment, BoolExpr, BoolOp, BuiltQuery, Delete, ErasedParam, Field, Insert, JsonKind,
-        Meta, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, SearchFilter,
-        SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
-        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, select,
-        table, update, view,
-    };
-}
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub mod prelude {
     pub use crate::{

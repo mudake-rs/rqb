@@ -160,8 +160,7 @@ SQL shape, but they are hidden from JSON requests by default.
 
 ## Crates
 
-- `rqb`: public facade.
-- `rqb-postgres`: typed AST, renderer, params, execution helpers.
+- `rqb`: typed AST, renderer, params, execution helpers, and public API.
 - `rqb-cli`: schema introspection and code generation, not published.
 
 ## Checks

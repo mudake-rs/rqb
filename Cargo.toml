@@ -1,8 +1,6 @@
 [workspace]
 members = [
     "crates/rqb",
-    "crates/rqb-core",
-    "crates/rqb-macros",
     "crates/rqb-postgres",
     "crates/rqb-cli",
 ]
@@ -15,24 +13,18 @@ repository = "https://github.com/epolishko/rqb"
 
 [workspace.dependencies]
 anyhow = "1.0.100"
-bytes = "1"
 clap = { version = "4.5.53", features = ["derive", "env"] }
 heck = "0.5.0"
-itoa = "1.0.15"
 prettyplease = "0.2.37"
 pretty_assertions = "1"
 proc-macro2 = "1.0.103"
 quote = "1.0.42"
-rqb-core = { version = "0.1.0", path = "crates/rqb-core" }
-rqb-macros = { version = "0.1.0", path = "crates/rqb-macros" }
 rqb-postgres = { version = "0.1.0", path = "crates/rqb-postgres" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 syn = "2.0.111"
 thiserror = "2.0.17"
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "json", "uuid", "chrono", "bigdecimal", "runtime-tokio-rustls"] }
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
-trybuild = "1"
-tokio-postgres = { version = "0.7.15", features = ["with-serde_json-1"] }
-deadpool-postgres = "0.14.1"
 uuid = { version = "1", default-features = false, features = ["serde", "std"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }

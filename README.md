@@ -1,104 +1,105 @@
 # rqb
 
-Ergonomic Postgres query builder for Rust services.
+sqlx-first Postgres query builder for Rust services.
 
-rqb is not an ORM. It builds parameterized Postgres SQL from dataset metadata,
-validates query shapes before rendering, and can execute through
-`tokio-postgres` or `deadpool-postgres`.
-
-Use it when an application needs:
-
-- normal Rust query builders for service-owned SQL shape
-- safe JSON search over server-approved fields
-- async execution with pool-or-transaction ergonomics
-- serde row DTOs and small write DTOs
-- generated schema metadata from Postgres
+rqb is not an ORM. It builds parameterized SQL from server-owned query shape and
+small field metadata. Typed Rust values go straight into sqlx bind arguments;
+JSON search is a constrained adapter for filters, sort, limit, and offset.
 
 ## TL;DR
 
-Start with [`samples`](samples) if you want to see the API in real code. The
-small samples each focus on one use case; [`samples/rest-api`](samples/rest-api)
-shows the intended application shape with generated schema metadata, services,
-transactions, validation, and JSON search.
+Start with [`samples`](samples). They are short, compile-checked, and show the
+actual API faster than prose.
 
 ## Status
 
-rqb is pre-1.0 and the public API is still allowed to change when that makes the
-library simpler or clearer.
+Pre-public, pre-1.0. APIs are still allowed to break when that makes the library
+simpler or clearer.
 
 ## Install
 
 ```toml
 [dependencies]
-rqb = { version = "0.1", features = ["pool"] }
+rqb = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-uuid = { version = "1", features = ["serde"] }
-chrono = { version = "0.4", features = ["serde"] }
+sqlx = { version = "0.8", features = ["postgres", "derive", "runtime-tokio-rustls"] }
 ```
 
-Feature flags:
+`uuid`, `chrono`, JSON, numeric, ranges, arrays, and other Postgres values are
+accepted when the Rust type implements sqlx `Encode` and `Type` for Postgres.
 
-| Feature | Enables |
-| --- | --- |
-| `runtime-tokio-postgres` | execution traits, typed params, row deserialization |
-| `runtime-deadpool` | `runtime-tokio-postgres` plus deadpool client support |
-| `pool` | `Db`, `connect`, transactions, savepoints |
-
-Query building and SQL rendering work without a runtime feature.
-
-## Quick Start
+## Basic Query
 
 ```rust
-use chrono::{DateTime, Utc};
 use rqb::prelude::*;
-use serde::Deserialize;
-use uuid::Uuid;
 
-const ID: Field = Field::new("id", FieldType::Uuid);
-const EMAIL: Field = Field::new("email", FieldType::Text);
-const STATUS: Field = Field::new("status", FieldType::Text);
-const CREATED_AT: Field = Field::new("created_at", FieldType::Timestamptz);
+static ID_META: Meta = Meta::new("id", "id", "uuid")
+    .ops(OpSet::ordered())
+    .json(JsonKind::Uuid);
+static EMAIL_META: Meta = Meta::new("email", "email", "text")
+    .ops(OpSet::ordered())
+    .json(JsonKind::Text);
+static STATUS_META: Meta = Meta::new("status", "status", "text")
+    .ops(OpSet::ordered())
+    .json(JsonKind::Text);
 
-fn users() -> Dataset {
-    Dataset::table("app_users")
-        .fields([ID, EMAIL, STATUS, CREATED_AT])
-        .default_limit(50)
-        .max_limit(500)
+const ID: Field<rqb::uuid::Uuid> = Field::new(&ID_META);
+const EMAIL: Field<String> = Field::new(&EMAIL_META);
+const STATUS: Field<String> = Field::new(&STATUS_META);
+
+static USER_FIELDS: [&Meta; 3] = [&ID_META, &EMAIL_META, &STATUS_META];
+
+fn users() -> Source {
+    rqb::table("public.app_users", &USER_FIELDS)
 }
 
-#[derive(Deserialize)]
-struct UserRow {
-    id: Uuid,
-    email: String,
-    status: String,
-    created_at: DateTime<Utc>,
-}
-
-async fn active_users(db: &Db) -> rqb::Result<Vec<UserRow>> {
-    select(users())
-        .filter(STATUS.eq("active"))
-        .order_by(CREATED_AT.desc())
-        .limit(20)
-        .fetch_all_as::<UserRow>(db)
-        .await
-}
+let query = select(users())
+    .column(ID)
+    .column(EMAIL)
+    .filter(STATUS.eq("active"))
+    .order_asc(EMAIL)
+    .limit(20)
+    .build()?;
 ```
 
-If `.fields(...)` is omitted, rqb selects every selectable field from the root
-dataset. Joined fields must be selected explicitly.
+`query.sql` contains `$N` placeholders and `query.arguments()?` creates
+`sqlx::postgres::PgArguments` at execution time.
+
+## Execution
+
+Use any sqlx executor:
+
+```rust
+#[derive(sqlx::FromRow)]
+struct UserRow {
+    id: rqb::uuid::Uuid,
+    email: String,
+}
+
+let rows = select(users())
+    .column(ID)
+    .column(EMAIL)
+    .filter(STATUS.eq("active"))
+    .fetch_all_as::<_, UserRow>(&pool)
+    .await?;
+```
+
+Scalar queries use `fetch_one_scalar::<_, T>()`; raw SQL uses `raw("... ? ...")`
+with `?` placeholders. `??` renders a literal question mark.
 
 ## JSON Search
 
-`SearchRequest` is the client-facing JSON shape. It can filter, sort, limit, and
-offset. It cannot define joins, CTEs, raw SQL, subqueries, or response fields.
+`SearchRequest` is for client-controlled search parameters only. It cannot
+define tables, joins, raw SQL, subqueries, writes, computed projections, or
+response fields.
 
 ```json
 {
   "filter": {
     "and": [
       { "field": "status", "operator": "equals", "value": "paid" },
-      { "field": "metadata.score", "operator": "gte", "value": 80 }
+      { "field": "totalCents", "operator": "gte", "value": 5000 }
     ]
   },
   "sort": [{ "field": "createdAt", "dir": "desc" }],
@@ -110,234 +111,67 @@ offset. It cannot define joins, CTEs, raw SQL, subqueries, or response fields.
 Apply it to a trusted Rust query:
 
 ```rust
-let page = select(order_search_view())
-    .fields([ID, EMAIL, STATUS, TOTAL_CENTS])
+let query = select(order_search_view())
     .filter(ORGANIZATION_ID.eq(current_org_id))
-    .request(search_request)
-    .page_as::<OrderSearchRow>(&db)
-    .await?;
+    .request(search_request)?
+    .build()?;
 ```
 
-Server filters are preserved and combined with the client filter using `AND`.
-The dataset metadata decides which fields and operators are valid.
+Server filters are preserved and combined with the request filter using `AND`.
+Only fields with `Meta::json(...)` are visible to JSON requests.
 
 ## Writes
 
-Writes can be built field-by-field:
+Writes use field assignments. There is no serde write bridge.
 
 ```rust
-insert(users())
-    .set(ID, user_id)
-    .set(EMAIL, "ada@example.com")
-    .set(STATUS, "active")
-    .returning([ID]);
-```
+let created = insert(users())
+    .set(ID.set(user_id))
+    .set(EMAIL.set("ada@example.com"))
+    .set(STATUS.set("active"))
+    .returning(ID)
+    .fetch_one_scalar::<_, rqb::uuid::Uuid>(&pool)
+    .await?;
 
-For DTOs, derive `WriteRecord`:
-
-```rust
-mod user_fields {
-    use rqb::prelude::*;
-
-    pub const ID: Field = Field::new("id", FieldType::Uuid);
-    pub const EMAIL: Field = Field::new("email", FieldType::Text);
-    pub const STATUS: Field = Field::new("status", FieldType::Text);
-    pub const PROFILE: Field = Field::new("profile", FieldType::Jsonb);
-}
-
-fn writable_users() -> Dataset {
-    Dataset::table("app_users").fields([
-        user_fields::ID,
-        user_fields::EMAIL,
-        user_fields::STATUS,
-        user_fields::PROFILE,
-    ])
-}
-
-#[derive(rqb::WriteRecord)]
-#[rqb(fields = user_fields)]
-struct NewUser {
-    id: uuid::Uuid,
-    email: String,
-    status: String,
-    profile: serde_json::Value,
-}
-
-#[derive(rqb::WriteRecord)]
-#[rqb(fields = user_fields, skip_none)]
-struct UserPatch {
-    status: Option<String>,
-    profile: Option<serde_json::Value>,
-}
-
-insert(writable_users()).value(&new_user).execute(&db).await?;
-
-update(writable_users())
-    .set_from(&patch)
-    .filter(user_fields::ID.eq(user_id))
-    .execute(&db)
+update(users())
+    .set(STATUS.set("disabled"))
+    .filter(ID.eq(user_id))
+    .execute(&pool)
     .await?;
 ```
 
-`#[rqb(skip_none)]` skips absent patch fields. Without it, `None` writes SQL
-`NULL`. Use `#[rqb(field = user_fields::EMAIL)]` when a DTO field has a
-different Rust name than the generated field constant, and `#[rqb(skip)]` for
-request-only fields.
+`DELETE` without a filter is rejected during validation.
 
-## SQL Shape
+## CLI
 
-rqb supports Postgres-specific query shape in Rust:
-
-- joins and lateral joins
-- CTEs
-- subquery sources and `EXISTS`
-- `UNION`, `INTERSECT`, `EXCEPT`
-- `DISTINCT ON`
-- row locks
-- aggregates and grouped queries
-- `INSERT`, `UPDATE`, `DELETE`, upsert, `RETURNING`
-- server-owned raw SQL fragments
-
-Values are rendered as Postgres parameters. User input is not interpolated into
-SQL strings.
-
-## Raw SQL
-
-Use raw fragments inside validated queries when the builder does not cover a
-small expression:
-
-```rust
-select(users()).filter(raw("lower(email) = lower(?)").bind(email));
-```
-
-Use `raw_query` when the whole statement is hand-written SQL:
-
-```rust
-let count: i64 = raw_query("SELECT COUNT(*)::bigint FROM app_users WHERE status = ?")
-    .bind("active")
-    .fetch_one_scalar(&db)
-    .await?;
-```
-
-`?` placeholders are counted and rendered as Postgres `$N` parameters. Use `??`
-for a literal question mark.
-
-## Transactions
-
-```rust
-let tx = db.begin().await?;
-
-insert(users()).value(&new_user).execute(&tx).await?;
-update(users()).set(STATUS, "active").filter(ID.eq(user_id)).execute(&tx).await?;
-
-tx.commit().await?;
-```
-
-The pool feature also provides closure-style transactions through `txn!`:
-
-```rust
-db.transaction(txn!(|tx| {
-    insert(users()).value(&new_user).execute(tx).await?;
-    update(users())
-        .set(STATUS, "active")
-        .filter(ID.eq(user_id))
-        .execute(tx)
-        .await?;
-    Ok(())
-}))
-.await?;
-```
-
-Savepoints are available from `Tx` when a transaction needs a smaller rollback
-scope.
-
-## Type Policy
-
-`uuid`, `chrono`, JSON, arrays, enums, bytea, temporal types, ranges, network
-types, and custom domains are modeled in field metadata.
-
-`FieldType::Float` means Postgres `double precision`. `FieldType::Numeric` and
-decimal-string custom domains keep exact values as strings by default, so large
-money, balance, and domain values do not silently pass through `f64`.
-
-## Code Generation
-
-`rqb-cli` introspects a live Postgres schema and writes a Rust module with rqb
-metadata. It is kept in this repository for now:
-
-```bash
-cargo run -p rqb-cli -- generate \
-  --database-url postgres://rqb:rqb@localhost:55432/rqb \
-  --schema public \
-  --out src/schema.rs
-```
-
-Limit generation to specific tables or views with repeated `--table` flags:
+`rqb-cli` introspects Postgres and writes a schema module with `Meta` and
+`Field<T>` constants.
 
 ```bash
 cargo run -p rqb-cli -- generate \
   --database-url "$DATABASE_URL" \
   --schema public \
-  --table app_users \
-  --table orders \
   --out src/schema.rs
 ```
 
-The generated module includes:
+Known sqlx-supported Postgres types generate typed `Field<T>` constants.
+Unknown extension types stay raw-only metadata: they can be part of server-owned
+SQL shape, but they are hidden from JSON requests by default.
 
-- `Field` constants
-- `dataset()` functions
-- schema-qualified table/view sources
-- relation helpers for joins, such as `app_users::table().alias("u").email()`
-- Rust enum wrappers for Postgres enums
-- domain/custom type metadata
-- JSONB path policy and array sorting defaults
+## Crates
 
-Generation fails on unknown `--table` names and unsupported Postgres types
-instead of guessing metadata.
+- `rqb`: public facade.
+- `rqb-postgres`: typed AST, renderer, params, execution helpers.
+- `rqb-cli`: schema introspection and code generation, not published.
 
-Use generated metadata directly in queries:
-
-```rust
-use crate::schema::{app_users, enums::OrderStatus, orders};
-
-let user = app_users::table().alias("u");
-let order = orders::table().alias("o");
-
-let rows = select(&user)
-    .join(&order, user.id().eq_col(order.user_id()))
-    .fields([user.id().alias("id"), user.email().alias("email")])
-    .filter(order.status().eq(OrderStatus::Paid))
-    .fetch_all_as::<UserOrderRow>(&db)
-    .await?;
-```
-
-After changing the database schema, regenerate the module and commit the result.
-The repository samples use this flow through `make generate-sample-base-schema`.
-
-## Testing
+## Checks
 
 ```bash
-cargo test --workspace --all-features
-make docker-test
+cargo fmt --all --check
+cargo test --workspace --no-default-features
+cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 ```
-
-`make docker-test` starts the repository Postgres test container, runs the
-workspace test suite, and tears the container down.
-
-## Examples
-
-- [`crates/rqb/examples`](crates/rqb/examples): small compile-checked examples
-- [`samples`](samples): standalone samples for CRUD, JSON search, joins,
-  transactions, CTEs, advanced builder queries, write DTOs, exact numerics,
-  Postgres types, raw SQL, errors, and custom types
-- [`samples/rest-api`](samples/rest-api): actix-web service sample
 
 ## License
 
-Licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+Licensed under either Apache-2.0 or MIT, at your option.

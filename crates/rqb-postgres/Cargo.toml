@@ -11,47 +11,11 @@ categories = ["database", "web-programming"]
 
 [features]
 default = []
-runtime-tokio-postgres = [
-    "dep:bytes",
-    "dep:tokio",
-    "dep:tokio-postgres",
-    "tokio-postgres/with-uuid-1",
-    "tokio-postgres/with-chrono-0_4",
-]
-runtime-deadpool = ["runtime-tokio-postgres", "dep:deadpool-postgres"]
-pool = ["runtime-deadpool"]
 
 [dependencies]
-bytes = { workspace = true, optional = true }
-itoa.workspace = true
-rqb-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
-deadpool-postgres = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
-tokio-postgres = { workspace = true, optional = true }
 uuid.workspace = true
 chrono.workspace = true
-
-[[test]]
-name = "postgres_integration"
-path = "tests/postgres_integration.rs"
-required-features = ["runtime-tokio-postgres"]
-
-[dev-dependencies]
-diesel = { version = "2.3.7", default-features = false, features = ["postgres", "pq-src"] }
-divan = "0.1.21"
-pretty_assertions.workspace = true
-rqb-macros.workspace = true
-sea-query = { version = "1.0.0-rc.33", default-features = false, features = ["backend-postgres"] }
-sqlx = { version = "0.8.6", default-features = false, features = ["postgres"] }
-
-[[bench]]
-name = "query_build"
-harness = false
-
-[[bench]]
-name = "fetch_as"
-harness = false
-required-features = ["runtime-tokio-postgres"]

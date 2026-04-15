@@ -1,5 +1,5 @@
 [package]
-name = "rqb-sample-json-search"
+name = "rqb-sample-writes-and-types"
 version = "0.1.0"
 edition = "2024"
 publish = false

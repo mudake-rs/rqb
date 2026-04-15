@@ -1,48 +1,18 @@
-//! Postgres renderer and optional runtime execution for rqb query models.
+//! sqlx-first Postgres query builder runtime for rqb.
 //!
-//! Without runtime features this crate can render `SelectQuery`, `InsertQuery`,
-//! `UpdateQuery`, and `DeleteQuery` into parameterized Postgres SQL. With
-//! `runtime-tokio-postgres` and `pool`, it also provides execution traits,
-//! row deserialization, pooled `Db`, transactions, and savepoints.
+//! This crate owns the typed Postgres AST, SQL rendering, typed bind
+//! parameters, and execution through `sqlx::Executor`.
 
 #![allow(clippy::result_large_err)]
 
-mod bind;
-mod build;
-mod built;
 mod error;
-#[cfg(feature = "runtime-tokio-postgres")]
-mod executor;
-mod helpers;
-#[cfg(feature = "runtime-tokio-postgres")]
-mod params;
-#[cfg(feature = "pool")]
-mod pool;
-mod render;
-#[cfg(feature = "runtime-tokio-postgres")]
-mod result_ext;
-#[cfg(feature = "runtime-tokio-postgres")]
-mod row_map;
-#[cfg(test)]
-mod tests;
-mod type_sql;
+pub mod typed;
 
-pub use bind::{BindParam, BindType};
-pub use build::{BuildPostgres, BuildRowsPostgres, Postgres};
-pub use built::{BuiltQuery, BuiltSelect, DebugSelectSql, DebugSql};
-pub use error::Error;
-#[cfg(feature = "runtime-tokio-postgres")]
-pub use error::{DbErrorInfo, DbErrorPosition};
-#[cfg(feature = "runtime-tokio-postgres")]
-pub use executor::{
-    ExecutePostgres, ExecuteRawPostgres, ExecuteWritePostgres, Page, PgExecutor, StatementCache,
+pub use error::{DbErrorInfo, DbErrorPosition, Error};
+pub use typed::{
+    Assignment, BoolExpr, BoolOp, BuiltQuery, Delete, ErasedParam, Field, Insert, JsonKind, Meta,
+    OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, SearchFilter, SearchOperator,
+    SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SortDirection, Source, Stmt,
+    Update, ValueExpr, ValueOp, delete_from, insert, raw, select, table, update, view,
 };
-#[cfg(feature = "runtime-tokio-postgres")]
-pub use params::PgParams;
-#[cfg(feature = "pool")]
-pub use pool::{
-    BeginBuilder, Db, IsolationLevel, Savepoint, Tx, TxFuture, connect, connect_with_tls,
-};
-#[cfg(feature = "runtime-tokio-postgres")]
-pub use result_ext::ResultExt;
 pub type Result<T> = std::result::Result<T, Error>;

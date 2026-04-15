@@ -21,12 +21,11 @@ heck.workspace = true
 prettyplease.workspace = true
 proc-macro2.workspace = true
 quote.workspace = true
-rqb-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 syn.workspace = true
 tokio.workspace = true
-tokio-postgres.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

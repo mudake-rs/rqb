@@ -1,7 +1,3 @@
-use rqb_core::{FieldType, SelectRepr, TypeFamily, ValueRepr};
-
-pub(crate) type SchemaTypeKey = (String, String);
-
 #[derive(Debug, Clone)]
 pub(crate) struct Relation {
     pub(crate) schema: String,
@@ -10,7 +6,7 @@ pub(crate) struct Relation {
     pub(crate) columns: Vec<Column>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RelationKind {
     Table,
     View,
@@ -22,52 +18,37 @@ pub(crate) struct Column {
     pub(crate) api_name: String,
     pub(crate) rust_name: String,
     pub(crate) const_name: String,
-    pub(crate) field_type: ColumnType,
+    pub(crate) meta_name: String,
+    pub(crate) ty: ColumnType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ColumnType {
-    Core(FieldType),
-    Enum(PgEnum),
-    ArrayEnum(PgEnum),
-    Domain(PgDomain),
-    ArrayDomain(PgDomain),
+    Known(KnownType),
+    RawOnly { pg: String },
 }
 
-impl ColumnType {
-    pub(crate) fn is_jsonb(&self) -> bool {
-        matches!(self, Self::Core(FieldType::Jsonb))
-            || matches!(self, Self::Domain(domain) if domain.family == TypeFamily::Jsonb)
-    }
-
-    pub(crate) fn is_array(&self) -> bool {
-        matches!(self, Self::Core(field_type) if field_type.is_array())
-            || matches!(self, Self::ArrayEnum(_) | Self::ArrayDomain(_))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PgEnum {
-    pub(crate) schema: String,
-    pub(crate) name: String,
-    pub(crate) const_name: String,
-    pub(crate) rust_name: String,
-    pub(crate) variants: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PgDomain {
-    pub(crate) schema: String,
-    pub(crate) name: String,
-    pub(crate) const_name: String,
-    pub(crate) family: TypeFamily,
-    pub(crate) value_repr: ValueRepr,
-    pub(crate) select_repr: SelectRepr,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PgDomainSource {
-    pub(crate) schema: String,
-    pub(crate) name: String,
-    pub(crate) base_udt_name: String,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum KnownType {
+    Text,
+    Bool,
+    Int2,
+    Int4,
+    Int8,
+    Float4,
+    Float8,
+    Numeric,
+    Uuid,
+    Date,
+    Time,
+    Timetz,
+    Timestamp,
+    Timestamptz,
+    Interval,
+    Json,
+    Bytes,
+    Inet,
+    Cidr,
+    Range(Box<KnownType>),
+    Array(Box<KnownType>),
 }

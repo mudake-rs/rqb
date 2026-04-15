@@ -4,29 +4,21 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Ergonomic Postgres query builder with JSON search, serde mapping, and async execution."
+description = "sqlx-first typed Postgres query builder."
 readme = "../../README.md"
 keywords = ["postgres", "query-builder", "sql", "database", "async"]
 categories = ["database", "web-programming"]
 
 [features]
 default = []
-runtime-tokio-postgres = ["rqb-postgres/runtime-tokio-postgres"]
-runtime-deadpool = ["runtime-tokio-postgres", "rqb-postgres/runtime-deadpool"]
-pool = ["runtime-deadpool", "rqb-postgres/pool"]
 
 [dependencies]
-rqb-core.workspace = true
-rqb-macros.workspace = true
 rqb-postgres.workspace = true
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
-trybuild.workspace = true
 uuid = { workspace = true, features = ["v4"] }
-
-[[example]]
-name = "transactions"
-required-features = ["pool"]

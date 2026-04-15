@@ -1,7 +1,7 @@
-use rqb_core::Error as CoreError;
+use sqlx::error::DatabaseError;
+use sqlx::postgres::{PgDatabaseError, PgErrorPosition};
 use thiserror::Error;
 
-#[cfg(feature = "runtime-tokio-postgres")]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DbErrorInfo {
     pub schema: Option<String>,
@@ -13,36 +13,44 @@ pub struct DbErrorInfo {
     pub position: Option<DbErrorPosition>,
 }
 
-#[cfg(feature = "runtime-tokio-postgres")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DbErrorPosition {
-    Original(u32),
-    Internal { position: u32, query: String },
+    Original(usize),
+    Internal { position: usize, query: String },
 }
 
-#[cfg(feature = "runtime-tokio-postgres")]
 impl DbErrorInfo {
-    fn from_db_error(db: &tokio_postgres::error::DbError) -> Self {
+    fn from_sqlx_database_error(db: &(dyn DatabaseError + 'static)) -> Self {
+        if let Some(pg) = db.try_downcast_ref::<PgDatabaseError>() {
+            return Self::from_sqlx_pg_error(pg);
+        }
+        Self {
+            table: db.table().map(ToOwned::to_owned),
+            constraint: db.constraint().map(ToOwned::to_owned),
+            ..Self::default()
+        }
+    }
+
+    fn from_sqlx_pg_error(db: &PgDatabaseError) -> Self {
         Self {
             schema: db.schema().map(ToOwned::to_owned),
             table: db.table().map(ToOwned::to_owned),
             column: db.column().map(ToOwned::to_owned),
-            datatype: db.datatype().map(ToOwned::to_owned),
+            datatype: db.data_type().map(ToOwned::to_owned),
             constraint: db.constraint().map(ToOwned::to_owned),
-            where_: db.where_().map(ToOwned::to_owned),
+            where_: db.r#where().map(ToOwned::to_owned),
             position: db.position().map(DbErrorPosition::from),
         }
     }
 }
 
-#[cfg(feature = "runtime-tokio-postgres")]
-impl From<&tokio_postgres::error::ErrorPosition> for DbErrorPosition {
-    fn from(position: &tokio_postgres::error::ErrorPosition) -> Self {
+impl From<PgErrorPosition<'_>> for DbErrorPosition {
+    fn from(position: PgErrorPosition<'_>) -> Self {
         match position {
-            tokio_postgres::error::ErrorPosition::Original(position) => Self::Original(*position),
-            tokio_postgres::error::ErrorPosition::Internal { position, query } => Self::Internal {
-                position: *position,
-                query: query.clone(),
+            PgErrorPosition::Original(position) => Self::Original(position),
+            PgErrorPosition::Internal { position, query } => Self::Internal {
+                position,
+                query: query.to_owned(),
             },
         }
     }
@@ -50,14 +58,9 @@ impl From<&tokio_postgres::error::ErrorPosition> for DbErrorPosition {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error(transparent)]
-    Core(#[from] CoreError),
-
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("query returned no rows")]
     NotFound,
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("unique violation{}", constraint_suffix(.constraint))]
     UniqueViolation {
         constraint: Option<String>,
@@ -65,7 +68,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("foreign key violation{}", constraint_suffix(.constraint))]
     ForeignKeyViolation {
         constraint: Option<String>,
@@ -73,7 +75,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("restrict violation{}", constraint_suffix(.constraint))]
     RestrictViolation {
         constraint: Option<String>,
@@ -81,21 +82,18 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("not null violation{}", column_suffix(.column))]
     NotNullViolation {
         column: Option<String>,
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("check violation{}", constraint_suffix(.constraint))]
     CheckViolation {
         constraint: Option<String>,
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("exclusion violation{}", constraint_suffix(.constraint))]
     ExclusionViolation {
         constraint: Option<String>,
@@ -103,7 +101,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("serialization failure: {message}")]
     SerializationFailure {
         message: String,
@@ -112,7 +109,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("deadlock detected: {message}")]
     DeadlockDetected {
         message: String,
@@ -121,7 +117,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("query canceled: {message}")]
     QueryCanceled {
         message: String,
@@ -130,7 +125,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("insufficient privilege: {message}")]
     InsufficientPrivilege {
         message: String,
@@ -141,7 +135,6 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("database error ({code}): {message}")]
     Database {
         code: String,
@@ -154,20 +147,58 @@ pub enum Error {
         info: DbErrorInfo,
     },
 
-    #[cfg(feature = "runtime-tokio-postgres")]
     #[error("connection error: {0}")]
     Connection(String),
 
-    #[cfg(feature = "pool")]
-    #[error("pool error: {0}")]
-    Pool(String),
+    #[error("sqlx error: {0}")]
+    Sqlx(sqlx::Error),
 
-    #[cfg(feature = "runtime-tokio-postgres")]
-    #[error("deserialization error: {0}")]
-    Deserialize(String),
+    #[error("parameter encode error: {0}")]
+    Encode(String),
+
+    #[error("raw SQL fragment has {placeholders} placeholders but {binds} bind values")]
+    RawBindMismatch { placeholders: usize, binds: usize },
+
+    #[error("operator `{operator}` is not supported for typed field `{field}`")]
+    InvalidTypedOperator { field: String, operator: String },
+
+    #[error("typed field `{field}` is not sortable")]
+    InvalidTypedSort { field: String },
+
+    #[error("unknown search field `{field}`")]
+    InvalidSearchField { field: String },
+
+    #[error("search field `{field}` is not exposed to JSON requests")]
+    SearchFieldNotExposed { field: String },
+
+    #[error("operator `{operator}` is not supported for search field `{field}`")]
+    InvalidSearchOperator { field: String, operator: String },
+
+    #[error("invalid JSON value for search field `{field}`; expected {expected}")]
+    InvalidSearchValue {
+        field: String,
+        expected: &'static str,
+    },
+
+    #[error("empty search logical expression `{logical}`")]
+    EmptySearchLogical { logical: &'static str },
+
+    #[error("empty typed logical expression `{logical}`")]
+    EmptyTypedLogical { logical: String },
+
+    #[error("{statement} target must be a table source, got {source_kind}")]
+    InvalidTypedWriteTarget {
+        statement: &'static str,
+        source_kind: &'static str,
+    },
+
+    #[error("{statement} statement requires at least one assignment")]
+    EmptyTypedAssignments { statement: &'static str },
+
+    #[error("typed delete without filter is not allowed")]
+    TypedDeleteWithoutFilter,
 }
 
-#[cfg(feature = "runtime-tokio-postgres")]
 fn constraint_suffix(constraint: &Option<String>) -> String {
     constraint
         .as_ref()
@@ -175,7 +206,6 @@ fn constraint_suffix(constraint: &Option<String>) -> String {
         .unwrap_or_default()
 }
 
-#[cfg(feature = "runtime-tokio-postgres")]
 fn column_suffix(column: &Option<String>) -> String {
     column
         .as_ref()
@@ -183,131 +213,93 @@ fn column_suffix(column: &Option<String>) -> String {
         .unwrap_or_default()
 }
 
-#[cfg(feature = "runtime-tokio-postgres")]
-impl From<tokio_postgres::Error> for Error {
-    fn from(error: tokio_postgres::Error) -> Self {
-        use tokio_postgres::error::SqlState;
+impl From<sqlx::Error> for Error {
+    fn from(error: sqlx::Error) -> Self {
+        match error {
+            sqlx::Error::RowNotFound => Self::NotFound,
+            sqlx::Error::Database(db) => Self::from_sqlx_database_error(&*db),
+            other => Self::Sqlx(other),
+        }
+    }
+}
 
-        let Some(db) = error.as_db_error() else {
-            return Self::Connection(error.to_string());
-        };
-
-        let code = db.code();
-        let constraint = db.constraint().map(ToOwned::to_owned);
-        let detail = db.detail().map(ToOwned::to_owned);
-        let hint = db.hint().map(ToOwned::to_owned);
-        let column = db.column().map(ToOwned::to_owned);
-        let table = db.table().map(ToOwned::to_owned);
+impl Error {
+    fn from_sqlx_database_error(db: &(dyn DatabaseError + 'static)) -> Self {
+        let pg = db.try_downcast_ref::<PgDatabaseError>();
+        let code = db
+            .code()
+            .map(|code| code.into_owned())
+            .unwrap_or_else(|| "unknown".to_owned());
         let message = db.message().to_owned();
-        let info = DbErrorInfo::from_db_error(db);
+        let detail = pg.and_then(PgDatabaseError::detail).map(ToOwned::to_owned);
+        let hint = pg.and_then(PgDatabaseError::hint).map(ToOwned::to_owned);
+        let constraint = db.constraint().map(ToOwned::to_owned);
+        let table = db.table().map(ToOwned::to_owned);
+        let column = pg.and_then(PgDatabaseError::column).map(ToOwned::to_owned);
+        let info = DbErrorInfo::from_sqlx_database_error(db);
 
-        if *code == SqlState::UNIQUE_VIOLATION {
-            return Self::UniqueViolation {
+        match code.as_str() {
+            "23505" => Self::UniqueViolation {
                 constraint,
                 detail,
                 info,
-            };
-        }
-        if *code == SqlState::FOREIGN_KEY_VIOLATION {
-            return Self::ForeignKeyViolation {
+            },
+            "23503" => Self::ForeignKeyViolation {
                 constraint,
                 detail,
                 info,
-            };
-        }
-        if *code == SqlState::RESTRICT_VIOLATION {
-            return Self::RestrictViolation {
+            },
+            "23001" => Self::RestrictViolation {
                 constraint,
                 detail,
                 info,
-            };
-        }
-        if *code == SqlState::NOT_NULL_VIOLATION {
-            return Self::NotNullViolation { column, info };
-        }
-        if *code == SqlState::CHECK_VIOLATION {
-            return Self::CheckViolation { constraint, info };
-        }
-        if *code == SqlState::EXCLUSION_VIOLATION {
-            return Self::ExclusionViolation {
+            },
+            "23502" => Self::NotNullViolation { column, info },
+            "23514" => Self::CheckViolation { constraint, info },
+            "23P01" => Self::ExclusionViolation {
                 constraint,
                 detail,
                 info,
-            };
-        }
-        if *code == SqlState::T_R_SERIALIZATION_FAILURE {
-            return Self::SerializationFailure {
+            },
+            "40001" => Self::SerializationFailure {
                 message,
                 detail,
                 hint,
                 info,
-            };
-        }
-        if *code == SqlState::T_R_DEADLOCK_DETECTED {
-            return Self::DeadlockDetected {
+            },
+            "40P01" => Self::DeadlockDetected {
                 message,
                 detail,
                 hint,
                 info,
-            };
-        }
-        if *code == SqlState::QUERY_CANCELED {
-            return Self::QueryCanceled {
+            },
+            "57014" => Self::QueryCanceled {
                 message,
                 detail,
                 hint,
                 info,
-            };
-        }
-        if *code == SqlState::INSUFFICIENT_PRIVILEGE {
-            return Self::InsufficientPrivilege {
+            },
+            "42501" => Self::InsufficientPrivilege {
                 message,
                 detail,
                 hint,
                 table,
                 column,
                 info,
-            };
-        }
-
-        Self::Database {
-            code: code.code().to_owned(),
-            message,
-            detail,
-            hint,
-            constraint,
-            table,
-            column,
-            info,
-        }
-    }
-}
-
-#[cfg(feature = "runtime-tokio-postgres")]
-impl From<serde_json::Error> for Error {
-    fn from(error: serde_json::Error) -> Self {
-        Self::Deserialize(error.to_string())
-    }
-}
-
-impl Error {
-    #[cfg(feature = "runtime-tokio-postgres")]
-    pub fn as_core(&self) -> Option<&CoreError> {
-        match self {
-            Self::Core(error) => Some(error),
-            _ => None,
+            },
+            _ => Self::Database {
+                code,
+                message,
+                detail,
+                hint,
+                constraint,
+                table,
+                column,
+                info,
+            },
         }
     }
 
-    #[cfg(not(feature = "runtime-tokio-postgres"))]
-    pub fn as_core(&self) -> Option<&CoreError> {
-        let Self::Core(error) = self;
-        Some(error)
-    }
-}
-
-#[cfg(feature = "runtime-tokio-postgres")]
-impl Error {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -316,12 +308,7 @@ impl Error {
     }
 
     pub fn is_connection(&self) -> bool {
-        match self {
-            Self::Connection(_) => true,
-            #[cfg(feature = "pool")]
-            Self::Pool(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Connection(_))
     }
 
     pub fn code(&self) -> Option<&str> {

@@ -1,10 +1,4 @@
-# json-search
+# JSON Search
 
-Shows the JSON `SearchRequest` API: client filter/sort/page input becomes validated, parameterized SQL.
-
-Run from the repository root:
-
-```bash
-make db-up
-cargo run --manifest-path samples/json-search/Cargo.toml
-```
+`SearchRequest` accepts client filters, sort, limit, and offset. Rust still owns
+the table, projection, joins, raw SQL, and server filters.

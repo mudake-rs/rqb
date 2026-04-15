@@ -1,0 +1,4 @@
+# Writes And Types
+
+Writes use typed field assignments. Any Rust type supported by sqlx for
+Postgres can be bound through `Param::typed` or `Field<T>`.

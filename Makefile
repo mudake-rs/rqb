@@ -1,8 +1,7 @@
-.PHONY: fmt check-fmt clippy lint test check test-integration test-cli-integration docker-test verify generate-demo generate-sample-schema generate-sample-base-schema db-up db-down db-reset
+.PHONY: fmt check-fmt clippy lint test check doc verify generate-schema db-up db-down db-reset
 
 DATABASE_URL ?= postgres://rqb:rqb@localhost:55432/rqb
 GENERATED_SCHEMA ?= target/generated/rqb_schema.rs
-SAMPLE_SCHEMA ?= samples/sample-base/src/schema.rs
 
 fmt:
 	cargo fmt --all
@@ -11,37 +10,26 @@ check-fmt:
 	cargo fmt --all --check
 
 clippy:
-	cargo clippy --all-targets --all-features --workspace -- -D warnings
+	cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
 lint: check-fmt clippy
 
 test:
-	cargo test --workspace
+	cargo test --workspace --no-default-features
 
 check: lint test
 
-test-integration: docker-infra-up
-	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test -p rqb-postgres --features runtime-tokio-postgres --test postgres_integration -- --nocapture
+doc:
+	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-default-features --no-deps
 
-test-cli-integration: docker-infra-up
-	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test -p rqb-cli --test generate_schema -- --nocapture
+verify: check doc
+	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/basic-queries/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/json-search/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/writes-and-types/Cargo.toml
 
-verify: docker-infra-up
-	cargo build --workspace
-	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test --workspace
-	RQB_TEST_DATABASE_URL="$(DATABASE_URL)" cargo test -p rqb-postgres --features pool --test postgres_integration -- --nocapture
-
-generate-demo: docker-infra-up
+generate-schema: docker-infra-up
 	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema public --out "$(GENERATED_SCHEMA)"
 	rustfmt "$(GENERATED_SCHEMA)"
-	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema public --out "$(SAMPLE_SCHEMA)"
-	rustfmt "$(SAMPLE_SCHEMA)"
-
-generate-sample-schema: docker-infra-up
-	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema public --out "$(SAMPLE_SCHEMA)"
-	rustfmt "$(SAMPLE_SCHEMA)"
-
-generate-sample-base-schema: generate-sample-schema
 
 db-up: docker-infra-up
 

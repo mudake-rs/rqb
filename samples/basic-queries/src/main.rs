@@ -1,112 +1,59 @@
 use rqb::prelude::*;
-use rqb_sample_base::{ACME_ORG_ID, UserStatus, schema::app_users};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct User {
-    id: Uuid,
-    organization_id: Uuid,
+mod users {
+    use rqb::prelude::*;
+
+    pub static ID_META: Meta = Meta::new("id", "id", "uuid")
+        .ops(OpSet::ordered())
+        .json(JsonKind::Uuid);
+    pub static EMAIL_META: Meta = Meta::new("email", "email", "text")
+        .ops(OpSet::ordered())
+        .json(JsonKind::Text);
+    pub static STATUS_META: Meta = Meta::new("status", "status", "text")
+        .ops(OpSet::ordered())
+        .json(JsonKind::Text);
+    pub static CREATED_AT_META: Meta = Meta::new("createdAt", "created_at", "timestamptz")
+        .ops(OpSet::ordered())
+        .json(JsonKind::Timestamptz);
+
+    pub const ID: Field<rqb::uuid::Uuid> = Field::new(&ID_META);
+    pub const EMAIL: Field<String> = Field::new(&EMAIL_META);
+    pub const STATUS: Field<String> = Field::new(&STATUS_META);
+    pub const CREATED_AT: Field<rqb::chrono::DateTime<rqb::chrono::Utc>> =
+        Field::new(&CREATED_AT_META);
+
+    pub static FIELDS: [&Meta; 4] = [&ID_META, &EMAIL_META, &STATUS_META, &CREATED_AT_META];
+
+    pub fn table() -> Source {
+        rqb::table("public.app_users", &FIELDS)
+    }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct UserRow {
+    id: rqb::uuid::Uuid,
     email: String,
-    status: UserStatus,
-    profile: serde_json::Value,
-    tags: Vec<String>,
-    created_at: chrono::DateTime<chrono::Utc>,
+    status: String,
+    created_at: rqb::chrono::DateTime<rqb::chrono::Utc>,
 }
 
-#[derive(Debug, Deserialize)]
-struct UserId {
-    id: Uuid,
-}
+fn main() -> rqb::Result<()> {
+    let built = select(users::table())
+        .column(users::ID)
+        .column(users::EMAIL)
+        .column(users::STATUS)
+        .filter(users::STATUS.eq("active"))
+        .order_desc(users::CREATED_AT)
+        .limit(20)
+        .build()?;
 
-#[derive(Debug, WriteRecord)]
-#[rqb(fields = app_users)]
-struct NewUser {
-    id: Uuid,
-    organization_id: Uuid,
-    email: String,
-    status: UserStatus,
-    profile: serde_json::Value,
-    tags: Vec<String>,
-}
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\", \"email\", \"status\" FROM \"public\".\"app_users\" WHERE \"status\" = $1 ORDER BY \"created_at\" DESC LIMIT $2"
+    );
+    assert_eq!(built.params.len(), 2);
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = rqb_sample_base::connect().await?;
-
-    let user_id = Uuid::new_v4();
-    let new_user = NewUser {
-        id: user_id,
-        organization_id: rqb_sample_base::uuid(ACME_ORG_ID),
-        email: format!("alice-{user_id}@example.com"),
-        status: UserStatus::Active,
-        profile: serde_json::json!({ "country": "NL", "score": 100 }),
-        tags: vec!["sample".to_owned()],
-    };
-
-    // 1. Insert a typed write DTO. Values are still sent as Postgres bind params.
-    insert(app_users::dataset())
-        .value(&new_user)
-        .execute(&db)
-        .await?;
-
-    // 2. Read a normal typed projection. Aliases match snake_case Rust DTO fields.
-    let active_users = select(app_users::dataset())
-        .fields([
-            app_users::ID.into(),
-            app_users::ORGANIZATION_ID.alias("organization_id"),
-            app_users::EMAIL.into(),
-            app_users::STATUS.into(),
-            app_users::PROFILE.into(),
-            app_users::TAGS.into(),
-            app_users::CREATED_AT.alias("created_at"),
-        ])
-        .filter(app_users::STATUS.eq(UserStatus::Active))
-        .order_by(app_users::EMAIL.asc())
-        .fetch_all_as::<User>(&db)
-        .await?;
-    println!("active users: {active_users:#?}");
-
-    // 3. Compose a richer filter without raw SQL; rqb validates fields and operators.
-    let matching_ids = select(app_users::dataset())
-        .fields([app_users::ID])
-        .filter(all([
-            app_users::STATUS.eq(UserStatus::Active),
-            any([
-                app_users::EMAIL.ends_with("@example.com"),
-                app_users::PROFILE.path("country").eq("NL"),
-            ]),
-            not(app_users::TAGS.contains_element("blocked")),
-        ]))
-        .order_by(app_users::CREATED_AT.desc())
-        .fetch_all_as::<UserId>(&db)
-        .await?;
-    let id_values = matching_ids.iter().map(|row| row.id).collect::<Vec<_>>();
-    println!("matching user ids only: {id_values:#?}");
-
-    // 4. Update and return the changed row in one round trip.
-    let disabled = update(app_users::dataset())
-        .set(app_users::STATUS, UserStatus::Disabled)
-        .filter(app_users::ID.eq(user_id))
-        .returning([
-            app_users::ID.into(),
-            app_users::ORGANIZATION_ID.alias("organization_id"),
-            app_users::EMAIL.into(),
-            app_users::STATUS.into(),
-            app_users::PROFILE.into(),
-            app_users::TAGS.into(),
-            app_users::CREATED_AT.alias("created_at"),
-        ])
-        .fetch_one_as::<User>(&db)
-        .await?;
-    println!("updated user: {disabled:#?}");
-
-    // 5. Clean up the row created by this sample.
-    delete(app_users::dataset())
-        .filter(app_users::ID.eq(user_id))
-        .execute(&db)
-        .await?;
-    println!("deleted user {user_id}");
-
+    println!("{}", built.sql);
     Ok(())
 }

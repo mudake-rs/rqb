@@ -4,7 +4,6 @@ target/
 # Standalone samples are checked from their manifests, but they should not each
 # add a separate lockfile to the library repository.
 /samples/*/Cargo.lock
-!/samples/rest-api/Cargo.lock
 
 # Generated local artifacts
 /target/generated/

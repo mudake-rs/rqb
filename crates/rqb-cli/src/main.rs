@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use tokio_postgres::NoTls;
+use sqlx::postgres::PgPoolOptions;
 
 mod codegen;
 mod ident;
@@ -12,7 +12,7 @@ mod model;
 mod type_map;
 
 use codegen::render;
-use introspect::{collect_used_schema_types, introspect, introspect_domains, introspect_enums};
+use introspect::introspect;
 
 #[derive(Parser)]
 #[command(name = "rqb")]
@@ -55,22 +55,16 @@ async fn generate(
     only_tables: &[String],
     out: PathBuf,
 ) -> Result<()> {
-    let (client, connection) = tokio_postgres::connect(database_url, NoTls)
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
         .await
         .context("failed to connect to Postgres")?;
-    tokio::spawn(async move {
-        if let Err(error) = connection.await {
-            eprintln!("postgres connection error: {error}");
-        }
-    });
 
-    let enums = introspect_enums(&client).await?;
-    let domain_sources = introspect_domains(&client).await?;
-    let mut relations = introspect(&client, schema, only_tables, &enums, &domain_sources).await?;
+    let mut relations = introspect(&pool, schema, only_tables).await?;
     relations.sort_by(|a, b| a.name.cmp(&b.name));
-    let (enums, domains) = collect_used_schema_types(&mut relations);
 
-    let code = render(&relations, &enums, &domains)?;
+    let code = render(&relations)?;
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;

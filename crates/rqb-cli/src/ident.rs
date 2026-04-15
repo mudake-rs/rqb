@@ -1,8 +1,5 @@
 use std::collections::BTreeMap;
 
-use heck::ToUpperCamelCase;
-use proc_macro2::{Ident, Span};
-
 pub(crate) fn sanitize_ident(value: &str) -> String {
     let mut out = value
         .chars()
@@ -40,18 +37,6 @@ where
         .into_iter()
         .map(|value| unique_ident_string(value.into(), &mut seen))
         .collect()
-}
-
-pub(crate) fn unique_enum_variant_idents(variants: &[String]) -> Vec<Ident> {
-    unique_ident_strings(
-        variants
-            .iter()
-            .map(|variant| sanitize_ident(&variant.to_upper_camel_case())),
-        &[],
-    )
-    .into_iter()
-    .map(|name| Ident::new(&name, Span::call_site()))
-    .collect()
 }
 
 fn unique_ident_string(name: String, seen: &mut BTreeMap<String, usize>) -> String {
@@ -138,28 +123,16 @@ fn is_rust_keyword(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_ident, unique_enum_variant_idents, unique_ident_strings};
+    use super::{sanitize_ident, unique_ident_strings};
 
     #[test]
-    fn sanitizes_identifiers_and_disambiguates_enum_variants() {
+    fn sanitizes_identifiers() {
         assert_eq!(sanitize_ident("type"), "type_");
         assert_eq!(sanitize_ident("macro"), "macro_");
         assert_eq!(sanitize_ident("try"), "try_");
         assert_eq!(sanitize_ident("gen"), "gen_");
         assert_eq!(sanitize_ident("123bad-name"), "_123bad_name");
         assert_eq!(sanitize_ident(""), "_");
-
-        let variants = vec![
-            "foo-bar".to_owned(),
-            "foo_bar".to_owned(),
-            "foo bar".to_owned(),
-        ];
-        let names = unique_enum_variant_idents(&variants)
-            .into_iter()
-            .map(|ident| ident.to_string())
-            .collect::<Vec<_>>();
-
-        assert_eq!(names, vec!["FooBar", "FooBar_1", "FooBar_2"]);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
-    Stmt, ValueExpr, array_agg, count_all, count_distinct, cte, insert, lag, row_number, select,
-    table, update, window,
+    Stmt, ValueExpr, array_agg, count_all, count_distinct, cte, insert, json_agg, lag, row_number,
+    select, table, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -594,14 +594,20 @@ fn aggregate_helpers_render_common_postgres_aggregates() {
                 .aggregate_filter(ID.gt(10))
                 .alias("emails"),
         )
+        .item(
+            json_agg(ID)
+                .aggregate_order_asc(EMAIL)
+                .aggregate_filter(ID.gt(20))
+                .alias("ids_json"),
+        )
         .build()
         .unwrap();
 
     assert_eq!(
         built.sql,
-        "SELECT count(*) AS \"total\", count(DISTINCT \"email_address\") AS \"unique_emails\", array_agg(\"email_address\" ORDER BY \"id\" DESC) FILTER (WHERE \"id\" > $1) AS \"emails\" FROM \"public\".\"app_users\""
+        "SELECT count(*) AS \"total\", count(DISTINCT \"email_address\") AS \"unique_emails\", array_agg(\"email_address\" ORDER BY \"id\" DESC) FILTER (WHERE \"id\" > $1) AS \"emails\", json_agg(\"id\" ORDER BY \"email_address\" ASC) FILTER (WHERE \"id\" > $2) AS \"ids_json\" FROM \"public\".\"app_users\""
     );
-    assert_eq!(built.params.len(), 1);
+    assert_eq!(built.params.len(), 2);
 }
 
 #[test]

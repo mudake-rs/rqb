@@ -52,6 +52,7 @@ pub use types::{
     DbEnum, ElemType, EnumType, FieldType, SelectRepr, TypeFamily, TypeSpec, ValueRepr,
     range_type_name,
 };
+#[doc(hidden)]
 pub use validation::{
     ValidatedAggregate, ValidatedArraySetOperator, ValidatedAssignment, ValidatedBinaryOperator,
     ValidatedConflictAction, ValidatedConflictClause, ValidatedConflictTarget,
@@ -69,7 +70,9 @@ pub use write::{
     WriteAssignment, WriteValue, delete, insert, set, set_col, set_default, set_expr, set_raw,
     update,
 };
-pub use write_record::{__RqbWriteRecordResult, __rqb_json_write_value, WriteRecord};
+pub use write_record::WriteRecord;
+#[doc(hidden)]
+pub use write_record::{__RqbWriteRecordResult, __rqb_json_write_value};
 
 pub mod prelude {
     pub use crate::{

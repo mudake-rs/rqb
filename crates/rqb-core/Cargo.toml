@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core AST, validation, and builders for rqb query builder."
+readme = "../../README.md"
 keywords = ["postgres", "query-builder", "sql", "database", "serde"]
 categories = ["database", "web-programming"]
 

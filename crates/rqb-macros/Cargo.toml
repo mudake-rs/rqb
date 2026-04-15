@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Derive macros for rqb."
+readme = "../../README.md"
 
 [lib]
 proc-macro = true

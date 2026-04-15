@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "PostgreSQL renderer and async executor for rqb query builder."
+readme = "../../README.md"
 keywords = ["postgres", "query-builder", "sql", "database", "async"]
 categories = ["database", "web-programming"]
 

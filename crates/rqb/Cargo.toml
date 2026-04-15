@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Ergonomic Postgres query builder with JSON search, serde mapping, and async execution."
+readme = "../../README.md"
 keywords = ["postgres", "query-builder", "sql", "database", "async"]
 categories = ["database", "web-programming"]
 

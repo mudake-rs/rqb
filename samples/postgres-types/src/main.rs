@@ -21,6 +21,9 @@ struct PgTypeRow {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
 
+    // Generated metadata carries Postgres-specific casts for bytea, network, range,
+    // timestamp, and timestamptz fields. Rust rows can use chrono types for
+    // Postgres date/timestamp values.
     let rows = select(pg_type_examples::dataset())
         .fields([
             pg_type_examples::ID.into(),

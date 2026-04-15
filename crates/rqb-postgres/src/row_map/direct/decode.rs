@@ -55,8 +55,8 @@ pub(super) fn raw_column_to_decoded(row: &Row, index: usize, ty: &Type) -> DeRes
         Type::BYTEA_ARRAY => read_decoded_array(row, index, DecodedArray::Bytes),
         Type::UUID => read_display_decoded_scalar::<uuid::Uuid>(row, index),
         Type::UUID_ARRAY => read_display_decoded_array::<uuid::Uuid>(row, index),
-        Type::TIMESTAMP => read_display_decoded_scalar::<chrono::NaiveDateTime>(row, index),
-        Type::TIMESTAMP_ARRAY => read_display_decoded_array::<chrono::NaiveDateTime>(row, index),
+        Type::TIMESTAMP => read_string_decoded_scalar(row, index, format_naive_datetime),
+        Type::TIMESTAMP_ARRAY => read_string_decoded_array(row, index, format_naive_datetime),
         Type::TIMESTAMPTZ => {
             read_string_decoded_scalar(row, index, |value: chrono::DateTime<chrono::Utc>| {
                 value.to_rfc3339()
@@ -89,7 +89,7 @@ fn field_to_decoded(row: &Row, index: usize, field_type: FieldType) -> DeResult<
         | FieldType::Range(_)
         | FieldType::Enum(_) => read_decoded_scalar(row, index, DecodedValue::String),
         FieldType::Uuid => read_display_decoded_scalar::<uuid::Uuid>(row, index),
-        FieldType::Timestamp => read_display_decoded_scalar::<chrono::NaiveDateTime>(row, index),
+        FieldType::Timestamp => read_string_decoded_scalar(row, index, format_naive_datetime),
         FieldType::Timestamptz => {
             read_string_decoded_scalar(row, index, |value: chrono::DateTime<chrono::Utc>| {
                 value.to_rfc3339()
@@ -137,7 +137,7 @@ fn array_to_decoded(row: &Row, index: usize, elem_type: ElemType) -> DeResult<De
         | ElemType::Interval
         | ElemType::Enum(_) => read_decoded_array(row, index, DecodedArray::String),
         ElemType::Uuid => read_display_decoded_array::<uuid::Uuid>(row, index),
-        ElemType::Timestamp => read_display_decoded_array::<chrono::NaiveDateTime>(row, index),
+        ElemType::Timestamp => read_string_decoded_array(row, index, format_naive_datetime),
         ElemType::Timestamptz => {
             read_string_decoded_array(row, index, |value: chrono::DateTime<chrono::Utc>| {
                 value.to_rfc3339()
@@ -264,6 +264,10 @@ where
     read_decoded_array(row, index, |values| {
         DecodedArray::String(values.into_iter().map(stringify).collect())
     })
+}
+
+fn format_naive_datetime(value: chrono::NaiveDateTime) -> String {
+    value.format("%Y-%m-%dT%H:%M:%S%.f").to_string()
 }
 
 fn to_json_error(error: tokio_postgres::Error) -> JsonError {

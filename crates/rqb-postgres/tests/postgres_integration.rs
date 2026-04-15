@@ -818,8 +818,8 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
         active_window: String,
         local_window: String,
         billing_dates: String,
-        created_local: String,
-        created_at: String,
+        created_local: chrono::NaiveDateTime,
+        created_at: chrono::DateTime<chrono::Utc>,
     }
 
     let rows: Vec<PgTypeExample> = select(pg_type_examples::dataset())
@@ -861,8 +861,8 @@ async fn executes_native_postgres_type_filters_and_mapping() -> TestResult {
     assert!(row.active_window.contains("2026-02-01"));
     assert!(row.local_window.contains("2026-02-01"));
     assert_eq!(row.billing_dates, "[2026-02-01,2026-03-01)");
-    assert_eq!(row.created_local, "2026-02-01 12:30:00");
-    assert_timestamp_prefix(&row.created_at, "2026-02-01T12:30:00");
+    assert_eq!(row.created_local.to_string(), "2026-02-01 12:30:00");
+    assert_eq!(row.created_at.to_rfc3339(), "2026-02-01T12:30:00+00:00");
 
     Ok(())
 }
@@ -1570,6 +1570,9 @@ async fn raw_query_executes_bind_param_scalar_and_array_matrix() -> TestResult {
         float_value: f64,
         bytes_value: Vec<u8>,
         json_value: serde_json::Value,
+        timestamp_value: chrono::NaiveDateTime,
+        timestamptz_value: chrono::DateTime<chrono::Utc>,
+        date_value: chrono::NaiveDate,
         text_array: Vec<String>,
         int_array: Vec<i64>,
         float_array: Vec<f64>,
@@ -1587,6 +1590,9 @@ async fn raw_query_executes_bind_param_scalar_and_array_matrix() -> TestResult {
             ?::double precision AS "floatValue",
             ?::bytea AS "bytesValue",
             ?::jsonb AS "jsonValue",
+            ?::text::timestamp AS "timestampValue",
+            ?::text::timestamptz AS "timestamptzValue",
+            ?::text::date AS "dateValue",
             ?::text[] AS "textArray",
             ?::bigint[] AS "intArray",
             ?::double precision[] AS "floatArray",
@@ -1601,6 +1607,18 @@ async fn raw_query_executes_bind_param_scalar_and_array_matrix() -> TestResult {
     .bind(1.25_f64)
     .bind(Value::bytes([0xde, 0xad]))
     .bind(serde_json::json!({ "ok": true }))
+    .bind(
+        chrono::NaiveDate::from_ymd_opt(2026, 2, 1)
+            .unwrap()
+            .and_hms_opt(12, 30, 0)
+            .unwrap(),
+    )
+    .bind(
+        chrono::DateTime::parse_from_rfc3339("2026-02-01T12:30:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    )
+    .bind(chrono::NaiveDate::from_ymd_opt(2026, 2, 1).unwrap())
     .bind(["a", "b"])
     .bind([1_i64, 2_i64])
     .bind([1.25_f64, 2.5_f64])
@@ -1619,6 +1637,12 @@ async fn raw_query_executes_bind_param_scalar_and_array_matrix() -> TestResult {
     assert_eq!(row.float_value, 1.25);
     assert_eq!(row.bytes_value, vec![0xde, 0xad]);
     assert_eq!(row.json_value, serde_json::json!({ "ok": true }));
+    assert_eq!(row.timestamp_value.to_string(), "2026-02-01 12:30:00");
+    assert_eq!(
+        row.timestamptz_value.to_rfc3339(),
+        "2026-02-01T12:30:00+00:00"
+    );
+    assert_eq!(row.date_value.to_string(), "2026-02-01");
     assert_eq!(row.text_array, vec!["a", "b"]);
     assert_eq!(row.int_array, vec![1, 2]);
     assert_eq!(row.float_array, vec![1.25, 2.5]);

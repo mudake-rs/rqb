@@ -18,9 +18,11 @@ struct EscapedQuestion {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
 
+    // 1. Raw SQL can return a scalar when no generated metadata is useful.
     let version: String = raw_query("SELECT version()").fetch_one_scalar(&db).await?;
     println!("postgres version: {version}");
 
+    // 2. Bind values with `?`; result columns are mapped by name into the row DTO.
     let stats = raw_query(
         "SELECT status::text AS status, \
                 COUNT(*)::bigint AS orders, \
@@ -39,6 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // 3. Scalar reads can still use bind params.
     let active_count: i64 =
         raw_query("SELECT COUNT(*)::bigint FROM app_users WHERE status = ?::text::user_status")
             .bind("active")
@@ -46,12 +49,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     println!("active users: {active_count}");
 
+    // 4. Use `??` when the SQL text needs a literal question mark.
     let escaped: EscapedQuestion = raw_query("SELECT '??' AS literal, ?::text AS value")
         .bind("bound value")
         .fetch_one_as(&db)
         .await?;
     println!("literal={} value={}", escaped.literal, escaped.value);
 
+    // 5. Raw queries use the same executor path as builders, including transactions.
     let tx = db.begin().await?;
     raw_query("UPDATE app_users SET profile = profile || ?::jsonb WHERE email = ?")
         .bind(serde_json::json!({ "rawQuerySample": true }))

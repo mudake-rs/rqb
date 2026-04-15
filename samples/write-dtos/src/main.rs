@@ -14,12 +14,15 @@ struct UserProfile {
 struct CreateUserRequest {
     id: Uuid,
     organization_id: Uuid,
+    // The external DTO says `login`, but the generated database field is `email`.
     #[rqb(field = app_users::EMAIL)]
     login: String,
     status: UserStatus,
+    // Nested Rust structs are serialized into the JSONB field explicitly.
     #[rqb(json)]
     profile: UserProfile,
     tags: Vec<String>,
+    // Request bookkeeping is not part of the INSERT.
     #[rqb(skip)]
     request_id: String,
 }
@@ -27,8 +30,10 @@ struct CreateUserRequest {
 #[derive(Debug, WriteRecord)]
 #[rqb(fields = app_users, skip_none)]
 struct PatchUserRequest {
+    // Patch DTO names can differ from database field names too.
     #[rqb(field = app_users::STATUS)]
     new_status: Option<UserStatus>,
+    // `skip_none` omits None fields, while Some(profile) is encoded as JSONB.
     #[rqb(json)]
     profile: Option<UserProfile>,
     #[rqb(skip)]
@@ -64,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         request_id: "req-create-1".to_owned(),
     };
 
+    // 1. Insert from an API-shaped DTO, not from a database row struct.
     println!("handling {}", create.request_id);
     let inserted = insert(app_users::dataset())
         .value(&create)
@@ -80,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("inserted: {}", serde_json::to_string_pretty(&inserted)?);
 
+    // 2. Patch with `skip_none`; only fields present in the DTO become SET clauses.
     let patch = PatchUserRequest {
         new_status: Some(UserStatus::Disabled),
         profile: Some(UserProfile {
@@ -106,6 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("updated: {}", serde_json::to_string_pretty(&updated)?);
 
+    // 3. Delete the row created by this sample.
     delete(app_users::dataset())
         .filter(app_users::ID.eq(user_id))
         .execute(&db)

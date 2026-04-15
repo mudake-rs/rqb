@@ -1,6 +1,6 @@
 # joins-and-aggregates
 
-Shows joined field qualification, nested `json_agg`, aggregate filters, and grouped stats.
+Shows grouped stats first, then joined field qualification and nested `json_agg`.
 
 Run from the repository root:
 

@@ -1,11 +1,13 @@
-# error-handling
+# Error handling
 
-Shows common app error patterns:
+Small error-handling sample:
 
-- map named constraints to application errors with `on_constraint`
-- map `NotFound` to `Option` with `optional`
-- retry a serializable transaction when `is_retryable` says the error can be retried
-- surface validation errors before SQL is sent to Postgres
+- `optional()` turns a missing row into `Option<T>`
+- invalid field names fail validation before SQL is sent
+- duplicate keys return `rqb::Error::UniqueViolation`
+- missing parents return `rqb::Error::ForeignKeyViolation`
+- `code()` and `constraint_name()` are available when logs or API mapping need
+  database details
 
 Run from the repository root:
 

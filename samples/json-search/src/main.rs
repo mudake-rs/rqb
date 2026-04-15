@@ -14,6 +14,7 @@ struct OrderSearchRow {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
 
+    // 1. The client sends search parameters only: filter, sort, limit, and offset.
     let request: SearchRequest = serde_json::from_str(
         r#"{
             "filter": {
@@ -27,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }"#,
     )?;
 
+    // 2. The server still owns the dataset, selected fields, and tenant boundary.
     let page = select(order_search::dataset())
         .fields([
             order_search::ID.into(),
@@ -39,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .page_as::<OrderSearchRow>(&db)
         .await?;
 
-    println!("{}", serde_json::to_string_pretty(&page.items).unwrap());
+    println!("{}", serde_json::to_string_pretty(&page.items)?);
     println!(
         "total={}, limit={}, offset={}",
         page.total, page.limit, page.offset

@@ -30,12 +30,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let id = Uuid::new_v4();
     let huge = "900719925474099312345678901234567890".to_owned();
 
+    // 1. CLI generation exposes the domain as TypeSpec metadata.
     println!(
         "generated custom type: {} ({:?})",
         types::UINT_256.name,
         types::UINT_256.value_repr
     );
 
+    // 2. Writes bind exact domain values as decimal strings.
     insert(withdrawals::dataset())
         .value(&NewWithdrawal {
             id,
@@ -47,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .execute(&db)
         .await?;
 
+    // 3. Reads select the same domain back as strings, including arrays.
     let rows = select(withdrawals::dataset())
         .fields([
             withdrawals::ID.into(),
@@ -64,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // 4. Delete the row created by this sample.
     delete(withdrawals::dataset())
         .filter(withdrawals::ID.eq(id))
         .execute(&db)

@@ -44,11 +44,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tags: vec!["sample".to_owned()],
     };
 
+    // 1. Insert a typed write DTO. Values are still sent as Postgres bind params.
     insert(app_users::dataset())
         .value(&new_user)
         .execute(&db)
         .await?;
 
+    // 2. Read a normal typed projection. Aliases match snake_case Rust DTO fields.
     let active_users = select(app_users::dataset())
         .fields([
             app_users::ID.into(),
@@ -65,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("active users: {active_users:#?}");
 
+    // 3. Compose a richer filter without raw SQL; rqb validates fields and operators.
     let matching_ids = select(app_users::dataset())
         .fields([app_users::ID])
         .filter(all([
@@ -81,6 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let id_values = matching_ids.iter().map(|row| row.id).collect::<Vec<_>>();
     println!("matching user ids only: {id_values:#?}");
 
+    // 4. Update and return the changed row in one round trip.
     let disabled = update(app_users::dataset())
         .set(app_users::STATUS, UserStatus::Disabled)
         .filter(app_users::ID.eq(user_id))
@@ -97,6 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("updated user: {disabled:#?}");
 
+    // 5. Clean up the row created by this sample.
     delete(app_users::dataset())
         .filter(app_users::ID.eq(user_id))
         .execute(&db)

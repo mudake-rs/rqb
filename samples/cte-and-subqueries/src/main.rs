@@ -37,6 +37,50 @@ struct LatestStatusRow {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
 
+    // 1. Correlated EXISTS keeps the outer query typed while checking child rows.
+    let user = app_users::table().alias("u");
+    let order = orders::table().alias("o");
+    let users_with_orders = select(&user)
+        .fields([user.id().alias("id"), user.email().alias("email")])
+        .filter(exists(
+            select(&order)
+                .filter(order.user_id().eq_col(user.id()))
+                .build(),
+        ))
+        .fetch_all_as::<UserRow>(&db)
+        .await?;
+    print_users("users with any order", &users_with_orders);
+
+    // 2. IN subquery is useful when the outer query can stay on its base dataset.
+    let paid_order = orders::table().alias("paid_o");
+    let users_with_paid_orders = select(app_users::dataset())
+        .fields([app_users::ID, app_users::EMAIL])
+        .filter(
+            app_users::ID.in_subquery(
+                select(&paid_order)
+                    .fields([paid_order.user_id()])
+                    .filter(paid_order.status().eq(rqb_sample_base::OrderStatus::Paid))
+                    .build(),
+            ),
+        )
+        .fetch_all_as::<UserRow>(&db)
+        .await?;
+    print_users("users with paid orders", &users_with_paid_orders);
+
+    // 3. Set queries compose complete SELECT builders.
+    let active_users = select(app_users::dataset())
+        .fields([app_users::ID, app_users::EMAIL])
+        .filter(app_users::STATUS.eq(rqb_sample_base::UserStatus::Active));
+    let disabled_users = select(app_users::dataset())
+        .fields([app_users::ID, app_users::EMAIL])
+        .filter(app_users::STATUS.eq(rqb_sample_base::UserStatus::Disabled));
+    let users_from_set_query = union(active_users, disabled_users)
+        .order_by(field("email").asc())
+        .fetch_all_as::<UserRow>(&db)
+        .await?;
+    print_users("users from UNION set query", &users_from_set_query);
+
+    // 4. A typed CTE gets explicit field metadata before the outer query reads it.
     let recent = cte(
         "recent_orders",
         select(order_search::dataset())
@@ -64,46 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     print_orders("paid recent orders", &paid_recent);
 
-    let user = app_users::table().alias("u");
-    let order = orders::table().alias("o");
-    let users_with_orders = select(&user)
-        .fields([user.id().alias("id"), user.email().alias("email")])
-        .filter(exists(
-            select(&order)
-                .filter(order.user_id().eq_col(user.id()))
-                .build(),
-        ))
-        .fetch_all_as::<UserRow>(&db)
-        .await?;
-    print_users("users with any order", &users_with_orders);
-
-    let paid_order = orders::table().alias("paid_o");
-    let users_with_paid_orders = select(app_users::dataset())
-        .fields([app_users::ID, app_users::EMAIL])
-        .filter(
-            app_users::ID.in_subquery(
-                select(&paid_order)
-                    .fields([paid_order.user_id()])
-                    .filter(paid_order.status().eq(rqb_sample_base::OrderStatus::Paid))
-                    .build(),
-            ),
-        )
-        .fetch_all_as::<UserRow>(&db)
-        .await?;
-    print_users("users with paid orders", &users_with_paid_orders);
-
-    let active_users = select(app_users::dataset())
-        .fields([app_users::ID, app_users::EMAIL])
-        .filter(app_users::STATUS.eq(rqb_sample_base::UserStatus::Active));
-    let disabled_users = select(app_users::dataset())
-        .fields([app_users::ID, app_users::EMAIL])
-        .filter(app_users::STATUS.eq(rqb_sample_base::UserStatus::Disabled));
-    let users_from_set_query = union(active_users, disabled_users)
-        .order_by(field("email").asc())
-        .fetch_all_as::<UserRow>(&db)
-        .await?;
-    print_users("users from UNION set query", &users_from_set_query);
-
+    // 5. LATERAL joins let a subquery depend on each row from the left side.
     let latest_order = select(&order)
         .fields([order.status()])
         .filter(order.user_id().eq_col(user.id()))
@@ -121,6 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     print_latest_statuses("latest order status per user", &latest_status);
 
+    // 6. Raw sources are the lowest-level escape hatch and still need field metadata.
     let raw_source = Dataset::raw(
         "SELECT id, email FROM app_users WHERE status = 'active'",
         "active_users",

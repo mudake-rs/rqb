@@ -33,9 +33,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let order = new_order();
     let item = new_item(order.id);
 
+    // 1. Explicit transaction: the order and its first item commit together.
     let tx = db.begin().await?;
     insert(orders::dataset()).value(&order).execute(&tx).await?;
 
+    // 2. Savepoints are useful for nested work inside a larger transaction.
     let savepoint = tx.savepoint("item_insert").await?;
     insert(order_items::dataset())
         .value(&item)
@@ -46,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tx.commit().await?;
     println!("committed order {}", order.id);
 
+    // 3. Closure-style transactions keep the boundary small for simple units of work.
     db.transaction(txn!(|tx| {
         update(orders::dataset())
             .set(orders::TAGS, vec!["sample", "closure"])
@@ -57,6 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
     println!("committed tag update through closure transaction");
 
+    // 4. Rollback leaves the previous committed state untouched.
     let rollback_tx = db.begin().await?;
     update(orders::dataset())
         .set(orders::STATUS, OrderStatus::Cancelled)
@@ -66,6 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     rollback_tx.rollback().await?;
     println!("rolled back cancellation");
 
+    // 5. Cleanup can use the same closure transaction helper.
     db.transaction(txn!(|tx| {
         delete(order_items::dataset())
             .filter(order_items::ORDER_ID.eq(order.id))

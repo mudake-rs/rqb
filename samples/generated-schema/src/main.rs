@@ -28,16 +28,15 @@ struct WithdrawalAmount {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
 
+    // 1. Generated fields are enough for a typed SELECT with enum values.
     let paid = select(orders::dataset())
         .fields([orders::ID, orders::STATUS])
         .filter(orders::STATUS.eq(OrderStatus::Paid))
         .fetch_all_as::<PaidOrder>(&db)
         .await?;
-    println!(
-        "paid orders: {}",
-        serde_json::to_string_pretty(&paid).unwrap()
-    );
+    println!("paid orders: {}", serde_json::to_string_pretty(&paid)?);
 
+    // 2. Generated relation helpers qualify joined fields without string aliases.
     let user = app_users::table().alias("u");
     let order = orders::table().alias("o");
     let joined = select(&user)
@@ -46,20 +45,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(order.status().eq(OrderStatus::Paid))
         .fetch_all_as::<JoinedUser>(&db)
         .await?;
-    println!(
-        "joined users: {}",
-        serde_json::to_string_pretty(&joined).unwrap()
-    );
+    println!("joined users: {}", serde_json::to_string_pretty(&joined)?);
 
+    // 3. Generated custom domains keep exact numeric values as decimal strings.
     let exact = select(withdrawals::dataset())
         .fields([withdrawals::ID, withdrawals::AMOUNT])
         .filter(withdrawals::AMOUNT.gt("9007199254740993"))
         .fetch_all_as::<WithdrawalAmount>(&db)
         .await?;
-    println!(
-        "exact domain rows: {}",
-        serde_json::to_string_pretty(&exact).unwrap()
-    );
+    println!("exact domain rows: {}", serde_json::to_string_pretty(&exact)?);
 
     Ok(())
 }

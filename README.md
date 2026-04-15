@@ -329,8 +329,8 @@ workspace test suite, and tears the container down.
 
 - [`crates/rqb/examples`](crates/rqb/examples): small compile-checked examples
 - [`samples`](samples): standalone samples for CRUD, JSON search, joins,
-  transactions, CTEs, write DTOs, exact numerics, Postgres types, raw SQL,
-  errors, and custom types
+  transactions, CTEs, advanced builder queries, write DTOs, exact numerics,
+  Postgres types, raw SQL, errors, and custom types
 - [`samples/rest-api`](samples/rest-api): actix-web service sample
 
 ## License

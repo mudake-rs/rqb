@@ -1,6 +1,8 @@
 # cte-and-subqueries
 
-Shows typed CTEs, `EXISTS`, `IN (subquery)`, and raw SQL sources with field metadata.
+Shows advanced query composition from simpler subqueries to escape hatches:
+`EXISTS`, `IN (subquery)`, `UNION`, typed CTEs, lateral joins, and raw SQL
+sources with field metadata.
 
 Run from the repository root:
 

@@ -117,75 +117,27 @@ fn require_value_for_field_type(
     reject_non_finite_numbers(field, operator, value)?;
 
     match field_type {
-        FieldType::Text => require_value_shape(field, operator, value, "string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        FieldType::Citext => require_value_shape(field, operator, value, "string", |value| {
-            matches!(value, Value::String(_))
-        }),
+        FieldType::Text | FieldType::Citext => {
+            require_string_value(field, operator, value, "string")
+        }
         FieldType::Integer => require_int4_value(field, operator, value),
-        FieldType::BigInt => require_value_shape(field, operator, value, "integer", |value| {
-            matches!(value, Value::I64(_))
-        }),
+        FieldType::BigInt => require_i64_value(field, operator, value),
         FieldType::Float => require_value_shape(field, operator, value, "number", Value::is_number),
-        FieldType::Numeric => require_value_shape(
-            field,
-            operator,
-            value,
-            "integer or numeric string",
-            is_exact_numeric_value,
-        ),
-        FieldType::Bool => require_value_shape(field, operator, value, "bool", |value| {
-            matches!(value, Value::Bool(_))
-        }),
-        FieldType::Uuid => require_value_shape(field, operator, value, "UUID string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        FieldType::Timestamp => {
-            require_value_shape(field, operator, value, "timestamp string", |value| {
-                matches!(value, Value::String(_))
-            })
-        }
+        FieldType::Numeric => require_exact_numeric_value(field, operator, value),
+        FieldType::Bool => require_bool_value(field, operator, value),
+        FieldType::Uuid => require_string_value(field, operator, value, "UUID string"),
+        FieldType::Timestamp => require_string_value(field, operator, value, "timestamp string"),
         FieldType::Timestamptz => {
-            require_value_shape(field, operator, value, "timestamptz string", |value| {
-                matches!(value, Value::String(_))
-            })
+            require_string_value(field, operator, value, "timestamptz string")
         }
-        FieldType::Date => require_value_shape(field, operator, value, "date string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        FieldType::Time => require_value_shape(field, operator, value, "time string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        FieldType::Timetz => {
-            require_value_shape(field, operator, value, "timetz string", |value| {
-                matches!(value, Value::String(_))
-            })
-        }
-        FieldType::Interval => {
-            require_value_shape(field, operator, value, "interval string", |value| {
-                matches!(value, Value::String(_))
-            })
-        }
-        FieldType::Jsonb => {
-            if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
-                reject_non_finite_numbers(field, operator, value)?;
-                Ok(())
-            } else {
-                Err(Error::InvalidValue {
-                    field: field.display_name(),
-                    operator: operator.to_owned(),
-                    message: format!("expected scalar, array, or JSON, got {}", value.type_name()),
-                })
-            }
-        }
-        FieldType::Bytea => require_value_shape(field, operator, value, "bytes", |value| {
-            matches!(value, Value::Bytes(_))
-        }),
+        FieldType::Date => require_string_value(field, operator, value, "date string"),
+        FieldType::Time => require_string_value(field, operator, value, "time string"),
+        FieldType::Timetz => require_string_value(field, operator, value, "timetz string"),
+        FieldType::Interval => require_string_value(field, operator, value, "interval string"),
+        FieldType::Jsonb => require_jsonb_value(field, operator, value),
+        FieldType::Bytea => require_bytes_value(field, operator, value),
         FieldType::Inet | FieldType::Cidr => {
-            require_value_shape(field, operator, value, "network string", |value| {
-                matches!(value, Value::String(_))
-            })
+            require_string_value(field, operator, value, "network string")
         }
         FieldType::Enum(enum_type) => {
             require_enum_scalar_by_name(field, operator, enum_type, value)
@@ -203,7 +155,7 @@ fn require_value_for_field_type(
                 });
             };
             for value in values {
-                require_value_for_elem_type(field, operator, elem_type, value)?;
+                require_value_for_field_type(field, operator, elem_type.field_type(), value)?;
             }
             Ok(())
         }
@@ -217,93 +169,38 @@ fn require_value_for_type_spec(
     value: &Value,
 ) -> Result<()> {
     match type_spec.value_repr {
-        ValueRepr::DecimalString => require_value_shape(
-            field,
-            operator,
-            value,
-            "integer or decimal string",
-            |value| match value {
-                Value::I64(_) => true,
-                Value::String(value) => looks_like_decimal(value),
-                _ => false,
-            },
-        ),
-        ValueRepr::String => require_value_shape(field, operator, value, "string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ValueRepr::Native => match type_spec.family {
-            TypeFamily::Text => require_value_shape(field, operator, value, "string", |value| {
-                matches!(value, Value::String(_))
-            }),
-            TypeFamily::Numeric => require_value_shape(
-                field,
-                operator,
-                value,
-                "integer or numeric string",
-                is_exact_numeric_value,
-            ),
-            TypeFamily::Bool => require_value_shape(field, operator, value, "bool", |value| {
-                matches!(value, Value::Bool(_))
-            }),
-            TypeFamily::Uuid => {
-                require_value_shape(field, operator, value, "UUID string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Timestamp => {
-                require_value_shape(field, operator, value, "timestamp string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Timestamptz => {
-                require_value_shape(field, operator, value, "timestamptz string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Date => {
-                require_value_shape(field, operator, value, "date string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Time => {
-                require_value_shape(field, operator, value, "time string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Timetz => {
-                require_value_shape(field, operator, value, "timetz string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Interval => {
-                require_value_shape(field, operator, value, "interval string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-            TypeFamily::Jsonb => {
-                if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
-                    reject_non_finite_numbers(field, operator, value)?;
-                    Ok(())
-                } else {
-                    Err(Error::InvalidValue {
-                        field: field.display_name(),
-                        operator: operator.to_owned(),
-                        message: format!(
-                            "expected scalar, array, or JSON, got {}",
-                            value.type_name()
-                        ),
-                    })
-                }
-            }
-            TypeFamily::Bytes => require_value_shape(field, operator, value, "bytes", |value| {
-                matches!(value, Value::Bytes(_))
-            }),
-            TypeFamily::Network | TypeFamily::Range => {
-                require_value_shape(field, operator, value, "string", |value| {
-                    matches!(value, Value::String(_))
-                })
-            }
-        },
+        ValueRepr::DecimalString => require_decimal_string_value(field, operator, value),
+        ValueRepr::String => require_string_value(field, operator, value, "string"),
+        ValueRepr::Native => {
+            require_value_for_type_family(field, operator, type_spec.family, value)
+        }
+    }
+}
+
+fn require_value_for_type_family(
+    field: &ResolvedField,
+    operator: &str,
+    family: TypeFamily,
+    value: &Value,
+) -> Result<()> {
+    match family {
+        TypeFamily::Text => require_string_value(field, operator, value, "string"),
+        TypeFamily::Numeric => require_exact_numeric_value(field, operator, value),
+        TypeFamily::Bool => require_bool_value(field, operator, value),
+        TypeFamily::Uuid => require_string_value(field, operator, value, "UUID string"),
+        TypeFamily::Timestamp => require_string_value(field, operator, value, "timestamp string"),
+        TypeFamily::Timestamptz => {
+            require_string_value(field, operator, value, "timestamptz string")
+        }
+        TypeFamily::Date => require_string_value(field, operator, value, "date string"),
+        TypeFamily::Time => require_string_value(field, operator, value, "time string"),
+        TypeFamily::Timetz => require_string_value(field, operator, value, "timetz string"),
+        TypeFamily::Interval => require_string_value(field, operator, value, "interval string"),
+        TypeFamily::Jsonb => require_jsonb_value(field, operator, value),
+        TypeFamily::Bytes => require_bytes_value(field, operator, value),
+        TypeFamily::Network | TypeFamily::Range => {
+            require_string_value(field, operator, value, "string")
+        }
     }
 }
 
@@ -320,9 +217,7 @@ fn require_range_value(
             message: format!("unsupported range element type {}", elem_type.as_str()),
         });
     }
-    require_value_shape(field, operator, value, "range literal string", |value| {
-        matches!(value, Value::String(_))
-    })
+    require_string_value(field, operator, value, "range literal string")
 }
 
 fn is_supported_range_elem(elem_type: ElemType) -> bool {
@@ -371,6 +266,10 @@ fn looks_like_decimal(value: &str) -> bool {
 }
 
 fn is_exact_numeric_value(value: &Value) -> bool {
+    is_decimal_string_value(value)
+}
+
+fn is_decimal_string_value(value: &Value) -> bool {
     match value {
         Value::I64(_) => true,
         Value::String(value) => looks_like_decimal(value),
@@ -392,62 +291,7 @@ pub(super) fn require_value_for_elem_type(
     elem_type: ElemType,
     value: &Value,
 ) -> Result<()> {
-    reject_non_finite_numbers(field, operator, value)?;
-
-    match elem_type {
-        ElemType::Text => require_value_shape(field, operator, value, "string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ElemType::Citext => require_value_shape(field, operator, value, "string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ElemType::Int => require_int4_value(field, operator, value),
-        ElemType::BigInt => require_value_shape(field, operator, value, "integer", |value| {
-            matches!(value, Value::I64(_))
-        }),
-        ElemType::Float => require_value_shape(field, operator, value, "number", Value::is_number),
-        ElemType::Numeric => require_value_shape(
-            field,
-            operator,
-            value,
-            "integer or numeric string",
-            is_exact_numeric_value,
-        ),
-        ElemType::Bool => require_value_shape(field, operator, value, "bool", |value| {
-            matches!(value, Value::Bool(_))
-        }),
-        ElemType::Uuid => require_value_shape(field, operator, value, "UUID string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ElemType::Timestamp => {
-            require_value_shape(field, operator, value, "timestamp string", |value| {
-                matches!(value, Value::String(_))
-            })
-        }
-        ElemType::Timestamptz => {
-            require_value_shape(field, operator, value, "timestamptz string", |value| {
-                matches!(value, Value::String(_))
-            })
-        }
-        ElemType::Date => require_value_shape(field, operator, value, "date string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ElemType::Time => require_value_shape(field, operator, value, "time string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ElemType::Timetz => require_value_shape(field, operator, value, "timetz string", |value| {
-            matches!(value, Value::String(_))
-        }),
-        ElemType::Interval => {
-            require_value_shape(field, operator, value, "interval string", |value| {
-                matches!(value, Value::String(_))
-            })
-        }
-        ElemType::Enum(enum_type) => require_enum_scalar_by_name(field, operator, enum_type, value),
-        ElemType::Custom(type_spec) => {
-            require_value_for_type_spec(field, operator, *type_spec, value)
-        }
-    }
+    require_value_for_field_type(field, operator, elem_type.field_type(), value)
 }
 
 fn require_value_shape(
@@ -464,6 +308,70 @@ fn require_value_shape(
         field: field.display_name(),
         operator: operator.to_owned(),
         message: format!("expected {expected}, got {}", value.type_name()),
+    })
+}
+
+fn require_string_value(
+    field: &ResolvedField,
+    operator: &str,
+    value: &Value,
+    expected: &str,
+) -> Result<()> {
+    require_value_shape(field, operator, value, expected, |value| {
+        matches!(value, Value::String(_))
+    })
+}
+
+fn require_bool_value(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    require_value_shape(field, operator, value, "bool", |value| {
+        matches!(value, Value::Bool(_))
+    })
+}
+
+fn require_i64_value(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    require_value_shape(field, operator, value, "integer", |value| {
+        matches!(value, Value::I64(_))
+    })
+}
+
+fn require_bytes_value(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    require_value_shape(field, operator, value, "bytes", |value| {
+        matches!(value, Value::Bytes(_))
+    })
+}
+
+fn require_exact_numeric_value(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    require_value_shape(
+        field,
+        operator,
+        value,
+        "integer or numeric string",
+        is_exact_numeric_value,
+    )
+}
+
+fn require_decimal_string_value(
+    field: &ResolvedField,
+    operator: &str,
+    value: &Value,
+) -> Result<()> {
+    require_value_shape(
+        field,
+        operator,
+        value,
+        "integer or decimal string",
+        is_decimal_string_value,
+    )
+}
+
+fn require_jsonb_value(field: &ResolvedField, operator: &str, value: &Value) -> Result<()> {
+    if value.is_scalar() || matches!(value, Value::Array(_) | Value::Json(_)) {
+        return Ok(());
+    }
+    Err(Error::InvalidValue {
+        field: field.display_name(),
+        operator: operator.to_owned(),
+        message: format!("expected scalar, array, or JSON, got {}", value.type_name()),
     })
 }
 

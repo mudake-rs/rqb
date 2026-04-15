@@ -57,6 +57,24 @@ macro_rules! impl_value_from {
     };
 }
 
+macro_rules! impl_value_display_string_from {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl From<$ty> for Value {
+                fn from(value: $ty) -> Self {
+                    Self::String(value.to_string())
+                }
+            }
+
+            impl From<&$ty> for Value {
+                fn from(value: &$ty) -> Self {
+                    Self::String(value.to_string())
+                }
+            }
+        )*
+    };
+}
+
 impl<'de> Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -189,53 +207,12 @@ impl<const N: usize> From<&[u8; N]> for Value {
     }
 }
 
-impl From<uuid::Uuid> for Value {
-    fn from(value: uuid::Uuid) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<&uuid::Uuid> for Value {
-    fn from(value: &uuid::Uuid) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<chrono::NaiveDate> for Value {
-    fn from(value: chrono::NaiveDate) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<&chrono::NaiveDate> for Value {
-    fn from(value: &chrono::NaiveDate) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<chrono::NaiveDateTime> for Value {
-    fn from(value: chrono::NaiveDateTime) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<&chrono::NaiveDateTime> for Value {
-    fn from(value: &chrono::NaiveDateTime) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<chrono::NaiveTime> for Value {
-    fn from(value: chrono::NaiveTime) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<&chrono::NaiveTime> for Value {
-    fn from(value: &chrono::NaiveTime) -> Self {
-        Self::String(value.to_string())
-    }
-}
+impl_value_display_string_from!(
+    uuid::Uuid,
+    chrono::NaiveDate,
+    chrono::NaiveDateTime,
+    chrono::NaiveTime,
+);
 
 impl<Tz> From<chrono::DateTime<Tz>> for Value
 where

@@ -16,20 +16,7 @@ fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
         FieldType::Citext => Some("::text::citext"),
         FieldType::Inet => Some("::text::inet"),
         FieldType::Cidr => Some("::text::cidr"),
-        FieldType::Array(ElemType::Text) => Some("::text[]"),
-        FieldType::Array(ElemType::Citext) => Some("::text[]::citext[]"),
-        FieldType::Array(ElemType::Int) => Some("::int[]"),
-        FieldType::Array(ElemType::BigInt) => Some("::bigint[]"),
-        FieldType::Array(ElemType::Uuid) => Some("::text[]::uuid[]"),
-        FieldType::Array(ElemType::Float) => Some("::double precision[]"),
-        FieldType::Array(ElemType::Numeric) => Some("::numeric[]"),
-        FieldType::Array(ElemType::Bool) => Some("::boolean[]"),
-        FieldType::Array(ElemType::Timestamp) => Some("::text[]::timestamp[]"),
-        FieldType::Array(ElemType::Timestamptz) => Some("::text[]::timestamptz[]"),
-        FieldType::Array(ElemType::Date) => Some("::text[]::date[]"),
-        FieldType::Array(ElemType::Time) => Some("::text[]::time[]"),
-        FieldType::Array(ElemType::Timetz) => Some("::text[]::timetz[]"),
-        FieldType::Array(ElemType::Interval) => Some("::text[]::interval[]"),
+        FieldType::Array(elem_type) => postgres_builtin_array_cast(elem_type, false),
         FieldType::Integer => Some("::int"),
         FieldType::BigInt => Some("::bigint"),
         FieldType::Float => Some("::double precision"),
@@ -38,8 +25,31 @@ fn postgres_cast(field_type: FieldType) -> Option<&'static str> {
         | FieldType::Bool
         | FieldType::Custom(_)
         | FieldType::Enum(_)
-        | FieldType::Range(_)
-        | FieldType::Array(ElemType::Enum(_) | ElemType::Custom(_)) => None,
+        | FieldType::Range(_) => None,
+    }
+}
+
+fn postgres_builtin_array_cast(
+    elem_type: ElemType,
+    numeric_text_cast: bool,
+) -> Option<&'static str> {
+    match elem_type {
+        ElemType::Text => Some("::text[]"),
+        ElemType::Citext => Some("::text[]::citext[]"),
+        ElemType::Int => Some("::int[]"),
+        ElemType::BigInt => Some("::bigint[]"),
+        ElemType::Uuid => Some("::text[]::uuid[]"),
+        ElemType::Float => Some("::double precision[]"),
+        ElemType::Numeric if numeric_text_cast => Some("::text[]::numeric[]"),
+        ElemType::Numeric => Some("::numeric[]"),
+        ElemType::Bool => Some("::boolean[]"),
+        ElemType::Timestamp => Some("::text[]::timestamp[]"),
+        ElemType::Timestamptz => Some("::text[]::timestamptz[]"),
+        ElemType::Date => Some("::text[]::date[]"),
+        ElemType::Time => Some("::text[]::time[]"),
+        ElemType::Timetz => Some("::text[]::timetz[]"),
+        ElemType::Interval => Some("::text[]::interval[]"),
+        ElemType::Enum(_) | ElemType::Custom(_) => None,
     }
 }
 
@@ -84,20 +94,6 @@ pub(crate) fn write_postgres_array_cast_for_scalar(
     field_type: FieldType,
 ) -> bool {
     match field_type {
-        FieldType::Text => output.push_str("::text[]"),
-        FieldType::Citext => output.push_str("::text[]::citext[]"),
-        FieldType::Integer => output.push_str("::int[]"),
-        FieldType::BigInt => output.push_str("::bigint[]"),
-        FieldType::Float => output.push_str("::double precision[]"),
-        FieldType::Numeric => output.push_str("::text[]::numeric[]"),
-        FieldType::Bool => output.push_str("::boolean[]"),
-        FieldType::Uuid => output.push_str("::text[]::uuid[]"),
-        FieldType::Timestamp => output.push_str("::text[]::timestamp[]"),
-        FieldType::Timestamptz => output.push_str("::text[]::timestamptz[]"),
-        FieldType::Date => output.push_str("::text[]::date[]"),
-        FieldType::Time => output.push_str("::text[]::time[]"),
-        FieldType::Timetz => output.push_str("::text[]::timetz[]"),
-        FieldType::Interval => output.push_str("::text[]::interval[]"),
         FieldType::Jsonb => output.push_str("::jsonb[]"),
         FieldType::Bytea => output.push_str("::bytea[]"),
         FieldType::Inet => output.push_str("::text[]::inet[]"),
@@ -114,6 +110,15 @@ pub(crate) fn write_postgres_array_cast_for_scalar(
             output.push_str("[]");
         }
         FieldType::Array(_) => return false,
+        other => {
+            let Some(FieldType::Array(elem_type)) = other.array_type_for_scalar() else {
+                return false;
+            };
+            let Some(cast) = postgres_builtin_array_cast(elem_type, true) else {
+                return false;
+            };
+            output.push_str(cast);
+        }
     }
     true
 }

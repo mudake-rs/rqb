@@ -53,14 +53,22 @@ pub(super) fn raw_column_to_decoded(row: &Row, index: usize, ty: &Type) -> DeRes
         }
         Type::JSON_ARRAY | Type::JSONB_ARRAY => read_decoded_array(row, index, DecodedArray::Json),
         Type::BYTEA_ARRAY => read_decoded_array(row, index, DecodedArray::Bytes),
-        Type::UUID => uuid_to_decoded(row, index),
-        Type::UUID_ARRAY => uuid_array_to_decoded(row, index),
-        Type::TIMESTAMP => timestamp_to_decoded(row, index),
-        Type::TIMESTAMP_ARRAY => timestamp_array_to_decoded(row, index),
-        Type::TIMESTAMPTZ => timestamptz_to_decoded(row, index),
-        Type::TIMESTAMPTZ_ARRAY => timestamptz_array_to_decoded(row, index),
-        Type::DATE => date_to_decoded(row, index),
-        Type::DATE_ARRAY => date_array_to_decoded(row, index),
+        Type::UUID => read_display_decoded_scalar::<uuid::Uuid>(row, index),
+        Type::UUID_ARRAY => read_display_decoded_array::<uuid::Uuid>(row, index),
+        Type::TIMESTAMP => read_display_decoded_scalar::<chrono::NaiveDateTime>(row, index),
+        Type::TIMESTAMP_ARRAY => read_display_decoded_array::<chrono::NaiveDateTime>(row, index),
+        Type::TIMESTAMPTZ => {
+            read_string_decoded_scalar(row, index, |value: chrono::DateTime<chrono::Utc>| {
+                value.to_rfc3339()
+            })
+        }
+        Type::TIMESTAMPTZ_ARRAY => {
+            read_string_decoded_array(row, index, |value: chrono::DateTime<chrono::Utc>| {
+                value.to_rfc3339()
+            })
+        }
+        Type::DATE => read_display_decoded_scalar::<chrono::NaiveDate>(row, index),
+        Type::DATE_ARRAY => read_display_decoded_array::<chrono::NaiveDate>(row, index),
         _ => Err(JsonError::custom(format!(
             "raw query column `{}` has unsupported Postgres type `{}`; cast it to a supported type",
             row.columns()[index].name(),
@@ -80,10 +88,14 @@ fn field_to_decoded(row: &Row, index: usize, field_type: FieldType) -> DeResult<
         | FieldType::Cidr
         | FieldType::Range(_)
         | FieldType::Enum(_) => read_decoded_scalar(row, index, DecodedValue::String),
-        FieldType::Uuid => uuid_to_decoded(row, index),
-        FieldType::Timestamp => timestamp_to_decoded(row, index),
-        FieldType::Timestamptz => timestamptz_to_decoded(row, index),
-        FieldType::Date => date_to_decoded(row, index),
+        FieldType::Uuid => read_display_decoded_scalar::<uuid::Uuid>(row, index),
+        FieldType::Timestamp => read_display_decoded_scalar::<chrono::NaiveDateTime>(row, index),
+        FieldType::Timestamptz => {
+            read_string_decoded_scalar(row, index, |value: chrono::DateTime<chrono::Utc>| {
+                value.to_rfc3339()
+            })
+        }
+        FieldType::Date => read_display_decoded_scalar::<chrono::NaiveDate>(row, index),
         FieldType::Integer => read_decoded_scalar(row, index, DecodedValue::I32),
         FieldType::BigInt => read_decoded_scalar(row, index, DecodedValue::I64),
         FieldType::Float => read_decoded_scalar(row, index, DecodedValue::F64),
@@ -101,26 +113,7 @@ fn custom_field_to_decoded(
     index: usize,
     type_spec: rqb_core::TypeSpec,
 ) -> DeResult<DecodedValue> {
-    if type_spec.selects_as_text() {
-        return read_decoded_scalar(row, index, DecodedValue::String);
-    }
-
-    match type_spec.family {
-        TypeFamily::Text
-        | TypeFamily::Uuid
-        | TypeFamily::Timestamp
-        | TypeFamily::Timestamptz
-        | TypeFamily::Date
-        | TypeFamily::Time
-        | TypeFamily::Timetz
-        | TypeFamily::Interval
-        | TypeFamily::Network
-        | TypeFamily::Range
-        | TypeFamily::Numeric => read_decoded_scalar(row, index, DecodedValue::String),
-        TypeFamily::Bool => read_decoded_scalar(row, index, DecodedValue::Bool),
-        TypeFamily::Jsonb => read_decoded_scalar(row, index, DecodedValue::Json),
-        TypeFamily::Bytes => read_decoded_scalar(row, index, DecodedValue::Bytes),
-    }
+    read_decoded_scalar_kind(row, index, custom_decoded_kind(type_spec))
 }
 
 fn aggregate_to_decoded(row: &Row, index: usize, ty: &AggregateType) -> DeResult<DecodedValue> {
@@ -143,10 +136,14 @@ fn array_to_decoded(row: &Row, index: usize, elem_type: ElemType) -> DeResult<De
         | ElemType::Timetz
         | ElemType::Interval
         | ElemType::Enum(_) => read_decoded_array(row, index, DecodedArray::String),
-        ElemType::Uuid => uuid_array_to_decoded(row, index),
-        ElemType::Timestamp => timestamp_array_to_decoded(row, index),
-        ElemType::Timestamptz => timestamptz_array_to_decoded(row, index),
-        ElemType::Date => date_array_to_decoded(row, index),
+        ElemType::Uuid => read_display_decoded_array::<uuid::Uuid>(row, index),
+        ElemType::Timestamp => read_display_decoded_array::<chrono::NaiveDateTime>(row, index),
+        ElemType::Timestamptz => {
+            read_string_decoded_array(row, index, |value: chrono::DateTime<chrono::Utc>| {
+                value.to_rfc3339()
+            })
+        }
+        ElemType::Date => read_display_decoded_array::<chrono::NaiveDate>(row, index),
         ElemType::Int => read_decoded_array(row, index, DecodedArray::I32),
         ElemType::BigInt => read_decoded_array(row, index, DecodedArray::I64),
         ElemType::Float => read_decoded_array(row, index, DecodedArray::F64),
@@ -161,8 +158,20 @@ fn custom_array_to_decoded(
     index: usize,
     type_spec: rqb_core::TypeSpec,
 ) -> DeResult<DecodedValue> {
+    read_decoded_array_kind(row, index, custom_decoded_kind(type_spec))
+}
+
+#[derive(Clone, Copy)]
+enum DecodedKind {
+    String,
+    Bool,
+    Json,
+    Bytes,
+}
+
+fn custom_decoded_kind(type_spec: rqb_core::TypeSpec) -> DecodedKind {
     if type_spec.selects_as_text() {
-        return read_decoded_array(row, index, DecodedArray::String);
+        return DecodedKind::String;
     }
 
     match type_spec.family {
@@ -176,10 +185,28 @@ fn custom_array_to_decoded(
         | TypeFamily::Interval
         | TypeFamily::Network
         | TypeFamily::Range
-        | TypeFamily::Numeric => read_decoded_array(row, index, DecodedArray::String),
-        TypeFamily::Bool => read_decoded_array(row, index, DecodedArray::Bool),
-        TypeFamily::Jsonb => read_decoded_array(row, index, DecodedArray::Json),
-        TypeFamily::Bytes => read_decoded_array(row, index, DecodedArray::Bytes),
+        | TypeFamily::Numeric => DecodedKind::String,
+        TypeFamily::Bool => DecodedKind::Bool,
+        TypeFamily::Jsonb => DecodedKind::Json,
+        TypeFamily::Bytes => DecodedKind::Bytes,
+    }
+}
+
+fn read_decoded_scalar_kind(row: &Row, index: usize, kind: DecodedKind) -> DeResult<DecodedValue> {
+    match kind {
+        DecodedKind::String => read_decoded_scalar(row, index, DecodedValue::String),
+        DecodedKind::Bool => read_decoded_scalar(row, index, DecodedValue::Bool),
+        DecodedKind::Json => read_decoded_scalar(row, index, DecodedValue::Json),
+        DecodedKind::Bytes => read_decoded_scalar(row, index, DecodedValue::Bytes),
+    }
+}
+
+fn read_decoded_array_kind(row: &Row, index: usize, kind: DecodedKind) -> DeResult<DecodedValue> {
+    match kind {
+        DecodedKind::String => read_decoded_array(row, index, DecodedArray::String),
+        DecodedKind::Bool => read_decoded_array(row, index, DecodedArray::Bool),
+        DecodedKind::Json => read_decoded_array(row, index, DecodedArray::Json),
+        DecodedKind::Bytes => read_decoded_array(row, index, DecodedArray::Bytes),
     }
 }
 
@@ -207,54 +234,38 @@ where
         .map_err(to_json_error)
 }
 
+fn read_display_decoded_scalar<T>(row: &Row, index: usize) -> DeResult<DecodedValue>
+where
+    T: for<'a> FromSql<'a> + ToString,
+{
+    read_string_decoded_scalar(row, index, |value: T| value.to_string())
+}
+
+fn read_display_decoded_array<T>(row: &Row, index: usize) -> DeResult<DecodedValue>
+where
+    T: for<'a> FromSql<'a> + ToString,
+{
+    read_string_decoded_array(row, index, |value: T| value.to_string())
+}
+
+fn read_string_decoded_scalar<T, F>(row: &Row, index: usize, stringify: F) -> DeResult<DecodedValue>
+where
+    T: for<'a> FromSql<'a>,
+    F: FnOnce(T) -> String,
+{
+    read_decoded_scalar(row, index, |value| DecodedValue::String(stringify(value)))
+}
+
+fn read_string_decoded_array<T, F>(row: &Row, index: usize, stringify: F) -> DeResult<DecodedValue>
+where
+    T: for<'a> FromSql<'a>,
+    F: Fn(T) -> String,
+{
+    read_decoded_array(row, index, |values| {
+        DecodedArray::String(values.into_iter().map(stringify).collect())
+    })
+}
+
 fn to_json_error(error: tokio_postgres::Error) -> JsonError {
     JsonError::custom(error.to_string())
-}
-
-fn uuid_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, |value: uuid::Uuid| {
-        DecodedValue::String(value.to_string())
-    })
-}
-
-fn uuid_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, |values: Vec<uuid::Uuid>| {
-        DecodedArray::String(values.into_iter().map(|value| value.to_string()).collect())
-    })
-}
-
-fn timestamp_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, |value: chrono::NaiveDateTime| {
-        DecodedValue::String(value.to_string())
-    })
-}
-
-fn timestamp_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, |values: Vec<chrono::NaiveDateTime>| {
-        DecodedArray::String(values.into_iter().map(|value| value.to_string()).collect())
-    })
-}
-
-fn timestamptz_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, |value: chrono::DateTime<chrono::Utc>| {
-        DecodedValue::String(value.to_rfc3339())
-    })
-}
-
-fn timestamptz_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, |values: Vec<chrono::DateTime<chrono::Utc>>| {
-        DecodedArray::String(values.into_iter().map(|value| value.to_rfc3339()).collect())
-    })
-}
-
-fn date_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_scalar(row, index, |value: chrono::NaiveDate| {
-        DecodedValue::String(value.to_string())
-    })
-}
-
-fn date_array_to_decoded(row: &Row, index: usize) -> DeResult<DecodedValue> {
-    read_decoded_array(row, index, |values: Vec<chrono::NaiveDate>| {
-        DecodedArray::String(values.into_iter().map(|value| value.to_string()).collect())
-    })
 }

@@ -27,6 +27,27 @@ pub enum ElemType {
 }
 
 impl ElemType {
+    pub fn field_type(self) -> FieldType {
+        match self {
+            Self::Text => FieldType::Text,
+            Self::Citext => FieldType::Citext,
+            Self::Int => FieldType::Integer,
+            Self::BigInt => FieldType::BigInt,
+            Self::Float => FieldType::Float,
+            Self::Numeric => FieldType::Numeric,
+            Self::Bool => FieldType::Bool,
+            Self::Uuid => FieldType::Uuid,
+            Self::Timestamp => FieldType::Timestamp,
+            Self::Timestamptz => FieldType::Timestamptz,
+            Self::Date => FieldType::Date,
+            Self::Time => FieldType::Time,
+            Self::Timetz => FieldType::Timetz,
+            Self::Interval => FieldType::Interval,
+            Self::Enum(enum_type) => FieldType::Enum(enum_type),
+            Self::Custom(type_spec) => FieldType::Custom(type_spec),
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Text => "text",
@@ -50,9 +71,38 @@ impl ElemType {
 
     pub fn display_name(self) -> Cow<'static, str> {
         match self {
+            Self::Enum(enum_type) => Cow::Owned(enum_type.display_name()),
+            Self::Custom(type_spec) => Cow::Owned(type_spec.display_name()),
+            other => Cow::Borrowed(other.as_str()),
+        }
+    }
+
+    fn array_display_name(self) -> Cow<'static, str> {
+        match self {
             Self::Enum(enum_type) => Cow::Owned(format!("{}[]", enum_type.display_name())),
             Self::Custom(type_spec) => Cow::Owned(format!("{}[]", type_spec.display_name())),
-            other => Cow::Borrowed(other.as_str()),
+            other => Cow::Borrowed(other.array_type_name()),
+        }
+    }
+
+    fn array_type_name(self) -> &'static str {
+        match self {
+            Self::Text => "text[]",
+            Self::Citext => "citext[]",
+            Self::Int => "int[]",
+            Self::BigInt => "bigint[]",
+            Self::Float => "float[]",
+            Self::Numeric => "numeric[]",
+            Self::Bool => "bool[]",
+            Self::Uuid => "uuid[]",
+            Self::Timestamp => "timestamp[]",
+            Self::Timestamptz => "timestamptz[]",
+            Self::Date => "date[]",
+            Self::Time => "time[]",
+            Self::Timetz => "timetz[]",
+            Self::Interval => "interval[]",
+            Self::Enum(_) => "enum[]",
+            Self::Custom(_) => "custom[]",
         }
     }
 }
@@ -148,23 +198,27 @@ impl FieldType {
     }
 
     pub fn array_type_for_scalar(self) -> Option<Self> {
+        self.elem_type_for_scalar().map(Self::Array)
+    }
+
+    fn elem_type_for_scalar(self) -> Option<ElemType> {
         match self {
-            Self::Text => Some(Self::Array(ElemType::Text)),
-            Self::Citext => Some(Self::Array(ElemType::Citext)),
-            Self::Integer => Some(Self::Array(ElemType::Int)),
-            Self::BigInt => Some(Self::Array(ElemType::BigInt)),
-            Self::Float => Some(Self::Array(ElemType::Float)),
-            Self::Numeric => Some(Self::Array(ElemType::Numeric)),
-            Self::Bool => Some(Self::Array(ElemType::Bool)),
-            Self::Uuid => Some(Self::Array(ElemType::Uuid)),
-            Self::Timestamp => Some(Self::Array(ElemType::Timestamp)),
-            Self::Timestamptz => Some(Self::Array(ElemType::Timestamptz)),
-            Self::Date => Some(Self::Array(ElemType::Date)),
-            Self::Time => Some(Self::Array(ElemType::Time)),
-            Self::Timetz => Some(Self::Array(ElemType::Timetz)),
-            Self::Interval => Some(Self::Array(ElemType::Interval)),
-            Self::Enum(enum_type) => Some(Self::Array(ElemType::Enum(enum_type))),
-            Self::Custom(type_spec) => Some(Self::Array(ElemType::Custom(type_spec))),
+            Self::Text => Some(ElemType::Text),
+            Self::Citext => Some(ElemType::Citext),
+            Self::Integer => Some(ElemType::Int),
+            Self::BigInt => Some(ElemType::BigInt),
+            Self::Float => Some(ElemType::Float),
+            Self::Numeric => Some(ElemType::Numeric),
+            Self::Bool => Some(ElemType::Bool),
+            Self::Uuid => Some(ElemType::Uuid),
+            Self::Timestamp => Some(ElemType::Timestamp),
+            Self::Timestamptz => Some(ElemType::Timestamptz),
+            Self::Date => Some(ElemType::Date),
+            Self::Time => Some(ElemType::Time),
+            Self::Timetz => Some(ElemType::Timetz),
+            Self::Interval => Some(ElemType::Interval),
+            Self::Enum(enum_type) => Some(ElemType::Enum(enum_type)),
+            Self::Custom(type_spec) => Some(ElemType::Custom(type_spec)),
             Self::Jsonb
             | Self::Bytea
             | Self::Inet
@@ -176,22 +230,7 @@ impl FieldType {
 
     pub fn array_element_type(self) -> Self {
         match self {
-            Self::Array(ElemType::Text) => Self::Text,
-            Self::Array(ElemType::Citext) => Self::Citext,
-            Self::Array(ElemType::Int) => Self::Integer,
-            Self::Array(ElemType::BigInt) => Self::BigInt,
-            Self::Array(ElemType::Float) => Self::Float,
-            Self::Array(ElemType::Numeric) => Self::Numeric,
-            Self::Array(ElemType::Bool) => Self::Bool,
-            Self::Array(ElemType::Uuid) => Self::Uuid,
-            Self::Array(ElemType::Timestamp) => Self::Timestamp,
-            Self::Array(ElemType::Timestamptz) => Self::Timestamptz,
-            Self::Array(ElemType::Date) => Self::Date,
-            Self::Array(ElemType::Time) => Self::Time,
-            Self::Array(ElemType::Timetz) => Self::Timetz,
-            Self::Array(ElemType::Interval) => Self::Interval,
-            Self::Array(ElemType::Enum(enum_type)) => Self::Enum(enum_type),
-            Self::Array(ElemType::Custom(type_spec)) => Self::Custom(type_spec),
+            Self::Array(elem_type) => elem_type.field_type(),
             other => other,
         }
     }
@@ -219,24 +258,7 @@ impl FieldType {
             Self::Enum(enum_type) => enum_type.name,
             Self::Custom(type_spec) => type_spec.name,
             Self::Range(elem) => range_type_name(elem),
-            Self::Array(elem) => match elem {
-                ElemType::Text => "text[]",
-                ElemType::Citext => "citext[]",
-                ElemType::Int => "int[]",
-                ElemType::BigInt => "bigint[]",
-                ElemType::Float => "float[]",
-                ElemType::Numeric => "numeric[]",
-                ElemType::Bool => "bool[]",
-                ElemType::Uuid => "uuid[]",
-                ElemType::Timestamp => "timestamp[]",
-                ElemType::Timestamptz => "timestamptz[]",
-                ElemType::Date => "date[]",
-                ElemType::Time => "time[]",
-                ElemType::Timetz => "timetz[]",
-                ElemType::Interval => "interval[]",
-                ElemType::Enum(_) => "enum[]",
-                ElemType::Custom(_) => "custom[]",
-            },
+            Self::Array(elem) => elem.array_type_name(),
         }
     }
 
@@ -244,7 +266,7 @@ impl FieldType {
         match self {
             Self::Enum(enum_type) => Cow::Owned(enum_type.display_name()),
             Self::Custom(type_spec) => Cow::Owned(type_spec.display_name()),
-            Self::Array(elem_type) => elem_type.display_name(),
+            Self::Array(elem_type) => elem_type.array_display_name(),
             other => Cow::Borrowed(other.as_str()),
         }
     }
@@ -337,5 +359,16 @@ mod tests {
             FieldType::Custom(&MONEY)
         );
         assert_eq!(FieldType::Jsonb.array_element_type(), FieldType::Jsonb);
+    }
+
+    #[test]
+    fn array_field_types_display_as_arrays() {
+        assert_eq!(FieldType::Array(ElemType::Text).display_name(), "text[]");
+        assert_eq!(ElemType::Text.display_name(), "text");
+        assert_eq!(
+            FieldType::Array(ElemType::Custom(&MONEY)).display_name(),
+            "public.money_256[]"
+        );
+        assert_eq!(ElemType::Custom(&MONEY).display_name(), "public.money_256");
     }
 }

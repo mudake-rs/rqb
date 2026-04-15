@@ -1,7 +1,7 @@
 use rqb::prelude::*;
+use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
 
-use crate::schema::app_users as users;
 use crate::services::orders;
 use crate::types::{CreateUser, UserRow};
 

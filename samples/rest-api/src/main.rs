@@ -2,7 +2,6 @@ use sqlx::postgres::PgPoolOptions;
 
 mod error;
 mod routes;
-mod schema;
 mod services;
 mod types;
 

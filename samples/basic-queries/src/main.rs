@@ -1,10 +1,7 @@
 use chrono::{DateTime, Utc};
 use rqb::prelude::*;
+use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
-
-mod schema;
-
-use schema::app_users as users;
 
 #[derive(Debug)]
 #[allow(dead_code)]

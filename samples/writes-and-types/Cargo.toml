@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 chrono = "0.4"
 rqb = { path = "../../crates/rqb" }
+rqb-sample-schema = { path = "../schema" }
 serde_json = "1"
 sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "bigdecimal", "chrono", "uuid", "json"] }
 uuid = "1"

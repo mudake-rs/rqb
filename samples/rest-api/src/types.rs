@@ -22,14 +22,14 @@ pub struct OrderRow {
 }
 
 #[derive(Debug, Deserialize, Insertable)]
-#[rqb(table = crate::schema::app_users)]
+#[rqb(table = rqb_sample_schema::app_users)]
 pub struct CreateUser {
     pub email: String,
     pub display_name: String,
 }
 
 #[derive(Debug, Deserialize, Insertable)]
-#[rqb(table = crate::schema::orders)]
+#[rqb(table = rqb_sample_schema::orders)]
 pub struct CreateOrder {
     pub user_id: Uuid,
     pub total_cents: i64,

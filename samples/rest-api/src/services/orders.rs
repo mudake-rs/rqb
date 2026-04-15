@@ -1,7 +1,7 @@
 use rqb::prelude::*;
+use rqb_sample_schema::orders;
 use uuid::Uuid;
 
-use crate::schema::orders;
 use crate::services::users;
 use crate::types::{CheckoutResponse, CreateOrder, OrderRow};
 

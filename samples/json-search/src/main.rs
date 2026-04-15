@@ -1,10 +1,7 @@
 use rqb::prelude::*;
+use rqb_sample_schema::order_search_view as orders;
 use serde_json::json;
 use uuid::Uuid;
-
-mod schema;
-
-use schema::order_search_view as orders;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let current_org = Uuid::nil();

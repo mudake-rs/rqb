@@ -23,6 +23,7 @@ doc:
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-default-features --no-deps
 
 verify: check doc
+	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/schema/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/basic-queries/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/json-search/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/rest-api/Cargo.toml
@@ -36,11 +37,8 @@ generate-sample-schema: generate-sample-schemas
 
 generate-sample-schemas: docker-infra-up
 	docker compose -f test/docker-compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 -U rqb -d rqb < samples/schema.sql
-	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --table app_users --out samples/basic-queries/src/schema.rs
-	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --table order_search_view --out samples/json-search/src/schema.rs
-	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --table app_users --table orders --out samples/rest-api/src/schema.rs
-	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --table invoices --out samples/writes-and-types/src/schema.rs
-	rustfmt samples/basic-queries/src/schema.rs samples/json-search/src/schema.rs samples/rest-api/src/schema.rs samples/writes-and-types/src/schema.rs
+	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --out samples/schema/src/lib.rs
+	rustfmt samples/schema/src/lib.rs
 
 db-up: docker-infra-up
 

@@ -2,13 +2,10 @@ use std::str::FromStr;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rqb::prelude::*;
+use rqb_sample_schema::invoices;
 use serde_json::{Value, json};
 use sqlx::types::BigDecimal;
 use uuid::Uuid;
-
-mod schema;
-
-use schema::invoices;
 
 #[derive(Insertable)]
 #[rqb(table = invoices)]

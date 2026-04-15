@@ -12,7 +12,7 @@ mod model;
 mod type_map;
 
 use codegen::render;
-use introspect::{introspect, introspect_domains, introspect_enums};
+use introspect::{collect_used_schema_types, introspect, introspect_domains, introspect_enums};
 
 #[derive(Parser)]
 #[command(name = "rqb")]
@@ -64,10 +64,11 @@ async fn generate(
         }
     });
 
-    let enums = introspect_enums(&client, schema).await?;
-    let domains = introspect_domains(&client, schema).await?;
-    let mut relations = introspect(&client, schema, only_tables, &enums, &domains).await?;
+    let enums = introspect_enums(&client).await?;
+    let domain_sources = introspect_domains(&client).await?;
+    let mut relations = introspect(&client, schema, only_tables, &enums, &domain_sources).await?;
     relations.sort_by(|a, b| a.name.cmp(&b.name));
+    let (enums, domains) = collect_used_schema_types(&mut relations);
 
     let code = render(&relations, &enums, &domains)?;
     if let Some(parent) = out.parent() {

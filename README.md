@@ -227,8 +227,23 @@ update(users()).set(STATUS, "active").filter(ID.eq(user_id)).execute(&tx).await?
 tx.commit().await?;
 ```
 
-The pool feature also provides savepoints and closure-style transactions through
-`txn!`.
+The pool feature also provides closure-style transactions through `txn!`:
+
+```rust
+db.transaction(txn!(|tx| {
+    insert(users()).value(&new_user).execute(tx).await?;
+    update(users())
+        .set(STATUS, "active")
+        .filter(ID.eq(user_id))
+        .execute(tx)
+        .await?;
+    Ok(())
+}))
+.await?;
+```
+
+Savepoints are available from `Tx` when a transaction needs a smaller rollback
+scope.
 
 ## Type Policy
 
@@ -241,7 +256,8 @@ money, balance, and domain values do not silently pass through `f64`.
 
 ## Code Generation
 
-`rqb-cli` can introspect Postgres and generate schema metadata:
+`rqb-cli` introspects a live Postgres schema and writes a Rust module with rqb
+metadata. It is kept in this repository for now:
 
 ```bash
 cargo run -p rqb-cli -- generate \
@@ -250,8 +266,48 @@ cargo run -p rqb-cli -- generate \
   --out src/schema.rs
 ```
 
-Generated schema includes field constants, dataset functions, enum metadata,
-relation helpers, JSON path policy, and array sorting defaults.
+Limit generation to specific tables or views with repeated `--table` flags:
+
+```bash
+cargo run -p rqb-cli -- generate \
+  --database-url "$DATABASE_URL" \
+  --schema public \
+  --table app_users \
+  --table orders \
+  --out src/schema.rs
+```
+
+The generated module includes:
+
+- `Field` constants
+- `dataset()` functions
+- schema-qualified table/view sources
+- relation helpers for joins, such as `app_users::table().alias("u").email()`
+- Rust enum wrappers for Postgres enums
+- domain/custom type metadata
+- JSONB path policy and array sorting defaults
+
+Generation fails on unknown `--table` names and unsupported Postgres types
+instead of guessing metadata.
+
+Use generated metadata directly in queries:
+
+```rust
+use crate::schema::{app_users, enums::OrderStatus, orders};
+
+let user = app_users::table().alias("u");
+let order = orders::table().alias("o");
+
+let rows = select(&user)
+    .join(&order, user.id().eq_col(order.user_id()))
+    .fields([user.id().alias("id"), user.email().alias("email")])
+    .filter(order.status().eq(OrderStatus::Paid))
+    .fetch_all_as::<UserOrderRow>(&db)
+    .await?;
+```
+
+After changing the database schema, regenerate the module and commit the result.
+The repository samples use this flow through `make generate-sample-base-schema`.
 
 ## Testing
 

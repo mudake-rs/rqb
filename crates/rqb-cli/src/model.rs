@@ -1,7 +1,10 @@
 use rqb_core::{FieldType, SelectRepr, TypeFamily, ValueRepr};
 
+pub(crate) type SchemaTypeKey = (String, String);
+
 #[derive(Debug, Clone)]
 pub(crate) struct Relation {
+    pub(crate) schema: String,
     pub(crate) name: String,
     pub(crate) kind: RelationKind,
     pub(crate) columns: Vec<Column>,
@@ -60,4 +63,11 @@ pub(crate) struct PgDomain {
     pub(crate) family: TypeFamily,
     pub(crate) value_repr: ValueRepr,
     pub(crate) select_repr: SelectRepr,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PgDomainSource {
+    pub(crate) schema: String,
+    pub(crate) name: String,
+    pub(crate) base_udt_name: String,
 }

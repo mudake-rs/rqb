@@ -19,27 +19,27 @@ impl Field<String> {
         self.reference().not_ilike(pattern)
     }
 
-    pub fn contains(self, value: impl Into<String>) -> BoolExpr {
+    pub fn contains(self, value: impl AsRef<str>) -> BoolExpr {
         self.reference().contains(value)
     }
 
-    pub fn not_contains(self, value: impl Into<String>) -> BoolExpr {
+    pub fn not_contains(self, value: impl AsRef<str>) -> BoolExpr {
         self.reference().not_contains(value)
     }
 
-    pub fn starts_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn starts_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.reference().starts_with(value)
     }
 
-    pub fn not_starts_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn not_starts_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.reference().not_starts_with(value)
     }
 
-    pub fn ends_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn ends_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.reference().ends_with(value)
     }
 
-    pub fn not_ends_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn not_ends_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.reference().not_ends_with(value)
     }
 
@@ -77,27 +77,27 @@ impl FieldRef<String> {
         self.like_predicate(pattern, true, true)
     }
 
-    pub fn contains(self, value: impl Into<String>) -> BoolExpr {
+    pub fn contains(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "%", "%", false)
     }
 
-    pub fn not_contains(self, value: impl Into<String>) -> BoolExpr {
+    pub fn not_contains(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "%", "%", true)
     }
 
-    pub fn starts_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn starts_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "", "%", false)
     }
 
-    pub fn not_starts_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn not_starts_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "", "%", true)
     }
 
-    pub fn ends_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn ends_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "%", "", false)
     }
 
-    pub fn not_ends_with(self, value: impl Into<String>) -> BoolExpr {
+    pub fn not_ends_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "%", "", true)
     }
 
@@ -134,16 +134,17 @@ impl FieldRef<String> {
 
     fn affix_predicate(
         self,
-        value: impl Into<String>,
+        value: impl AsRef<str>,
         prefix: &'static str,
         suffix: &'static str,
         negated: bool,
     ) -> BoolExpr {
         BoolExpr::Like {
             expr: self.expr(),
-            pattern: ValueExpr::Param(Param::typed(format!(
-                "{prefix}{}{suffix}",
-                escape_like(&value.into())
+            pattern: ValueExpr::Param(Param::typed(escaped_like_pattern(
+                value.as_ref(),
+                prefix,
+                suffix,
             ))),
             case_insensitive: true,
             negated,
@@ -166,13 +167,15 @@ impl FieldRef<String> {
     }
 }
 
-pub(crate) fn escape_like(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
+pub(crate) fn escaped_like_pattern(value: &str, prefix: &str, suffix: &str) -> String {
+    let mut escaped = String::with_capacity(prefix.len() + value.len() + suffix.len());
+    escaped.push_str(prefix);
     for ch in value.chars() {
         if matches!(ch, '\\' | '%' | '_') {
             escaped.push('\\');
         }
         escaped.push(ch);
     }
+    escaped.push_str(suffix);
     escaped
 }

@@ -23,4 +23,9 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+divan = "0.1.21"
 uuid = { workspace = true, features = ["v4"] }
+
+[[bench]]
+name = "query_build"
+harness = false

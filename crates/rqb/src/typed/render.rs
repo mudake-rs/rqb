@@ -34,50 +34,60 @@ impl Renderer {
             cacheable: self.cacheable,
         }
     }
+
+    fn build_with(render: impl FnOnce(&mut Self) -> Result<()>) -> Result<BuiltQuery> {
+        let mut renderer = Self::new();
+        render(&mut renderer)?;
+        Ok(renderer.finish())
+    }
 }
 
 impl Stmt {
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        let mut renderer = Renderer::new();
-        renderer.render_stmt(self)?;
-        Ok(renderer.finish())
+        Renderer::build_with(|renderer| renderer.render_stmt(self))
     }
 }
 
 impl Select {
     pub fn build(&self) -> Result<BuiltQuery> {
-        Stmt::Select(Box::new(self.clone())).build()
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_select(self))
     }
 }
 
 impl SetQuery {
     pub fn build(&self) -> Result<BuiltQuery> {
-        Stmt::Set(Box::new(self.clone())).build()
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_set(self))
     }
 }
 
 impl Insert {
     pub fn build(&self) -> Result<BuiltQuery> {
-        Stmt::Insert(Box::new(self.clone())).build()
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_insert(self))
     }
 }
 
 impl crate::typed::Update {
     pub fn build(&self) -> Result<BuiltQuery> {
-        Stmt::Update(Box::new(self.clone())).build()
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_update(self))
     }
 }
 
 impl Delete {
     pub fn build(&self) -> Result<BuiltQuery> {
-        Stmt::Delete(Box::new(self.clone())).build()
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_delete(self))
     }
 }
 
 impl RawStmt {
     pub fn build(&self) -> Result<BuiltQuery> {
-        Stmt::Raw(self.clone()).build()
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_raw_stmt(self))
     }
 }
 

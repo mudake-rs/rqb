@@ -19,7 +19,7 @@ pub use window::{
     json_agg, lag, lead, max, min, partition_by, rank, row_number, string_agg, sum, window,
 };
 
-pub(crate) use text::escape_like;
+pub(crate) use text::escaped_like_pattern;
 
 #[cfg(test)]
 mod tests;

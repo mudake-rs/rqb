@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use sqlx::postgres::PgArguments;
 use sqlx::{Arguments, Encode, Postgres, Type};
@@ -9,20 +9,14 @@ use crate::{Error, Result};
 ///
 /// This is the existential boundary: `Param` stores some `T` that sqlx can
 /// encode for Postgres. Generic `T` does not leak into the query AST.
-pub trait ErasedParam: Send + Sync {
-    fn clone_box(&self) -> Box<dyn ErasedParam>;
+trait ErasedParam: Send + Sync {
     fn add_to(&self, args: &mut PgArguments) -> Result<()>;
     fn debug_name(&self) -> &'static str;
 }
 
-impl Clone for Box<dyn ErasedParam> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
-
+#[derive(Clone)]
 pub struct Param {
-    inner: Box<dyn ErasedParam>,
+    inner: Arc<dyn ErasedParam>,
 }
 
 impl Param {
@@ -31,7 +25,7 @@ impl Param {
         T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
     {
         Self {
-            inner: Box::new(TypedParam { value }),
+            inner: Arc::new(TypedParam { value }),
         }
     }
 
@@ -41,14 +35,6 @@ impl Param {
 
     pub fn debug_name(&self) -> &'static str {
         self.inner.debug_name()
-    }
-}
-
-impl Clone for Param {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
     }
 }
 
@@ -116,12 +102,6 @@ impl<T> ErasedParam for TypedParam<T>
 where
     T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
 {
-    fn clone_box(&self) -> Box<dyn ErasedParam> {
-        Box::new(Self {
-            value: self.value.clone(),
-        })
-    }
-
     fn add_to(&self, args: &mut PgArguments) -> Result<()> {
         args.add(self.value.clone())
             .map_err(|error| Error::Encode(error.to_string()))

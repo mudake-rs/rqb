@@ -2,7 +2,7 @@ use serde_json::Value as JsonValue;
 
 use crate::typed::{
     BoolExpr, BoolOp, JsonKind, Meta, OrderDirection, OrderItem, Param, Select, Source, ValueExpr,
-    expr::escape_like,
+    expr::escaped_like_pattern,
 };
 use crate::{Error, Result};
 
@@ -174,9 +174,8 @@ impl SearchOperator {
                 };
                 Ok(BoolExpr::Like {
                     expr: field,
-                    pattern: ValueExpr::Param(Param::typed(format!(
-                        "{prefix}{}{suffix}",
-                        escape_like(value)
+                    pattern: ValueExpr::Param(Param::typed(escaped_like_pattern(
+                        value, prefix, suffix,
                     ))),
                     case_insensitive: true,
                     negated: matches!(

@@ -18,7 +18,7 @@ pub use expr::{
     max, min, partition_by, rank, row_number, string_agg, sum, window,
 };
 pub use meta::{JsonKind, Meta, OpSet};
-pub use param::{ErasedParam, Param, Params};
+pub use param::{Param, Params};
 pub use request::{
     SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, SortDirection,
 };

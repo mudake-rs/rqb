@@ -16,6 +16,7 @@ trait ErasedParam: Send + Sync {
 
 #[derive(Clone)]
 pub struct Param {
+    // Arc keeps Param::clone() to a refcount bump instead of a heap-allocating dyn clone.
     inner: Arc<dyn ErasedParam>,
 }
 

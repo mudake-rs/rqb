@@ -3,19 +3,19 @@ use crate::typed::Param;
 use super::{BoolExpr, Field, FieldRef, ValueExpr};
 
 impl Field<String> {
-    pub fn like(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn like(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.reference().like(pattern)
     }
 
-    pub fn not_like(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn not_like(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.reference().not_like(pattern)
     }
 
-    pub fn ilike(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.reference().ilike(pattern)
     }
 
-    pub fn not_ilike(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn not_ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.reference().not_ilike(pattern)
     }
 
@@ -61,19 +61,19 @@ impl Field<String> {
 }
 
 impl FieldRef<String> {
-    pub fn like(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn like(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, false, false)
     }
 
-    pub fn not_like(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn not_like(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, false, true)
     }
 
-    pub fn ilike(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, true, false)
     }
 
-    pub fn not_ilike(self, pattern: impl Into<String>) -> BoolExpr {
+    pub fn not_ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, true, true)
     }
 
@@ -119,13 +119,13 @@ impl FieldRef<String> {
 
     fn like_predicate(
         self,
-        pattern: impl Into<String>,
+        pattern: impl AsRef<str>,
         case_insensitive: bool,
         negated: bool,
     ) -> BoolExpr {
         BoolExpr::Like {
             expr: self.expr(),
-            pattern: ValueExpr::Param(Param::typed(pattern.into())),
+            pattern: ValueExpr::Param(Param::typed(pattern.as_ref().to_owned())),
             case_insensitive,
             negated,
             escape: false,

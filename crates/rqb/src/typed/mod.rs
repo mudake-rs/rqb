@@ -19,6 +19,6 @@ pub use request::{
 };
 pub use source::{Source, table, view};
 pub use stmt::{
-    Assignment, Delete, Insert, OrderDirection, OrderItem, RawStmt, Select, SelectItem, Stmt,
-    Update, delete_from, insert, raw, select, update,
+    Assignment, Changeset, Delete, Insert, Insertable, OrderDirection, OrderItem, RawStmt, Select,
+    SelectItem, Stmt, Update, delete_from, insert, raw, select, update,
 };

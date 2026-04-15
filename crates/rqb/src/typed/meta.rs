@@ -63,6 +63,10 @@ impl Meta {
         }
     }
 
+    pub const fn col(name: &'static str, pg: &'static str) -> Self {
+        Self::new(name, name, pg)
+    }
+
     pub const fn json(mut self, kind: JsonKind) -> Self {
         self.json = Some(kind);
         self

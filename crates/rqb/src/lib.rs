@@ -10,16 +10,22 @@ mod error;
 mod tx;
 pub mod typed;
 
+extern crate self as rqb;
+
 pub use chrono;
 pub use error::{DbErrorInfo, DbErrorPosition, Error};
+pub use rqb_macros::{Changeset, Insertable};
 pub use serde;
 pub use serde_json;
 pub use sqlx;
+pub use sqlx::{PgConnection, PgExecutor, PgPool};
+pub use typed::Changeset;
 pub use typed::{
-    Assignment, BoolExpr, BoolOp, BuiltQuery, Delete, ErasedParam, Field, Insert, JsonKind, Meta,
-    OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, SearchFilter, SearchOperator,
-    SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SortDirection, Source, Stmt,
-    Update, ValueExpr, ValueOp, delete_from, insert, raw, select, table, update, view,
+    Assignment, BoolExpr, BoolOp, BuiltQuery, Delete, ErasedParam, Field, Insert, Insertable,
+    JsonKind, Meta, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, SearchFilter,
+    SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SortDirection,
+    Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, select, table, update,
+    view,
 };
 pub use uuid;
 
@@ -27,11 +33,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub mod prelude {
     pub use crate::{
-        Assignment, BoolExpr, BoolOp, BuiltQuery, DbErrorInfo, DbErrorPosition, Delete,
-        ErasedParam, Error, Field, Insert, JsonKind, Meta, OpSet, OrderDirection, OrderItem, Param,
-        Params, RawStmt, Result, SearchFilter, SearchOperator, SearchPredicate, SearchRequest,
-        SearchSort, Select, SelectItem, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
-        delete_from, insert, raw, select, table, update, view,
+        Assignment, BoolExpr, BoolOp, BuiltQuery, Changeset, DbErrorInfo, DbErrorPosition, Delete,
+        ErasedParam, Error, Field, Insert, Insertable, JsonKind, Meta, OpSet, OrderDirection,
+        OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, SearchFilter,
+        SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
+        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, select,
+        table, tx, update, view,
     };
 }
 

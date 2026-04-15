@@ -7,4 +7,6 @@ publish = false
 [workspace]
 
 [dependencies]
+chrono = "0.4"
 rqb = { path = "../../crates/rqb" }
+uuid = "1"

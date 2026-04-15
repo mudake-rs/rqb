@@ -21,9 +21,18 @@ simpler or clearer.
 ```toml
 [dependencies]
 rqb = "0.1"
+chrono = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.8", features = ["postgres", "derive", "runtime-tokio-rustls"] }
+sqlx = { version = "0.8", features = [
+    "postgres",
+    "derive",
+    "uuid",
+    "chrono",
+    "json",
+    "runtime-tokio-rustls",
+] }
+uuid = "1"
 ```
 
 `uuid`, `chrono`, JSON, numeric, ranges, arrays, and other Postgres values are
@@ -33,6 +42,7 @@ accepted when the Rust type implements sqlx `Encode` and `Type` for Postgres.
 
 ```rust
 use rqb::prelude::*;
+use uuid::Uuid;
 
 static ID_META: Meta = Meta::new("id", "id", "uuid")
     .ops(OpSet::ordered())
@@ -44,7 +54,7 @@ static STATUS_META: Meta = Meta::new("status", "status", "text")
     .ops(OpSet::ordered())
     .json(JsonKind::Text);
 
-const ID: Field<rqb::uuid::Uuid> = Field::new(&ID_META);
+const ID: Field<Uuid> = Field::new(&ID_META);
 const EMAIL: Field<String> = Field::new(&EMAIL_META);
 const STATUS: Field<String> = Field::new(&STATUS_META);
 
@@ -73,7 +83,7 @@ Use any sqlx executor:
 ```rust
 #[derive(sqlx::FromRow)]
 struct UserRow {
-    id: rqb::uuid::Uuid,
+    id: Uuid,
     email: String,
 }
 
@@ -81,11 +91,11 @@ let rows = select(users())
     .column(ID)
     .column(EMAIL)
     .filter(STATUS.eq("active"))
-    .fetch_all_as::<_, UserRow>(&pool)
+    .fetch_all_as::<UserRow>(&pool)
     .await?;
 ```
 
-Scalar queries use `fetch_one_scalar::<_, T>()`; raw SQL uses `raw("... ? ...")`
+Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
 with `?` placeholders. `??` renders a literal question mark.
 
 ## JSON Search
@@ -122,7 +132,8 @@ Only fields with `Meta::json(...)` are visible to JSON requests.
 
 ## Writes
 
-Writes use field assignments. There is no serde write bridge.
+Writes use field assignments or derive-generated assignments. There is no
+serde write bridge.
 
 ```rust
 let created = insert(users())
@@ -130,7 +141,7 @@ let created = insert(users())
     .set(EMAIL.set("ada@example.com"))
     .set(STATUS.set("active"))
     .returning(ID)
-    .fetch_one_scalar::<_, rqb::uuid::Uuid>(&pool)
+    .fetch_one_scalar::<Uuid>(&pool)
     .await?;
 
 update(users())
@@ -140,35 +151,41 @@ update(users())
     .await?;
 ```
 
+With generated schema modules, request DTOs can derive write mappings:
+
+```rust
+#[derive(rqb::Insertable)]
+#[rqb(table = schema::users)]
+struct NewUser {
+    email: String,
+    status: String,
+}
+
+let created = insert(schema::users::table())
+    .set(schema::users::ID.set(user_id))
+    .values(&new_user)
+    .returning(schema::users::ID)
+    .fetch_one_scalar::<Uuid>(&pool)
+    .await?;
+```
+
+`#[derive(rqb::Changeset)]` maps `Option<T>` fields as patch fields: `Some`
+sets the column, `None` leaves it unchanged.
+
 `DELETE` without a filter is rejected during validation.
 
 ## Transactions
 
-rqb executes through sqlx. Use a pool for ordinary calls and a transaction
-connection for multi-step writes:
+rqb executes through sqlx. Use `tx!` when several statements must commit or
+roll back together:
 
 ```rust
-let mut tx = pool.begin().await?;
-let conn = &mut *tx;
-
-insert(users())
-    .set(ID.set(user_id))
-    .set(EMAIL.set("ada@example.com"))
-    .execute(&mut *conn)
-    .await?;
-
-tx.commit().await?;
-```
-
-Closure-style transactions are available without wrapping sqlx pools:
-
-```rust
-rqb::tx!(&pool, |conn| {
+tx!(&pool, |conn| {
     let created_id = insert(users())
         .set(ID.set(user_id))
         .set(EMAIL.set("ada@example.com"))
         .returning(ID)
-        .fetch_one_scalar::<_, rqb::uuid::Uuid>(conn)
+        .fetch_one_scalar::<Uuid>(conn)
         .await?;
     Ok(created_id)
 })
@@ -197,6 +214,7 @@ application DTOs, not in generated schema metadata.
 ## Crates
 
 - `rqb`: typed AST, renderer, params, execution helpers, and public API.
+- `rqb-macros`: derive macros re-exported by `rqb`.
 - `rqb-cli`: schema introspection and code generation, not published.
 
 ## Checks

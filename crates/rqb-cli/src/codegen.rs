@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use heck::ToSnakeCase;
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::quote;
 
 use crate::ident::{sanitize_ident, unique_ident_strings};
@@ -46,27 +46,28 @@ fn render_relation(relation: &Relation, module_name: &str) -> Result<TokenStream
     let relation_fn = match relation.kind {
         RelationKind::Table => quote! {
             pub fn table() -> Source {
-                source()
+                #source_fn
             }
         },
         RelationKind::View => quote! {
             pub fn view() -> Source {
-                source()
+                #source_fn
             }
         },
     };
 
     let metas = relation.columns.iter().map(render_meta);
     let fields = relation.columns.iter().filter_map(render_field);
-    let accessors = relation.columns.iter().filter_map(render_accessor);
+    let type_imports = render_type_imports(relation);
     let meta_idents = relation
         .columns
         .iter()
         .map(|column| Ident::new(&column.meta_name, Span::call_site()));
-    let field_count = relation.columns.len();
+    let field_count = Literal::usize_unsuffixed(relation.columns.len());
 
     Ok(quote! {
         pub mod #module {
+            #(#type_imports)*
             use rqb::prelude::*;
 
             #(#metas)*
@@ -74,13 +75,7 @@ fn render_relation(relation: &Relation, module_name: &str) -> Result<TokenStream
 
             pub static FIELDS: [&Meta; #field_count] = [#(&#meta_idents),*];
 
-            pub fn source() -> Source {
-                #source_fn
-            }
-
             #relation_fn
-
-            #(#accessors)*
         }
     })
 }
@@ -92,7 +87,12 @@ fn render_meta(column: &Column) -> TokenStream {
     let pg = column.pg_name();
     let ops = ops_tokens(&column.ty);
     let json = json_kind_tokens(&column.ty);
-    let mut expr = quote! { Meta::new(#api, #db, #pg).ops(#ops) };
+    let base = if api == db {
+        quote! { Meta::col(#db, #pg) }
+    } else {
+        quote! { Meta::new(#api, #db, #pg) }
+    };
+    let mut expr = quote! { #base.ops(#ops) };
     if let Some(json) = json {
         expr = quote! { #expr.json(#json) };
     }
@@ -110,20 +110,6 @@ fn render_field(column: &Column) -> Option<TokenStream> {
     let rust_ty = rust_type_tokens(known);
     Some(quote! {
         pub const #const_name: Field<#rust_ty> = Field::new(&#meta);
-    })
-}
-
-fn render_accessor(column: &Column) -> Option<TokenStream> {
-    let ColumnType::Known(known) = &column.ty else {
-        return None;
-    };
-    let const_name = Ident::new(&column.const_name, Span::call_site());
-    let method = Ident::new(&column.rust_name, Span::call_site());
-    let rust_ty = rust_type_tokens(known);
-    Some(quote! {
-        pub fn #method() -> Field<#rust_ty> {
-            #const_name
-        }
     })
 }
 
@@ -161,26 +147,132 @@ fn rust_type_tokens(known: &KnownType) -> TokenStream {
         KnownType::Int8 => quote! { i64 },
         KnownType::Float4 => quote! { f32 },
         KnownType::Float8 => quote! { f64 },
-        KnownType::Numeric => quote! { rqb::sqlx::types::BigDecimal },
-        KnownType::Uuid => quote! { rqb::uuid::Uuid },
-        KnownType::Date => quote! { rqb::chrono::NaiveDate },
-        KnownType::Time => quote! { rqb::chrono::NaiveTime },
+        KnownType::Numeric => quote! { BigDecimal },
+        KnownType::Uuid => quote! { Uuid },
+        KnownType::Date => quote! { NaiveDate },
+        KnownType::Time => quote! { NaiveTime },
         KnownType::Timetz => {
-            quote! { rqb::sqlx::postgres::types::PgTimeTz<rqb::chrono::NaiveTime, rqb::chrono::FixedOffset> }
+            quote! { PgTimeTz<NaiveTime, FixedOffset> }
         }
-        KnownType::Timestamp => quote! { rqb::chrono::NaiveDateTime },
-        KnownType::Timestamptz => quote! { rqb::chrono::DateTime<rqb::chrono::Utc> },
-        KnownType::Interval => quote! { rqb::sqlx::postgres::types::PgInterval },
-        KnownType::Json => quote! { rqb::serde_json::Value },
+        KnownType::Timestamp => quote! { NaiveDateTime },
+        KnownType::Timestamptz => quote! { DateTime<Utc> },
+        KnownType::Interval => quote! { PgInterval },
+        KnownType::Json => quote! { Value },
         KnownType::Bytes => quote! { Vec<u8> },
         KnownType::Range(elem) => {
             let elem = rust_type_tokens(elem);
-            quote! { rqb::sqlx::postgres::types::PgRange<#elem> }
+            quote! { PgRange<#elem> }
         }
         KnownType::Array(elem) => {
             let elem = rust_type_tokens(elem);
             quote! { Vec<#elem> }
         }
+    }
+}
+
+#[derive(Default)]
+struct TypeImports {
+    big_decimal: bool,
+    date_time: bool,
+    fixed_offset: bool,
+    naive_date: bool,
+    naive_date_time: bool,
+    naive_time: bool,
+    pg_interval: bool,
+    pg_range: bool,
+    pg_time_tz: bool,
+    serde_value: bool,
+    utc: bool,
+    uuid: bool,
+}
+
+fn render_type_imports(relation: &Relation) -> Vec<TokenStream> {
+    let mut imports = TypeImports::default();
+    for column in &relation.columns {
+        if let ColumnType::Known(known) = &column.ty {
+            collect_type_imports(known, &mut imports);
+        }
+    }
+
+    let mut rendered = Vec::new();
+    let chrono_imports = chrono_imports(&imports);
+    if !chrono_imports.is_empty() {
+        rendered.push(quote! { use chrono::{#(#chrono_imports),*}; });
+    }
+    if imports.serde_value {
+        rendered.push(quote! { use serde_json::Value; });
+    }
+    let pg_imports = pg_imports(&imports);
+    if !pg_imports.is_empty() {
+        rendered.push(quote! { use sqlx::postgres::types::{#(#pg_imports),*}; });
+    }
+    if imports.big_decimal {
+        rendered.push(quote! { use sqlx::types::BigDecimal; });
+    }
+    if imports.uuid {
+        rendered.push(quote! { use uuid::Uuid; });
+    }
+    rendered
+}
+
+fn collect_type_imports(known: &KnownType, imports: &mut TypeImports) {
+    match known {
+        KnownType::Text
+        | KnownType::Bool
+        | KnownType::Int2
+        | KnownType::Int4
+        | KnownType::Int8
+        | KnownType::Float4
+        | KnownType::Float8
+        | KnownType::Bytes
+        | KnownType::Inet
+        | KnownType::Cidr => {}
+        KnownType::Numeric => imports.big_decimal = true,
+        KnownType::Uuid => imports.uuid = true,
+        KnownType::Date => imports.naive_date = true,
+        KnownType::Time => imports.naive_time = true,
+        KnownType::Timetz => {
+            imports.pg_time_tz = true;
+            imports.naive_time = true;
+            imports.fixed_offset = true;
+        }
+        KnownType::Timestamp => imports.naive_date_time = true,
+        KnownType::Timestamptz => {
+            imports.date_time = true;
+            imports.utc = true;
+        }
+        KnownType::Interval => imports.pg_interval = true,
+        KnownType::Json => imports.serde_value = true,
+        KnownType::Range(elem) => {
+            imports.pg_range = true;
+            collect_type_imports(elem, imports);
+        }
+        KnownType::Array(elem) => collect_type_imports(elem, imports),
+    }
+}
+
+fn chrono_imports(imports: &TypeImports) -> Vec<Ident> {
+    let mut idents = Vec::new();
+    push_import(&mut idents, imports.date_time, "DateTime");
+    push_import(&mut idents, imports.fixed_offset, "FixedOffset");
+    push_import(&mut idents, imports.naive_date, "NaiveDate");
+    push_import(&mut idents, imports.naive_date_time, "NaiveDateTime");
+    push_import(&mut idents, imports.naive_time, "NaiveTime");
+    push_import(&mut idents, imports.utc, "Utc");
+    idents
+}
+
+fn pg_imports(imports: &TypeImports) -> Vec<Ident> {
+    let mut idents = Vec::new();
+    push_import(&mut idents, imports.pg_interval, "PgInterval");
+    push_import(&mut idents, imports.pg_range, "PgRange");
+    push_import(&mut idents, imports.pg_time_tz, "PgTimeTz");
+    idents
+}
+
+fn push_import(idents: &mut Vec<Ident>, enabled: bool, name: &str) {
+    if enabled {
+        idents.push(Ident::new(name, Span::call_site()));
     }
 }
 
@@ -288,12 +380,16 @@ mod tests {
         .unwrap();
 
         assert!(code.contains("pub static ID_META: Meta"));
-        assert!(code.contains("pub const ID: Field<rqb::uuid::Uuid>"));
+        assert!(code.contains("use uuid::Uuid;"));
+        assert!(code.contains("pub const ID: Field<Uuid>"));
         assert!(code.contains("pub static EMBEDDING_META: Meta"));
         assert!(!code.contains("pub const EMBEDDING"));
         assert!(code.contains("pub static FIELDS"));
         assert!(code.contains("&ID_META"));
         assert!(code.contains("&EMBEDDING_META"));
+        assert!(code.contains("Meta::col(\"id\", \"uuid\")"));
         assert!(code.contains("rqb::table(\"public.app_users\", &FIELDS)"));
+        assert!(!code.contains("pub fn source()"));
+        assert!(!code.contains("pub fn id()"));
     }
 }

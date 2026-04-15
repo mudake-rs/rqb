@@ -622,4 +622,31 @@ mod tests {
             "UPDATE \"public\".\"app_users\" SET \"email_address\" = $1 WHERE \"id\" = $2 RETURNING \"id\""
         );
     }
+
+    #[test]
+    fn later_write_assignments_replace_earlier_ones_for_same_column() {
+        let insert_sql = insert(users())
+            .set(ID.set(1))
+            .set(EMAIL.set("old@example.com".to_owned()))
+            .set(EMAIL.set("new@example.com".to_owned()))
+            .build()
+            .unwrap();
+        let update_sql = update(users())
+            .set(EMAIL.set("old@example.com".to_owned()))
+            .set(EMAIL.set("new@example.com".to_owned()))
+            .filter(ID.eq(1))
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            insert_sql.sql,
+            "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, $2)"
+        );
+        assert_eq!(
+            update_sql.sql,
+            "UPDATE \"public\".\"app_users\" SET \"email_address\" = $1 WHERE \"id\" = $2"
+        );
+        assert_eq!(insert_sql.params.len(), 2);
+        assert_eq!(update_sql.params.len(), 2);
+    }
 }

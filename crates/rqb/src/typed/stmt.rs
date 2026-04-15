@@ -25,6 +25,32 @@ pub struct Assignment {
     pub value: ValueExpr,
 }
 
+pub trait Insertable {
+    fn insert_assignments(&self) -> Vec<Assignment>;
+}
+
+impl<T> Insertable for &T
+where
+    T: Insertable + ?Sized,
+{
+    fn insert_assignments(&self) -> Vec<Assignment> {
+        (**self).insert_assignments()
+    }
+}
+
+pub trait Changeset {
+    fn changeset_assignments(&self) -> Vec<Assignment>;
+}
+
+impl<T> Changeset for &T
+where
+    T: Changeset + ?Sized,
+{
+    fn changeset_assignments(&self) -> Vec<Assignment> {
+        (**self).changeset_assignments()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Select {
     pub source: Source,
@@ -295,8 +321,19 @@ impl Insert {
         }
     }
 
+    /// Adds one column assignment. If the same database column was assigned
+    /// earlier, this assignment replaces the earlier value.
+    ///
+    /// This makes it safe to layer server-owned values around a DTO mapping:
+    /// call `values(&dto)` for request-owned fields and use `set(...)` for
+    /// generated IDs, tenant IDs, status defaults, or explicit overrides.
     pub fn set(mut self, assignment: Assignment) -> Self {
-        self.assignments.push(assignment);
+        push_assignment(&mut self.assignments, assignment);
+        self
+    }
+
+    pub fn values(mut self, values: impl Insertable) -> Self {
+        extend_assignments(&mut self.assignments, values.insert_assignments());
         self
     }
 
@@ -344,7 +381,12 @@ impl Update {
     }
 
     pub fn set(mut self, assignment: Assignment) -> Self {
-        self.assignments.push(assignment);
+        push_assignment(&mut self.assignments, assignment);
+        self
+    }
+
+    pub fn changes(mut self, changes: impl Changeset) -> Self {
+        extend_assignments(&mut self.assignments, changes.changeset_assignments());
         self
     }
 
@@ -489,6 +531,17 @@ fn validate_nonempty_assignments(
         return Err(Error::EmptyTypedAssignments { statement });
     }
     Ok(())
+}
+
+fn extend_assignments(assignments: &mut Vec<Assignment>, next: Vec<Assignment>) {
+    for assignment in next {
+        push_assignment(assignments, assignment);
+    }
+}
+
+fn push_assignment(assignments: &mut Vec<Assignment>, assignment: Assignment) {
+    assignments.retain(|existing| existing.field.db != assignment.field.db);
+    assignments.push(assignment);
 }
 
 fn validate_returning(returning: &[SelectItem]) -> Result<()> {

@@ -11,3 +11,10 @@ Start here when reading the API.
 
 The small samples build queries and assert rendered SQL. `rest-api` uses
 `connect_lazy`, so it is compile-checked without a running database.
+
+All sample `src/schema.rs` files are generated from `samples/schema.sql` by
+`rqb-cli`:
+
+```bash
+make generate-sample-schema
+```

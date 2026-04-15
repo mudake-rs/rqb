@@ -1,0 +1,97 @@
+use rqb::prelude::*;
+
+mod users {
+    use rqb::prelude::*;
+
+    pub static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    pub static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    pub static STATUS_META: Meta = Meta::new("status", "status", "text").ops(OpSet::ordered());
+    pub static NICKNAME_META: Meta =
+        Meta::new("nickname", "nickname", "text").ops(OpSet::ordered());
+    pub static TYPE_META: Meta = Meta::new("type", "type", "text").ops(OpSet::ordered());
+
+    pub const ID: Field<i32> = Field::new(&ID_META);
+    pub const EMAIL: Field<String> = Field::new(&EMAIL_META);
+    pub const STATUS: Field<String> = Field::new(&STATUS_META);
+    pub const NICKNAME: Field<String> = Field::new(&NICKNAME_META);
+    pub const TYPE: Field<String> = Field::new(&TYPE_META);
+
+    pub static FIELDS: [&Meta; 5] = [
+        &ID_META,
+        &EMAIL_META,
+        &STATUS_META,
+        &NICKNAME_META,
+        &TYPE_META,
+    ];
+
+    pub fn table() -> Source {
+        rqb::table("public.users", &FIELDS)
+    }
+}
+
+#[derive(Insertable)]
+#[rqb(table = users)]
+struct NewUser {
+    email: String,
+    #[rqb(field = STATUS)]
+    state: String,
+    r#type: String,
+    #[rqb(skip_none)]
+    nickname: Option<String>,
+    #[rqb(skip)]
+    _local_note: String,
+}
+
+#[derive(Changeset)]
+#[rqb(table = users)]
+struct UserChanges {
+    email: Option<String>,
+    status: Option<String>,
+    #[rqb(field = NICKNAME)]
+    display_name: String,
+}
+
+#[test]
+fn insertable_derive_maps_struct_fields_to_assignments() {
+    let new_user = NewUser {
+        email: "ada@example.com".to_owned(),
+        state: "active".to_owned(),
+        r#type: "admin".to_owned(),
+        nickname: None,
+        _local_note: "not persisted".to_owned(),
+    };
+
+    let built = insert(users::table())
+        .set(users::ID.set(1))
+        .values(&new_user)
+        .returning(users::ID)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"public\".\"users\" (\"id\", \"email\", \"status\", \"type\") VALUES ($1, $2, $3, $4) RETURNING \"id\""
+    );
+    assert_eq!(built.params.len(), 4);
+}
+
+#[test]
+fn changeset_derive_skips_none_option_fields() {
+    let changes = UserChanges {
+        email: Some("ada@example.com".to_owned()),
+        status: None,
+        display_name: "Ada".to_owned(),
+    };
+
+    let built = update(users::table())
+        .changes(&changes)
+        .filter(users::ID.eq(1))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "UPDATE \"public\".\"users\" SET \"email\" = $1, \"nickname\" = $2 WHERE \"id\" = $3"
+    );
+    assert_eq!(built.params.len(), 3);
+}

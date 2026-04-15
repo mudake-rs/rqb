@@ -46,6 +46,14 @@ impl<T> Field<T> {
         }
     }
 
+    pub fn set_ref<V>(self, value: &V) -> crate::typed::Assignment
+    where
+        V: Clone + Into<T>,
+        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+    {
+        self.set(value.clone())
+    }
+
     pub fn eq<V>(self, value: V) -> BoolExpr
     where
         V: Into<T>,

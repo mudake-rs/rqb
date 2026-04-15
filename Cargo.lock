@@ -1122,6 +1122,7 @@ name = "rqb"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "rqb-macros",
  "serde",
  "serde_json",
  "sqlx",
@@ -1146,6 +1147,16 @@ dependencies = [
  "sqlx",
  "syn",
  "tokio",
+]
+
+[[package]]
+name = "rqb-macros"
+version = "0.1.0"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

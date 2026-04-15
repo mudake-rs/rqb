@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct User {
     id: Uuid,
     organization_id: Uuid,
@@ -51,6 +50,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let active_users = select(app_users::dataset())
+        .fields([
+            app_users::ID.into(),
+            app_users::ORGANIZATION_ID.alias("organization_id"),
+            app_users::EMAIL.into(),
+            app_users::STATUS.into(),
+            app_users::PROFILE.into(),
+            app_users::TAGS.into(),
+            app_users::CREATED_AT.alias("created_at"),
+        ])
         .filter(app_users::STATUS.eq(UserStatus::Active))
         .order_by(app_users::EMAIL.asc())
         .fetch_all_as::<User>(&db)
@@ -76,6 +84,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let disabled = update(app_users::dataset())
         .set(app_users::STATUS, UserStatus::Disabled)
         .filter(app_users::ID.eq(user_id))
+        .returning([
+            app_users::ID.into(),
+            app_users::ORGANIZATION_ID.alias("organization_id"),
+            app_users::EMAIL.into(),
+            app_users::STATUS.into(),
+            app_users::PROFILE.into(),
+            app_users::TAGS.into(),
+            app_users::CREATED_AT.alias("created_at"),
+        ])
         .fetch_one_as::<User>(&db)
         .await?;
     println!("updated user: {disabled:#?}");

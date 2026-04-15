@@ -14,7 +14,6 @@ fn recent_orders() -> Dataset {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct OrderRow {
     id: Uuid,
     status: rqb_sample_base::OrderStatus,
@@ -29,7 +28,6 @@ struct UserRow {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct LatestStatusRow {
     email: String,
     latest_status: rqb_sample_base::OrderStatus,
@@ -43,10 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "recent_orders",
         select(order_search::dataset())
             .fields([
-                order_search::ID,
-                order_search::STATUS,
-                order_search::TOTAL_CENTS,
-                order_search::CREATED_AT,
+                order_search::ID.into(),
+                order_search::STATUS.into(),
+                order_search::TOTAL_CENTS.alias("total_cents"),
+                order_search::CREATED_AT.alias("created_at"),
             ])
             .filter(order_search::CREATED_AT.gte("2026-02-01T00:00:00Z"))
             .build(),
@@ -54,6 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let paid_recent = select(recent_orders())
         .cte(recent)
+        .fields([
+            order_search::ID.into(),
+            order_search::STATUS.into(),
+            order_search::TOTAL_CENTS.alias("total_cents"),
+            order_search::CREATED_AT.alias("created_at"),
+        ])
         .filter(order_search::STATUS.eq(rqb_sample_base::OrderStatus::Paid))
         .order_by(order_search::CREATED_AT.desc())
         .fetch_all_as::<OrderRow>(&db)
@@ -110,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let latest_status = select(&user)
         .fields([
             user.email().alias("email"),
-            orders::STATUS.on("latest_order").alias("latestStatus"),
+            orders::STATUS.on("latest_order").alias("latest_status"),
         ])
         .left_join_lateral(latest_order, raw("TRUE"))
         .fetch_all_as::<LatestStatusRow>(&db)

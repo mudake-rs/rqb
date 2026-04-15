@@ -2,7 +2,6 @@ use rqb::prelude::*;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct RawOrderStats {
     status: String,
     orders: i64,
@@ -25,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stats = raw_query(
         "SELECT status::text AS status, \
                 COUNT(*)::bigint AS orders, \
-                AVG(total_cents)::float8 AS \"avgTotalCents\" \
+                AVG(total_cents)::float8 AS avg_total_cents \
          FROM order_search_view \
          WHERE status = ?::text::order_status \
          GROUP BY status",

@@ -8,7 +8,6 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct UserWithOrders {
     id: Uuid,
     email: String,
@@ -16,7 +15,6 @@ struct UserWithOrders {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct OrderSummary {
     id: Uuid,
     status: OrderStatus,
@@ -25,7 +23,6 @@ struct OrderSummary {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct OrderStats {
     status: OrderStatus,
     orders: i64,
@@ -50,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     order.id().alias("id"),
                     order.status().alias("status"),
                     order.channel().alias("channel"),
-                    order.created_at().alias("createdAt"),
+                    order.created_at().alias("created_at"),
                 ],
             )
             .filter(order.id().is_not_null()),
@@ -74,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stats = select(order_search::dataset())
         .fields([order_search::STATUS])
         .agg(count("orders"))
-        .agg(sum(order_search::TOTAL_CENTS, "totalCents"))
+        .agg(sum(order_search::TOTAL_CENTS, "total_cents"))
         .order_by(order_search::STATUS.asc())
         .fetch_all_as::<OrderStats>(&db)
         .await?;

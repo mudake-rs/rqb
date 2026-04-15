@@ -17,7 +17,6 @@ struct NewWithdrawal {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Withdrawal {
     id: Uuid,
     amount: String,
@@ -50,10 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let rows = select(withdrawals::dataset())
         .fields([
-            withdrawals::ID,
-            withdrawals::AMOUNT,
-            withdrawals::AMOUNT_HISTORY,
-            withdrawals::WALLET_ADDRESS,
+            withdrawals::ID.into(),
+            withdrawals::AMOUNT.into(),
+            withdrawals::AMOUNT_HISTORY.alias("amount_history"),
+            withdrawals::WALLET_ADDRESS.alias("wallet_address"),
         ])
         .filter(withdrawals::AMOUNT.gte("9007199254740993"))
         .fetch_all_as::<Withdrawal>(&db)

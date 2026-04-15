@@ -36,7 +36,6 @@ struct PatchUserRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct UserRow {
     id: Uuid,
     organization_id: Uuid,
@@ -68,6 +67,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("handling {}", create.request_id);
     let inserted = insert(app_users::dataset())
         .value(&create)
+        .returning([
+            app_users::ID.into(),
+            app_users::ORGANIZATION_ID.alias("organization_id"),
+            app_users::EMAIL.into(),
+            app_users::STATUS.into(),
+            app_users::PROFILE.into(),
+            app_users::TAGS.into(),
+            app_users::CREATED_AT.alias("created_at"),
+        ])
         .fetch_one_as::<UserRow>(&db)
         .await?;
     println!("inserted: {}", serde_json::to_string_pretty(&inserted)?);
@@ -85,6 +93,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let updated = update(app_users::dataset())
         .set_from(&patch)
         .filter(app_users::ID.eq(user_id))
+        .returning([
+            app_users::ID.into(),
+            app_users::ORGANIZATION_ID.alias("organization_id"),
+            app_users::EMAIL.into(),
+            app_users::STATUS.into(),
+            app_users::PROFILE.into(),
+            app_users::TAGS.into(),
+            app_users::CREATED_AT.alias("created_at"),
+        ])
         .fetch_one_as::<UserRow>(&db)
         .await?;
     println!("updated: {}", serde_json::to_string_pretty(&updated)?);

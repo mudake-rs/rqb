@@ -44,7 +44,6 @@ struct NewWithdrawal {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 struct Withdrawal {
     id: String,
@@ -74,6 +73,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", insert_sql.debug_sql());
 
     let select_sql = select(withdrawals())
+        .fields([
+            ID.into(),
+            USER_ID.alias("user_id"),
+            AMOUNT.into(),
+            AMOUNT_HISTORY.alias("amount_history"),
+            WALLET_ADDRESS.alias("wallet_address"),
+        ])
         .filter(AMOUNT.gt("9007199254740993"))
         .build_pg()?;
     let _serde_shape = std::any::type_name::<Withdrawal>();

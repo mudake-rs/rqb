@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct PgTypeRow {
     id: Uuid,
     display_name: String,
@@ -23,6 +22,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = rqb_sample_base::connect().await?;
 
     let rows = select(pg_type_examples::dataset())
+        .fields([
+            pg_type_examples::ID.into(),
+            pg_type_examples::DISPLAY_NAME.alias("display_name"),
+            pg_type_examples::PAYLOAD.into(),
+            pg_type_examples::IP_ADDR.alias("ip_addr"),
+            pg_type_examples::NETWORK.into(),
+            pg_type_examples::ACTIVE_WINDOW.alias("active_window"),
+            pg_type_examples::LOCAL_WINDOW.alias("local_window"),
+            pg_type_examples::BILLING_DATES.alias("billing_dates"),
+            pg_type_examples::CREATED_LOCAL.alias("created_local"),
+            pg_type_examples::CREATED_AT.alias("created_at"),
+        ])
         .filter(pg_type_examples::DISPLAY_NAME.eq("ada"))
         .fetch_all_as::<PgTypeRow>(&db)
         .await?;

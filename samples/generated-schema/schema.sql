@@ -1,2 +1,0 @@
--- Uses the shared schema from ../../tests/sql/init.sql.
--- Generated metadata lives in ../sample-base/src/schema.rs.

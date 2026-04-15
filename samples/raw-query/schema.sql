@@ -1,2 +1,0 @@
--- Uses shared tables and views from ../../tests/sql/init.sql.
--- Generated metadata is not required for raw SQL, but the sample shares the same fixture.

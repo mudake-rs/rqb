@@ -58,7 +58,7 @@ use uuid::Uuid;
 const ID: Field = Field::new("id", FieldType::Uuid);
 const EMAIL: Field = Field::new("email", FieldType::Text);
 const STATUS: Field = Field::new("status", FieldType::Text);
-const CREATED_AT: Field = Field::mapped("createdAt", "created_at", FieldType::Timestamptz);
+const CREATED_AT: Field = Field::new("created_at", FieldType::Timestamptz);
 
 fn users() -> Dataset {
     Dataset::table("app_users")
@@ -68,7 +68,6 @@ fn users() -> Dataset {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct UserRow {
     id: Uuid,
     email: String,

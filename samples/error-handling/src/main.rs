@@ -17,7 +17,6 @@ enum AppError {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct User {
     id: Uuid,
     organization_id: Uuid,
@@ -69,6 +68,14 @@ async fn main() -> Result<(), AppError> {
     );
 
     let missing = select(app_users::dataset())
+        .fields([
+            app_users::ID.into(),
+            app_users::ORGANIZATION_ID.alias("organization_id"),
+            app_users::EMAIL.into(),
+            app_users::STATUS.into(),
+            app_users::PROFILE.into(),
+            app_users::TAGS.into(),
+        ])
         .filter(app_users::ID.eq(second_id))
         .fetch_one_as::<User>(&db)
         .await

@@ -1,4 +1,12 @@
 pub(crate) fn write_quoted_ident(output: &mut String, ident: &str) {
+    if !ident.contains('"') {
+        output.reserve(ident.len() + 2);
+        output.push('"');
+        output.push_str(ident);
+        output.push('"');
+        return;
+    }
+
     output.push('"');
     for ch in ident.chars() {
         if ch == '"' {

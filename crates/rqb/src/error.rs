@@ -201,8 +201,20 @@ pub enum Error {
     #[error("{statement} statement requires at least one assignment")]
     EmptyTypedAssignments { statement: &'static str },
 
+    #[error("{statement} statement requires at least one column")]
+    EmptyTypedColumns { statement: &'static str },
+
+    #[error("invalid insert shape: {message}")]
+    InvalidInsertShape { message: &'static str },
+
+    #[error("invalid CTE `{name}`: {message}")]
+    InvalidCteShape { name: String, message: &'static str },
+
     #[error("typed delete without filter is not allowed")]
     TypedDeleteWithoutFilter,
+
+    #[error("{join} requires an ON condition")]
+    MissingJoinCondition { join: &'static str },
 }
 
 fn constraint_suffix(constraint: &Option<String>) -> String {

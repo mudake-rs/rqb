@@ -21,11 +21,16 @@ pub use sqlx;
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use typed::Changeset;
 pub use typed::{
-    Assignment, BoolExpr, BoolOp, BuiltQuery, Delete, ErasedParam, Field, Insert, Insertable,
-    JsonKind, Meta, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, SearchFilter,
-    SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SortDirection,
-    Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, select, table, update,
-    view,
+    Assignment, BoolExpr, BoolOp, BuiltQuery, ConflictAction, ConflictClause, ConflictTarget, Cte,
+    Delete, ErasedParam, Field, FieldRef, Insert, InsertConflictBuilder, Insertable, IntoFieldRef,
+    Join, JoinKind, JsonKind, LockMode, LockWait, Meta, OffsetWindowFunctionBuilder, OpSet,
+    OrderDirection, OrderItem, Param, Params, RawStmt, RowLock, SearchFilter, SearchOperator,
+    SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SetOperator, SetQuery,
+    SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFunction, WindowFunctionBuilder,
+    WindowSpec, aggregate, array_agg, array_agg_distinct, avg, count, count_all, count_distinct,
+    cte, cte_source, delete_from, dense_rank, except, except_all, insert, intersect, intersect_all,
+    json_agg, lag, lead, max, min, partition_by, rank, raw, raw_source, row_number, select,
+    string_agg, subquery, sum, table, union, union_all, update, view, window,
 };
 pub use uuid;
 
@@ -33,12 +38,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub mod prelude {
     pub use crate::{
-        Assignment, BoolExpr, BoolOp, BuiltQuery, Changeset, DbErrorInfo, DbErrorPosition, Delete,
-        ErasedParam, Error, Field, Insert, Insertable, JsonKind, Meta, OpSet, OrderDirection,
-        OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, SearchFilter,
-        SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
-        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, schema,
-        select, table, tx, update, view,
+        Assignment, BoolExpr, BoolOp, BuiltQuery, Changeset, ConflictAction, ConflictClause,
+        ConflictTarget, Cte, DbErrorInfo, DbErrorPosition, Delete, ErasedParam, Error, Field,
+        FieldRef, Insert, InsertConflictBuilder, Insertable, IntoFieldRef, Join, JoinKind,
+        JsonKind, LockMode, LockWait, Meta, OffsetWindowFunctionBuilder, OpSet, OrderDirection,
+        OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, RowLock,
+        SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
+        SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
+        WindowFunction, WindowFunctionBuilder, WindowSpec, aggregate, array_agg,
+        array_agg_distinct, avg, count, count_all, count_distinct, cte, cte_source, delete_from,
+        dense_rank, except, except_all, insert, intersect, intersect_all, json_agg, lag, lead, max,
+        min, partition_by, rank, raw, raw_source, row_number, schema, select, string_agg, subquery,
+        sum, table, tx, union, union_all, update, view, window,
     };
 }
 

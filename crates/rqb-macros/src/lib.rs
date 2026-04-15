@@ -1,12 +1,48 @@
 use heck::ToShoutySnakeCase;
+use heck::ToSnakeCase;
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Literal, Span};
 use quote::{quote, quote_spanned};
+use syn::ext::IdentExt;
+use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{
-    Attribute, Data, DeriveInput, Error, Field, Fields, GenericArgument, LitBool, Path,
-    PathArguments, Type, parse_macro_input,
+    Attribute, Data, DeriveInput, Error, Field, Fields, GenericArgument, LitBool, LitStr, Path,
+    PathArguments, Result, Token, Type, braced, parse_macro_input,
 };
+
+/// Generates compact rqb schema modules.
+///
+/// Grammar:
+///
+/// ```text
+/// (table|view) <schema>.<relation> [as <module>] {
+///     <db_column> [as <CONST>]: <pg_type> [= <rust_type>],
+///     ...
+/// }
+/// ```
+///
+/// A column with `= <rust_type>` emits both metadata and a typed
+/// `pub const NAME: Field<T>`. A column without a Rust type emits metadata
+/// only, which is useful for extension or user-defined PostgreSQL types that
+/// should remain raw-only.
+///
+/// Generated metadata intentionally uses database column names as public API
+/// names. HTTP/JSON casing belongs in application DTOs, not generated schema.
+///
+/// ```rust,ignore
+/// rqb::schema! {
+///     table public.users {
+///         id: uuid = uuid::Uuid,
+///         email: text = String,
+///         embedding: vector,
+///     }
+/// }
+/// ```
+#[proc_macro]
+pub fn schema(input: TokenStream) -> TokenStream {
+    parse_macro_input!(input as SchemaInput).expand().into()
+}
 
 #[proc_macro_derive(Insertable, attributes(rqb))]
 pub fn derive_insertable(input: TokenStream) -> TokenStream {
@@ -34,6 +70,29 @@ enum WriteKind {
     Changeset,
 }
 
+enum RelationKind {
+    Table,
+    View,
+}
+
+struct SchemaInput {
+    relations: Vec<RelationInput>,
+}
+
+struct RelationInput {
+    kind: RelationKind,
+    qualified_name: String,
+    module: Ident,
+    columns: Vec<ColumnInput>,
+}
+
+struct ColumnInput {
+    db: String,
+    const_ident: Ident,
+    pg: String,
+    rust_ty: Option<Type>,
+}
+
 #[derive(Default)]
 struct ContainerAttrs {
     table: Option<Path>,
@@ -44,6 +103,286 @@ struct FieldAttrs {
     field: Option<Path>,
     skip: bool,
     skip_none: bool,
+}
+
+mod kw {
+    syn::custom_keyword!(table);
+    syn::custom_keyword!(view);
+}
+
+impl Parse for SchemaInput {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let mut relations = Vec::new();
+        while !input.is_empty() {
+            relations.push(input.parse()?);
+        }
+        Ok(Self { relations })
+    }
+}
+
+impl SchemaInput {
+    fn expand(self) -> proc_macro2::TokenStream {
+        let relations = self.relations.into_iter().map(RelationInput::expand);
+        quote! {
+            #(#relations)*
+        }
+    }
+}
+
+impl Parse for RelationInput {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let kind = if input.peek(kw::table) {
+            input.parse::<kw::table>()?;
+            RelationKind::Table
+        } else if input.peek(kw::view) {
+            input.parse::<kw::view>()?;
+            RelationKind::View
+        } else {
+            return Err(input.error("expected `table` or `view`"));
+        };
+
+        let name = parse_relation_name(input)?;
+        let module = if input.peek(Token![as]) {
+            input.parse::<Token![as]>()?;
+            input.call(Ident::parse_any)?
+        } else {
+            Ident::new(&sanitize_ident(&name.default_module), Span::call_site())
+        };
+
+        let content;
+        braced!(content in input);
+        let mut columns = Vec::new();
+        while !content.is_empty() {
+            columns.push(content.parse()?);
+            if content.peek(Token![,]) {
+                content.parse::<Token![,]>()?;
+            }
+        }
+
+        Ok(Self {
+            kind,
+            qualified_name: name.qualified,
+            module,
+            columns,
+        })
+    }
+}
+
+impl RelationInput {
+    fn expand(self) -> proc_macro2::TokenStream {
+        let module = self.module;
+        let qualified_name = self.qualified_name;
+        let constructor = match self.kind {
+            RelationKind::Table => quote! { ::rqb::table(#qualified_name, &FIELDS) },
+            RelationKind::View => quote! { ::rqb::view(#qualified_name, &FIELDS) },
+        };
+        let constructor_fn = match self.kind {
+            RelationKind::Table => quote! {
+                pub fn table() -> ::rqb::Source {
+                    #constructor
+                }
+            },
+            RelationKind::View => quote! {
+                pub fn view() -> ::rqb::Source {
+                    #constructor
+                }
+            },
+        };
+
+        let columns = self
+            .columns
+            .into_iter()
+            .map(ColumnInput::expand)
+            .collect::<Vec<_>>();
+        let metas = columns.iter().map(|column| &column.meta);
+        let fields = columns.iter().filter_map(|column| column.field.as_ref());
+        let meta_idents = columns.iter().map(|column| &column.meta_ident);
+        let field_count = Literal::usize_unsuffixed(columns.len());
+
+        quote! {
+            pub mod #module {
+                // Bring caller-scope Rust types into the generated module.
+                #[allow(unused_imports)]
+                use super::*;
+
+                #(#metas)*
+                #(#fields)*
+
+                pub static FIELDS: [&'static ::rqb::Meta; #field_count] = [#(&#meta_idents),*];
+
+                #constructor_fn
+            }
+        }
+    }
+}
+
+struct ExpandedColumn {
+    meta_ident: Ident,
+    meta: proc_macro2::TokenStream,
+    field: Option<proc_macro2::TokenStream>,
+}
+
+impl Parse for ColumnInput {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let db = parse_name(input)?;
+        let const_ident = if input.peek(Token![as]) {
+            input.parse::<Token![as]>()?;
+            input.call(Ident::parse_any)?
+        } else {
+            Ident::new(
+                &sanitize_ident(&db.to_shouty_snake_case()),
+                Span::call_site(),
+            )
+        };
+
+        input.parse::<Token![:]>()?;
+        let pg = parse_pg_name(input)?;
+        let rust_ty = if input.peek(Token![=]) {
+            input.parse::<Token![=]>()?;
+            Some(input.parse()?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            db,
+            const_ident,
+            pg,
+            rust_ty,
+        })
+    }
+}
+
+impl ColumnInput {
+    fn expand(self) -> ExpandedColumn {
+        let meta_ident = Ident::new(
+            &format!("{}_META", self.const_ident),
+            self.const_ident.span(),
+        );
+        let db = self.db;
+        let pg = self.pg;
+        let ops = ops_tokens(&pg, self.rust_ty.is_some());
+        let json = json_kind_tokens(&pg, self.rust_ty.is_some());
+        let const_ident = self.const_ident;
+
+        let mut meta_expr = quote! { ::rqb::Meta::col(#db, #pg).ops(#ops) };
+        if let Some(json) = json {
+            meta_expr = quote! { #meta_expr.json(#json) };
+        }
+        let meta = quote! {
+            pub static #meta_ident: ::rqb::Meta = #meta_expr;
+        };
+
+        let field = self.rust_ty.map(|rust_ty| {
+            quote! {
+                pub const #const_ident: ::rqb::Field<#rust_ty> = ::rqb::Field::new(&#meta_ident);
+            }
+        });
+
+        ExpandedColumn {
+            meta_ident,
+            meta,
+            field,
+        }
+    }
+}
+
+struct ParsedRelationName {
+    qualified: String,
+    default_module: String,
+}
+
+fn parse_relation_name(input: ParseStream<'_>) -> Result<ParsedRelationName> {
+    if input.peek(LitStr) {
+        let lit: LitStr = input.parse()?;
+        let qualified = lit.value();
+        let default_module = qualified
+            .rsplit('.')
+            .next()
+            .map(ToSnakeCase::to_snake_case)
+            .unwrap_or_else(|| qualified.to_snake_case());
+        return Ok(ParsedRelationName {
+            qualified,
+            default_module,
+        });
+    }
+
+    let schema: Ident = input.call(Ident::parse_any)?;
+    input.parse::<Token![.]>()?;
+    let relation: Ident = input.call(Ident::parse_any)?;
+    let schema = schema.to_string();
+    let relation = relation.to_string();
+    Ok(ParsedRelationName {
+        qualified: format!("{schema}.{relation}"),
+        default_module: relation.to_snake_case(),
+    })
+}
+
+fn parse_name(input: ParseStream<'_>) -> Result<String> {
+    let db = if input.peek(LitStr) {
+        input.parse::<LitStr>()?.value()
+    } else {
+        input.call(Ident::parse_any)?.to_string()
+    };
+    Ok(db)
+}
+
+fn parse_pg_name(input: ParseStream<'_>) -> Result<String> {
+    if input.peek(LitStr) {
+        return Ok(input.parse::<LitStr>()?.value());
+    }
+    Ok(input.call(Ident::parse_any)?.to_string())
+}
+
+fn ops_tokens(pg: &str, typed: bool) -> proc_macro2::TokenStream {
+    if !typed {
+        return quote! { ::rqb::OpSet::none() };
+    }
+    if is_equality_only_pg(pg) {
+        quote! { ::rqb::OpSet::equality() }
+    } else {
+        quote! { ::rqb::OpSet::ordered() }
+    }
+}
+
+fn is_equality_only_pg(pg: &str) -> bool {
+    matches!(
+        pg,
+        "bool"
+            | "json"
+            | "jsonb"
+            | "bytea"
+            | "int4range"
+            | "int8range"
+            | "numrange"
+            | "daterange"
+            | "tsrange"
+            | "tstzrange"
+    ) || pg.ends_with("[]")
+}
+
+fn json_kind_tokens(pg: &str, typed: bool) -> Option<proc_macro2::TokenStream> {
+    if !typed || pg.ends_with("[]") {
+        return None;
+    }
+    let kind = match pg {
+        "text" | "varchar" | "bpchar" | "citext" | "inet" | "cidr" => {
+            quote! { ::rqb::JsonKind::Text }
+        }
+        "bool" => quote! { ::rqb::JsonKind::Bool },
+        "int2" | "int4" => quote! { ::rqb::JsonKind::Integer },
+        "int8" => quote! { ::rqb::JsonKind::BigInt },
+        "float4" | "float8" => quote! { ::rqb::JsonKind::Float },
+        "numeric" => quote! { ::rqb::JsonKind::NumericString },
+        "uuid" => quote! { ::rqb::JsonKind::Uuid },
+        "date" => quote! { ::rqb::JsonKind::Date },
+        "time" | "timetz" => quote! { ::rqb::JsonKind::Time },
+        "timestamp" => quote! { ::rqb::JsonKind::Timestamp },
+        "timestamptz" => quote! { ::rqb::JsonKind::Timestamptz },
+        "json" | "jsonb" => quote! { ::rqb::JsonKind::Jsonb },
+        _ => return None,
+    };
+    Some(kind)
 }
 
 fn expand_write_record(
@@ -248,4 +587,93 @@ fn has_one_angle_arg(args: &PathArguments) -> bool {
 
 fn is_single_segment_path(path: &Path) -> bool {
     path.leading_colon.is_none() && path.segments.len() == 1
+}
+
+fn sanitize_ident(value: &str) -> String {
+    let mut out = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if out.is_empty() {
+        out.push('_');
+    }
+    if out.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
+        out.insert(0, '_');
+    }
+    if is_rust_keyword(&out) {
+        out.push('_');
+    }
+    out
+}
+
+fn is_rust_keyword(value: &str) -> bool {
+    // This mostly matters for generated module names. Column const names are
+    // SHOUTY_SNAKE, but quoted column names can still pass through the same
+    // sanitizer before case conversion.
+    matches!(
+        value,
+        "abstract"
+            | "alignof"
+            | "as"
+            | "become"
+            | "box"
+            | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "do"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "final"
+            | "fn"
+            | "for"
+            | "gen"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "macro"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "offsetof"
+            | "override"
+            | "priv"
+            | "proc"
+            | "pure"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "Self"
+            | "sizeof"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "try"
+            | "type"
+            | "typeof"
+            | "unsafe"
+            | "unsized"
+            | "use"
+            | "virtual"
+            | "where"
+            | "while"
+            | "async"
+            | "await"
+            | "dyn"
+            | "yield"
+    )
 }

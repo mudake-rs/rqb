@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Derive macros for rqb."
+description = "Procedural macros for rqb."
 
 [lib]
 proc-macro = true

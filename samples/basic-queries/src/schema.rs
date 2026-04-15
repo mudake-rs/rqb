@@ -2,48 +2,17 @@
 
 #![allow(dead_code)]
 
-pub mod app_users {
-    use chrono::{DateTime, Utc};
-    use rqb::prelude::*;
-    use uuid::Uuid;
-    pub static ID_META: Meta = Meta::col("id", "uuid")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Uuid);
-    pub static ORGANIZATION_ID_META: Meta = Meta::col("organization_id", "uuid")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Uuid);
-    pub static EMAIL_META: Meta = Meta::col("email", "text")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Text);
-    pub static STATUS_META: Meta = Meta::col("status", "text")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Text);
-    pub static DISPLAY_NAME_META: Meta = Meta::col("display_name", "text")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Text);
-    pub static ACTIVE_META: Meta = Meta::col("active", "bool")
-        .ops(OpSet::equality())
-        .json(JsonKind::Bool);
-    pub static CREATED_AT_META: Meta = Meta::col("created_at", "timestamptz")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Timestamptz);
-    pub const ID: Field<Uuid> = Field::new(&ID_META);
-    pub const ORGANIZATION_ID: Field<Uuid> = Field::new(&ORGANIZATION_ID_META);
-    pub const EMAIL: Field<String> = Field::new(&EMAIL_META);
-    pub const STATUS: Field<String> = Field::new(&STATUS_META);
-    pub const DISPLAY_NAME: Field<String> = Field::new(&DISPLAY_NAME_META);
-    pub const ACTIVE: Field<bool> = Field::new(&ACTIVE_META);
-    pub const CREATED_AT: Field<DateTime<Utc>> = Field::new(&CREATED_AT_META);
-    pub static FIELDS: [&Meta; 7] = [
-        &ID_META,
-        &ORGANIZATION_ID_META,
-        &EMAIL_META,
-        &STATUS_META,
-        &DISPLAY_NAME_META,
-        &ACTIVE_META,
-        &CREATED_AT_META,
-    ];
-    pub fn table() -> Source {
-        rqb::table("sample.app_users", &FIELDS)
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+rqb::schema! {
+    table sample.app_users {
+        id: uuid = Uuid,
+        organization_id: uuid = Uuid,
+        email: text = String,
+        status: text = String,
+        display_name: text = String,
+        active: bool = bool,
+        created_at: timestamptz = DateTime<Utc>,
     }
 }

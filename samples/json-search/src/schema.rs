@@ -2,77 +2,24 @@
 
 #![allow(dead_code)]
 
-pub mod order_search_view {
-    use chrono::{DateTime, Utc};
-    use rqb::prelude::*;
-    use serde_json::Value;
-    use uuid::Uuid;
-    pub static ID_META: Meta = Meta::col("id", "uuid")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Uuid);
-    pub static USER_ID_META: Meta = Meta::col("user_id", "uuid")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Uuid);
-    pub static ORGANIZATION_ID_META: Meta = Meta::col("organization_id", "uuid")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Uuid);
-    pub static ORGANIZATION_SLUG_META: Meta = Meta::col("organization_slug", "text")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Text);
-    pub static USER_EMAIL_META: Meta = Meta::col("user_email", "text")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Text);
-    pub static STATUS_META: Meta = Meta::col("status", "text")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Text);
-    pub static TOTAL_CENTS_META: Meta = Meta::col("total_cents", "int8")
-        .ops(OpSet::ordered())
-        .json(JsonKind::BigInt);
-    pub static TAGS_META: Meta = Meta::col("tags", "text[]").ops(OpSet::equality());
-    pub static METADATA_META: Meta = Meta::col("metadata", "jsonb")
-        .ops(OpSet::equality())
-        .json(JsonKind::Jsonb);
-    pub static CREATED_AT_META: Meta = Meta::col("created_at", "timestamptz")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Timestamptz);
-    pub static ITEM_COUNT_META: Meta = Meta::col("item_count", "int8")
-        .ops(OpSet::ordered())
-        .json(JsonKind::BigInt);
-    pub static EVENT_COUNT_META: Meta = Meta::col("event_count", "int8")
-        .ops(OpSet::ordered())
-        .json(JsonKind::BigInt);
-    pub static LAST_EVENT_AT_META: Meta = Meta::col("last_event_at", "timestamptz")
-        .ops(OpSet::ordered())
-        .json(JsonKind::Timestamptz);
-    pub const ID: Field<Uuid> = Field::new(&ID_META);
-    pub const USER_ID: Field<Uuid> = Field::new(&USER_ID_META);
-    pub const ORGANIZATION_ID: Field<Uuid> = Field::new(&ORGANIZATION_ID_META);
-    pub const ORGANIZATION_SLUG: Field<String> = Field::new(&ORGANIZATION_SLUG_META);
-    pub const USER_EMAIL: Field<String> = Field::new(&USER_EMAIL_META);
-    pub const STATUS: Field<String> = Field::new(&STATUS_META);
-    pub const TOTAL_CENTS: Field<i64> = Field::new(&TOTAL_CENTS_META);
-    pub const TAGS: Field<Vec<String>> = Field::new(&TAGS_META);
-    pub const METADATA: Field<Value> = Field::new(&METADATA_META);
-    pub const CREATED_AT: Field<DateTime<Utc>> = Field::new(&CREATED_AT_META);
-    pub const ITEM_COUNT: Field<i64> = Field::new(&ITEM_COUNT_META);
-    pub const EVENT_COUNT: Field<i64> = Field::new(&EVENT_COUNT_META);
-    pub const LAST_EVENT_AT: Field<DateTime<Utc>> = Field::new(&LAST_EVENT_AT_META);
-    pub static FIELDS: [&Meta; 13] = [
-        &ID_META,
-        &USER_ID_META,
-        &ORGANIZATION_ID_META,
-        &ORGANIZATION_SLUG_META,
-        &USER_EMAIL_META,
-        &STATUS_META,
-        &TOTAL_CENTS_META,
-        &TAGS_META,
-        &METADATA_META,
-        &CREATED_AT_META,
-        &ITEM_COUNT_META,
-        &EVENT_COUNT_META,
-        &LAST_EVENT_AT_META,
-    ];
-    pub fn view() -> Source {
-        rqb::view("sample.order_search_view", &FIELDS)
+use chrono::{DateTime, Utc};
+use serde_json::Value;
+use uuid::Uuid;
+
+rqb::schema! {
+    view sample.order_search_view {
+        id: uuid = Uuid,
+        user_id: uuid = Uuid,
+        organization_id: uuid = Uuid,
+        organization_slug: text = String,
+        user_email: text = String,
+        status: text = String,
+        total_cents: int8 = i64,
+        tags: "text[]" = Vec<String>,
+        metadata: jsonb = Value,
+        created_at: timestamptz = DateTime<Utc>,
+        item_count: int8 = i64,
+        event_count: int8 = i64,
+        last_event_at: timestamptz = DateTime<Utc>,
     }
 }

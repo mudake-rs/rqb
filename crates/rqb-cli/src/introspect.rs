@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail};
-use heck::{ToShoutySnakeCase, ToSnakeCase};
+use heck::ToShoutySnakeCase;
 use sqlx::{PgPool, Row};
 
 use crate::ident::{sanitize_ident, unique_ident_strings};
@@ -85,8 +85,6 @@ pub(crate) async fn introspect(
         let data_type: String = row.try_get("data_type")?;
         let udt_name: String = row.try_get("udt_name")?;
         relation.columns.push(Column {
-            api_name: name.clone(),
-            rust_name: sanitize_ident(&name.to_snake_case()),
             const_name: sanitize_ident(&name.to_shouty_snake_case()),
             meta_name: sanitize_ident(&format!("{}_META", name.to_shouty_snake_case())),
             ty: map_column_type(&data_type, &udt_name),
@@ -114,24 +112,12 @@ fn assign_unique_names(relations: &mut BTreeMap<String, Relation>) {
                 .map(|column| column.meta_name.clone()),
             &["FIELDS"],
         );
-        let rust_names = unique_ident_strings(
-            relation
-                .columns
-                .iter()
-                .map(|column| column.rust_name.clone()),
-            &["source", "table", "view"],
-        );
 
-        for (((column, const_name), meta_name), rust_name) in relation
-            .columns
-            .iter_mut()
-            .zip(const_names)
-            .zip(meta_names)
-            .zip(rust_names)
+        for ((column, const_name), meta_name) in
+            relation.columns.iter_mut().zip(const_names).zip(meta_names)
         {
             column.const_name = const_name;
             column.meta_name = meta_name;
-            column.rust_name = rust_name;
         }
     }
 }

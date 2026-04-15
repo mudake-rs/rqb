@@ -14,7 +14,7 @@ extern crate self as rqb;
 
 pub use chrono;
 pub use error::{DbErrorInfo, DbErrorPosition, Error};
-pub use rqb_macros::{Changeset, Insertable};
+pub use rqb_macros::{Changeset, Insertable, schema};
 pub use serde;
 pub use serde_json;
 pub use sqlx;
@@ -37,8 +37,8 @@ pub mod prelude {
         ErasedParam, Error, Field, Insert, Insertable, JsonKind, Meta, OpSet, OrderDirection,
         OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, SearchFilter,
         SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
-        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, select,
-        table, tx, update, view,
+        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, delete_from, insert, raw, schema,
+        select, table, tx, update, view,
     };
 }
 

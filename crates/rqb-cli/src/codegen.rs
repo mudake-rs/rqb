@@ -1,7 +1,5 @@
-use anyhow::{Context, Result, bail};
-use heck::ToSnakeCase;
-use proc_macro2::{Ident, Literal, Span, TokenStream};
-use quote::quote;
+use anyhow::{Context, Result};
+use heck::{ToShoutySnakeCase, ToSnakeCase};
 
 use crate::ident::{sanitize_ident, unique_ident_strings};
 use crate::model::{Column, ColumnType, KnownType, Relation, RelationKind};
@@ -20,113 +18,86 @@ pub(crate) fn render(relations: &[Relation]) -> Result<String> {
             .map(|relation| sanitize_ident(&relation.name.to_snake_case())),
         ROOT_RESERVED_MODULES,
     );
-    let modules = relations
-        .iter()
-        .zip(module_names.iter())
-        .map(|(relation, module_name)| render_relation(relation, module_name))
-        .collect::<Result<Vec<_>>>()?;
-    let tokens = quote! {
-        #(#modules)*
-    };
-    let syntax = syn::parse2(tokens).context("generated schema code did not parse")?;
-    let code = format!("{GENERATED_PREAMBLE}{}", prettyplease::unparse(&syntax));
+    let type_imports = render_schema_type_imports(relations);
+
+    let mut code = GENERATED_PREAMBLE.to_owned();
+    for import in type_imports {
+        code.push_str(&import);
+        code.push('\n');
+    }
+    if !code.ends_with("\n\n") {
+        code.push('\n');
+    }
+
+    code.push_str("rqb::schema! {\n");
+    for (relation, module_name) in relations.iter().zip(module_names.iter()) {
+        render_relation(&mut code, relation, module_name);
+    }
+    code.push_str("}\n");
+
     syn::parse_file(&code).context("generated schema code did not parse")?;
     Ok(code)
 }
 
-fn render_relation(relation: &Relation, module_name: &str) -> Result<TokenStream> {
-    ensure_unique_api_names(relation)?;
-
-    let module = Ident::new(module_name, Span::call_site());
-    let qualified_name = format!("{}.{}", relation.schema, relation.name);
-    let source_fn = match relation.kind {
-        RelationKind::Table => quote! { rqb::table(#qualified_name, &FIELDS) },
-        RelationKind::View => quote! { rqb::view(#qualified_name, &FIELDS) },
+fn render_relation(out: &mut String, relation: &Relation, module_name: &str) {
+    let kind = match relation.kind {
+        RelationKind::Table => "table",
+        RelationKind::View => "view",
     };
-    let relation_fn = match relation.kind {
-        RelationKind::Table => quote! {
-            pub fn table() -> Source {
-                #source_fn
-            }
-        },
-        RelationKind::View => quote! {
-            pub fn view() -> Source {
-                #source_fn
-            }
-        },
-    };
-
-    let metas = relation.columns.iter().map(render_meta);
-    let fields = relation.columns.iter().filter_map(render_field);
-    let type_imports = render_type_imports(relation);
-    let meta_idents = relation
-        .columns
-        .iter()
-        .map(|column| Ident::new(&column.meta_name, Span::call_site()));
-    let field_count = Literal::usize_unsuffixed(relation.columns.len());
-
-    Ok(quote! {
-        pub mod #module {
-            #(#type_imports)*
-            use rqb::prelude::*;
-
-            #(#metas)*
-            #(#fields)*
-
-            pub static FIELDS: [&Meta; #field_count] = [#(&#meta_idents),*];
-
-            #relation_fn
-        }
-    })
-}
-
-fn render_meta(column: &Column) -> TokenStream {
-    let meta = Ident::new(&column.meta_name, Span::call_site());
-    let api = &column.api_name;
-    let db = &column.name;
-    let pg = column.pg_name();
-    let ops = ops_tokens(&column.ty);
-    let json = json_kind_tokens(&column.ty);
-    let base = if api == db {
-        quote! { Meta::col(#db, #pg) }
+    let name = render_relation_name(&relation.schema, &relation.name);
+    let default_module = sanitize_ident(&relation.name.to_snake_case());
+    let module_alias = if module_name != default_module {
+        format!(" as {module_name}")
     } else {
-        quote! { Meta::new(#api, #db, #pg) }
+        String::new()
     };
-    let mut expr = quote! { #base.ops(#ops) };
-    if let Some(json) = json {
-        expr = quote! { #expr.json(#json) };
-    }
-    quote! {
-        pub static #meta: Meta = #expr;
-    }
-}
 
-fn render_field(column: &Column) -> Option<TokenStream> {
-    let ColumnType::Known(known) = &column.ty else {
-        return None;
-    };
-    let const_name = Ident::new(&column.const_name, Span::call_site());
-    let meta = Ident::new(&column.meta_name, Span::call_site());
-    let rust_ty = rust_type_tokens(known);
-    Some(quote! {
-        pub const #const_name: Field<#rust_ty> = Field::new(&#meta);
-    })
-}
-
-fn ensure_unique_api_names(relation: &Relation) -> Result<()> {
-    let mut seen = std::collections::BTreeMap::<&str, &str>::new();
+    out.push_str(&format!("    {kind} {name}{module_alias} {{\n"));
     for column in &relation.columns {
-        if let Some(first_column) = seen.insert(&column.api_name, &column.name) {
-            bail!(
-                "columns `{}` and `{}` in relation `{}` both map to API field `{}`",
-                first_column,
-                column.name,
-                relation.name,
-                column.api_name
-            );
-        }
+        render_column(out, column);
     }
-    Ok(())
+    out.push_str("    }\n");
+}
+
+fn render_relation_name(schema: &str, relation: &str) -> String {
+    if is_plain_ident(schema) && is_plain_ident(relation) {
+        format!("{schema}.{relation}")
+    } else {
+        rust_string_literal(&format!("{schema}.{relation}"))
+    }
+}
+
+fn render_column(out: &mut String, column: &Column) {
+    let name = render_name(&column.name);
+    let default_const = sanitize_ident(&column.name.to_shouty_snake_case());
+    let const_alias = if column.const_name != default_const {
+        format!(" as {}", column.const_name)
+    } else {
+        String::new()
+    };
+    let pg_name = column.pg_name();
+    let pg = render_pg_name(&pg_name);
+    let rust_ty = match &column.ty {
+        ColumnType::Known(known) => format!(" = {}", rust_type_name(known)),
+        ColumnType::RawOnly { .. } => String::new(),
+    };
+    out.push_str(&format!("        {name}{const_alias}: {pg}{rust_ty},\n"));
+}
+
+fn render_name(name: &str) -> String {
+    if is_plain_ident(name) {
+        name.to_owned()
+    } else {
+        rust_string_literal(name)
+    }
+}
+
+fn render_pg_name(name: &str) -> String {
+    if is_plain_ident(name) {
+        name.to_owned()
+    } else {
+        rust_string_literal(name)
+    }
 }
 
 impl Column {
@@ -138,35 +109,27 @@ impl Column {
     }
 }
 
-fn rust_type_tokens(known: &KnownType) -> TokenStream {
+fn rust_type_name(known: &KnownType) -> String {
     match known {
-        KnownType::Text | KnownType::Inet | KnownType::Cidr => quote! { String },
-        KnownType::Bool => quote! { bool },
-        KnownType::Int2 => quote! { i16 },
-        KnownType::Int4 => quote! { i32 },
-        KnownType::Int8 => quote! { i64 },
-        KnownType::Float4 => quote! { f32 },
-        KnownType::Float8 => quote! { f64 },
-        KnownType::Numeric => quote! { BigDecimal },
-        KnownType::Uuid => quote! { Uuid },
-        KnownType::Date => quote! { NaiveDate },
-        KnownType::Time => quote! { NaiveTime },
-        KnownType::Timetz => {
-            quote! { PgTimeTz<NaiveTime, FixedOffset> }
-        }
-        KnownType::Timestamp => quote! { NaiveDateTime },
-        KnownType::Timestamptz => quote! { DateTime<Utc> },
-        KnownType::Interval => quote! { PgInterval },
-        KnownType::Json => quote! { Value },
-        KnownType::Bytes => quote! { Vec<u8> },
-        KnownType::Range(elem) => {
-            let elem = rust_type_tokens(elem);
-            quote! { PgRange<#elem> }
-        }
-        KnownType::Array(elem) => {
-            let elem = rust_type_tokens(elem);
-            quote! { Vec<#elem> }
-        }
+        KnownType::Text | KnownType::Inet | KnownType::Cidr => "String".to_owned(),
+        KnownType::Bool => "bool".to_owned(),
+        KnownType::Int2 => "i16".to_owned(),
+        KnownType::Int4 => "i32".to_owned(),
+        KnownType::Int8 => "i64".to_owned(),
+        KnownType::Float4 => "f32".to_owned(),
+        KnownType::Float8 => "f64".to_owned(),
+        KnownType::Numeric => "BigDecimal".to_owned(),
+        KnownType::Uuid => "Uuid".to_owned(),
+        KnownType::Date => "NaiveDate".to_owned(),
+        KnownType::Time => "NaiveTime".to_owned(),
+        KnownType::Timetz => "PgTimeTz<NaiveTime, FixedOffset>".to_owned(),
+        KnownType::Timestamp => "NaiveDateTime".to_owned(),
+        KnownType::Timestamptz => "DateTime<Utc>".to_owned(),
+        KnownType::Interval => "PgInterval".to_owned(),
+        KnownType::Json => "Value".to_owned(),
+        KnownType::Bytes => "Vec<u8>".to_owned(),
+        KnownType::Range(elem) => format!("PgRange<{}>", rust_type_name(elem)),
+        KnownType::Array(elem) => format!("Vec<{}>", rust_type_name(elem)),
     }
 }
 
@@ -186,31 +149,36 @@ struct TypeImports {
     uuid: bool,
 }
 
-fn render_type_imports(relation: &Relation) -> Vec<TokenStream> {
+fn render_schema_type_imports(relations: &[Relation]) -> Vec<String> {
     let mut imports = TypeImports::default();
-    for column in &relation.columns {
-        if let ColumnType::Known(known) = &column.ty {
-            collect_type_imports(known, &mut imports);
+    for relation in relations {
+        for column in &relation.columns {
+            if let ColumnType::Known(known) = &column.ty {
+                collect_type_imports(known, &mut imports);
+            }
         }
     }
 
     let mut rendered = Vec::new();
     let chrono_imports = chrono_imports(&imports);
     if !chrono_imports.is_empty() {
-        rendered.push(quote! { use chrono::{#(#chrono_imports),*}; });
+        rendered.push(format!("use chrono::{{{}}};", chrono_imports.join(", ")));
     }
     if imports.serde_value {
-        rendered.push(quote! { use serde_json::Value; });
+        rendered.push("use serde_json::Value;".to_owned());
     }
     let pg_imports = pg_imports(&imports);
     if !pg_imports.is_empty() {
-        rendered.push(quote! { use sqlx::postgres::types::{#(#pg_imports),*}; });
+        rendered.push(format!(
+            "use sqlx::postgres::types::{{{}}};",
+            pg_imports.join(", ")
+        ));
     }
     if imports.big_decimal {
-        rendered.push(quote! { use sqlx::types::BigDecimal; });
+        rendered.push("use sqlx::types::BigDecimal;".to_owned());
     }
     if imports.uuid {
-        rendered.push(quote! { use uuid::Uuid; });
+        rendered.push("use uuid::Uuid;".to_owned());
     }
     rendered
 }
@@ -251,7 +219,7 @@ fn collect_type_imports(known: &KnownType, imports: &mut TypeImports) {
     }
 }
 
-fn chrono_imports(imports: &TypeImports) -> Vec<Ident> {
+fn chrono_imports(imports: &TypeImports) -> Vec<&'static str> {
     let mut idents = Vec::new();
     push_import(&mut idents, imports.date_time, "DateTime");
     push_import(&mut idents, imports.fixed_offset, "FixedOffset");
@@ -262,7 +230,7 @@ fn chrono_imports(imports: &TypeImports) -> Vec<Ident> {
     idents
 }
 
-fn pg_imports(imports: &TypeImports) -> Vec<Ident> {
+fn pg_imports(imports: &TypeImports) -> Vec<&'static str> {
     let mut idents = Vec::new();
     push_import(&mut idents, imports.pg_interval, "PgInterval");
     push_import(&mut idents, imports.pg_range, "PgRange");
@@ -270,9 +238,9 @@ fn pg_imports(imports: &TypeImports) -> Vec<Ident> {
     idents
 }
 
-fn push_import(idents: &mut Vec<Ident>, enabled: bool, name: &str) {
+fn push_import(idents: &mut Vec<&'static str>, enabled: bool, name: &'static str) {
     if enabled {
-        idents.push(Ident::new(name, Span::call_site()));
+        idents.push(name);
     }
 }
 
@@ -310,38 +278,12 @@ fn pg_name(known: &KnownType) -> String {
     }
 }
 
-fn ops_tokens(ty: &ColumnType) -> TokenStream {
-    match ty {
-        ColumnType::RawOnly { .. } => quote! { OpSet::none() },
-        ColumnType::Known(KnownType::Json | KnownType::Bytes | KnownType::Array(_)) => {
-            quote! { OpSet::equality() }
-        }
-        ColumnType::Known(KnownType::Bool | KnownType::Range(_)) => quote! { OpSet::equality() },
-        ColumnType::Known(_) => quote! { OpSet::ordered() },
-    }
+fn is_plain_ident(value: &str) -> bool {
+    sanitize_ident(value) == value
 }
 
-fn json_kind_tokens(ty: &ColumnType) -> Option<TokenStream> {
-    let kind = match ty {
-        ColumnType::Known(KnownType::Text | KnownType::Inet | KnownType::Cidr) => {
-            quote! { JsonKind::Text }
-        }
-        ColumnType::Known(KnownType::Bool) => quote! { JsonKind::Bool },
-        ColumnType::Known(KnownType::Int2 | KnownType::Int4) => quote! { JsonKind::Integer },
-        ColumnType::Known(KnownType::Int8) => quote! { JsonKind::BigInt },
-        ColumnType::Known(KnownType::Float4 | KnownType::Float8) => quote! { JsonKind::Float },
-        ColumnType::Known(KnownType::Numeric) => quote! { JsonKind::NumericString },
-        ColumnType::Known(KnownType::Uuid) => quote! { JsonKind::Uuid },
-        ColumnType::Known(KnownType::Date) => quote! { JsonKind::Date },
-        ColumnType::Known(KnownType::Time | KnownType::Timetz) => quote! { JsonKind::Time },
-        ColumnType::Known(KnownType::Timestamp) => quote! { JsonKind::Timestamp },
-        ColumnType::Known(KnownType::Timestamptz) => quote! { JsonKind::Timestamptz },
-        ColumnType::Known(KnownType::Json) => quote! { JsonKind::Jsonb },
-        ColumnType::Known(KnownType::Interval | KnownType::Bytes | KnownType::Range(_))
-        | ColumnType::Known(KnownType::Array(_))
-        | ColumnType::RawOnly { .. } => return None,
-    };
-    Some(kind)
+fn rust_string_literal(value: &str) -> String {
+    format!("{value:?}")
 }
 
 #[cfg(test)]
@@ -359,16 +301,12 @@ mod tests {
             columns: vec![
                 Column {
                     name: "id".to_owned(),
-                    api_name: "id".to_owned(),
-                    rust_name: "id".to_owned(),
                     const_name: "ID".to_owned(),
                     meta_name: "ID_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Uuid),
                 },
                 Column {
                     name: "embedding".to_owned(),
-                    api_name: "embedding".to_owned(),
-                    rust_name: "embedding".to_owned(),
                     const_name: "EMBEDDING".to_owned(),
                     meta_name: "EMBEDDING_META".to_owned(),
                     ty: ColumnType::RawOnly {
@@ -379,17 +317,41 @@ mod tests {
         }])
         .unwrap();
 
-        assert!(code.contains("pub static ID_META: Meta"));
+        assert!(code.contains("rqb::schema!"));
+        assert!(code.contains("table public.app_users"));
         assert!(code.contains("use uuid::Uuid;"));
-        assert!(code.contains("pub const ID: Field<Uuid>"));
-        assert!(code.contains("pub static EMBEDDING_META: Meta"));
-        assert!(!code.contains("pub const EMBEDDING"));
-        assert!(code.contains("pub static FIELDS"));
-        assert!(code.contains("&ID_META"));
-        assert!(code.contains("&EMBEDDING_META"));
-        assert!(code.contains("Meta::col(\"id\", \"uuid\")"));
-        assert!(code.contains("rqb::table(\"public.app_users\", &FIELDS)"));
+        assert!(code.contains("id: uuid = Uuid"));
+        assert!(code.contains("embedding: vector"));
+        assert!(!code.contains("pub const ID"));
         assert!(!code.contains("pub fn source()"));
         assert!(!code.contains("pub fn id()"));
+    }
+
+    #[test]
+    fn disambiguates_generated_module_names() {
+        let id = Column {
+            name: "id".to_owned(),
+            const_name: "ID".to_owned(),
+            meta_name: "ID_META".to_owned(),
+            ty: ColumnType::Known(KnownType::Uuid),
+        };
+        let code = render(&[
+            Relation {
+                schema: "admin".to_owned(),
+                name: "users".to_owned(),
+                kind: RelationKind::Table,
+                columns: vec![id.clone()],
+            },
+            Relation {
+                schema: "public".to_owned(),
+                name: "users".to_owned(),
+                kind: RelationKind::Table,
+                columns: vec![id],
+            },
+        ])
+        .unwrap();
+
+        assert!(code.contains("table admin.users {"));
+        assert!(code.contains("table public.users as users_1 {"));
     }
 }

@@ -194,8 +194,8 @@ tx!(&pool, |conn| {
 
 ## CLI
 
-`rqb-cli` introspects Postgres and writes a schema module with `Meta` and
-`Field<T>` constants.
+`rqb-cli` introspects Postgres and writes a compact `rqb::schema!` module. The
+macro expands to `Meta`, `Field<T>`, `FIELDS`, and `table()` / `view()` items.
 
 ```bash
 cargo run -p rqb-cli -- generate \
@@ -214,7 +214,7 @@ application DTOs, not in generated schema metadata.
 ## Crates
 
 - `rqb`: typed AST, renderer, params, execution helpers, and public API.
-- `rqb-macros`: derive macros re-exported by `rqb`.
+- `rqb-macros`: procedural macros re-exported by `rqb`.
 - `rqb-cli`: schema introspection and code generation, not published.
 
 ## Checks

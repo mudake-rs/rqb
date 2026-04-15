@@ -15,8 +15,6 @@ pub(crate) enum RelationKind {
 #[derive(Debug, Clone)]
 pub(crate) struct Column {
     pub(crate) name: String,
-    pub(crate) api_name: String,
-    pub(crate) rust_name: String,
     pub(crate) const_name: String,
     pub(crate) meta_name: String,
     pub(crate) ty: ColumnType,

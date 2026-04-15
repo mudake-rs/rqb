@@ -14,6 +14,13 @@ Use it when an application needs:
 - serde row DTOs and small write DTOs
 - generated schema metadata from Postgres
 
+## TL;DR
+
+Start with [`samples`](samples) if you want to see the API in real code. The
+small samples each focus on one use case; [`samples/rest-api`](samples/rest-api)
+shows the intended application shape with generated schema metadata, services,
+transactions, validation, and JSON search.
+
 ## Status
 
 rqb is pre-1.0 and the public API is still allowed to change when that makes the

@@ -10,10 +10,7 @@ impl Delete {
     }
 
     pub fn filter(mut self, filter: BoolExpr) -> Self {
-        self.filter = Some(match self.filter {
-            Some(existing) => BoolExpr::And(vec![existing, filter]),
-            None => filter,
-        });
+        self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
     }
 

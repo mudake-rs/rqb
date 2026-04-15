@@ -15,7 +15,7 @@ impl SearchRequest {
     pub fn merge_in(&self, mut select: Select) -> Result<Select> {
         let request_filter = self.filter_expr(&select.source)?;
         select.filter = match (select.filter, request_filter) {
-            (Some(existing), Some(request)) => Some(BoolExpr::And(vec![existing, request])),
+            (Some(existing), Some(request)) => Some(BoolExpr::and_pair(existing, request)),
             (existing, None) => existing,
             (None, Some(request)) => Some(request),
         };

@@ -39,10 +39,10 @@ impl ValueExpr {
             filter: current, ..
         } = &mut self
         {
-            *current = Some(Box::new(match current.take() {
-                Some(existing) => BoolExpr::And(vec![*existing, filter]),
-                None => filter,
-            }));
+            *current = Some(Box::new(BoolExpr::and_option(
+                current.take().map(|existing| *existing),
+                filter,
+            )));
         }
         self
     }

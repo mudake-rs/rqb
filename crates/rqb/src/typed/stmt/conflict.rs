@@ -29,10 +29,10 @@ impl InsertConflictBuilder {
             ConflictTarget::Columns {
                 predicate: current, ..
             } => {
-                *current = Some(Box::new(match current.take() {
-                    Some(existing) => BoolExpr::And(vec![*existing, predicate]),
-                    None => predicate,
-                }));
+                *current = Some(Box::new(BoolExpr::and_option(
+                    current.take().map(|existing| *existing),
+                    predicate,
+                )));
             }
             ConflictTarget::Constraint(_) => {
                 invalidate_conflict_target(

@@ -47,10 +47,7 @@ impl Select {
     }
 
     pub fn filter(mut self, filter: BoolExpr) -> Self {
-        self.filter = Some(match self.filter {
-            Some(existing) => BoolExpr::And(vec![existing, filter]),
-            None => filter,
-        });
+        self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
     }
 
@@ -135,10 +132,7 @@ impl Select {
     }
 
     pub fn having(mut self, having: BoolExpr) -> Self {
-        self.having = Some(match self.having {
-            Some(existing) => BoolExpr::And(vec![existing, having]),
-            None => having,
-        });
+        self.having = Some(BoolExpr::and_option(self.having, having));
         self
     }
 

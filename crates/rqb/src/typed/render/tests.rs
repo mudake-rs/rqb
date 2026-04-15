@@ -211,7 +211,7 @@ fn ergonomic_constructors_build_the_same_typed_ast() {
 
     assert_eq!(
         built.sql,
-        "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" WHERE ((\"id\" > $1 AND \"id\" < $2) AND \"email_address\" <> $3) ORDER BY \"id\" DESC LIMIT $4 OFFSET $5"
+        "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" WHERE (\"id\" > $1 AND \"id\" < $2 AND \"email_address\" <> $3) ORDER BY \"id\" DESC LIMIT $4 OFFSET $5"
     );
     assert_eq!(built.params.len(), 5);
 }

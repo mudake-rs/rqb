@@ -48,7 +48,7 @@ fn search_request_merges_filter_and_applies_sort_limit_offset() {
 
     assert_eq!(
         built.sql,
-        "SELECT \"id\", \"status\", \"active\", \"internal\" FROM \"public\".\"orders\" WHERE (\"id\" > $1 AND (\"status\" = $2 AND \"id\" >= $3)) ORDER BY \"id\" DESC LIMIT $4 OFFSET $5"
+        "SELECT \"id\", \"status\", \"active\", \"internal\" FROM \"public\".\"orders\" WHERE (\"id\" > $1 AND \"status\" = $2 AND \"id\" >= $3) ORDER BY \"id\" DESC LIMIT $4 OFFSET $5"
     );
     assert_eq!(built.params.len(), 5);
 }

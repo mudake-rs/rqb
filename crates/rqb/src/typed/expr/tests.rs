@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::typed::{BoolOp, Field, JsonKind, Meta, OpSet, Param, Params, ValueExpr};
+use crate::typed::{BoolExpr, BoolOp, Field, JsonKind, Meta, OpSet, Param, Params, ValueExpr};
 
 #[test]
 fn field_t_erases_to_bool_expr_with_sqlx_param() {
@@ -67,6 +67,22 @@ fn value_expr_is_separate_from_bool_expr() {
     };
 
     filter.validate().unwrap();
+}
+
+#[test]
+fn and_pair_flattens_nonempty_groups_without_hiding_empty_groups() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let flattened = BoolExpr::and_pair(BoolExpr::and([ID.gt(1), ID.lt(10)]), ID.ne(5));
+    assert!(matches!(flattened, BoolExpr::And(ref exprs) if exprs.len() == 3));
+    flattened.validate().unwrap();
+
+    let invalid = BoolExpr::and_pair(BoolExpr::and([]), ID.ne(5));
+    assert!(matches!(
+        invalid.validate().unwrap_err(),
+        crate::Error::EmptyTypedLogical { logical } if logical == "and"
+    ));
 }
 
 #[test]

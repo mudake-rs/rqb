@@ -1,6 +1,9 @@
 use crate::typed::Param;
 
-use super::{BoolExpr, Field, FieldRef, ValueExpr};
+use super::{
+    BoolExpr, Field, FieldRef, ValueExpr, plainto_tsquery, to_tsvector, ts_match,
+    websearch_to_tsquery,
+};
 
 impl Field<String> {
     pub fn like(self, pattern: impl AsRef<str>) -> BoolExpr {
@@ -17,6 +20,14 @@ impl Field<String> {
 
     pub fn not_ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.reference().not_ilike(pattern)
+    }
+
+    pub fn similar_to(self, pattern: impl AsRef<str>) -> BoolExpr {
+        self.reference().similar_to(pattern)
+    }
+
+    pub fn not_similar_to(self, pattern: impl AsRef<str>) -> BoolExpr {
+        self.reference().not_similar_to(pattern)
     }
 
     pub fn contains(self, value: impl AsRef<str>) -> BoolExpr {
@@ -58,6 +69,14 @@ impl Field<String> {
     pub fn not_iregex(self, pattern: impl Into<String>) -> BoolExpr {
         self.reference().not_iregex(pattern)
     }
+
+    pub fn text_search(self, query: impl AsRef<str>) -> BoolExpr {
+        self.reference().text_search(query)
+    }
+
+    pub fn websearch(self, query: impl AsRef<str>) -> BoolExpr {
+        self.reference().websearch(query)
+    }
 }
 
 impl FieldRef<String> {
@@ -75,6 +94,14 @@ impl FieldRef<String> {
 
     pub fn not_ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, true, true)
+    }
+
+    pub fn similar_to(self, pattern: impl AsRef<str>) -> BoolExpr {
+        self.similar_predicate(pattern, false)
+    }
+
+    pub fn not_similar_to(self, pattern: impl AsRef<str>) -> BoolExpr {
+        self.similar_predicate(pattern, true)
     }
 
     pub fn contains(self, value: impl AsRef<str>) -> BoolExpr {
@@ -117,6 +144,20 @@ impl FieldRef<String> {
         self.regex_predicate(pattern, true, true)
     }
 
+    pub fn text_search(self, query: impl AsRef<str>) -> BoolExpr {
+        ts_match(
+            to_tsvector(self.expr()),
+            plainto_tsquery(ValueExpr::Param(Param::typed(query.as_ref().to_owned()))),
+        )
+    }
+
+    pub fn websearch(self, query: impl AsRef<str>) -> BoolExpr {
+        ts_match(
+            to_tsvector(self.expr()),
+            websearch_to_tsquery(ValueExpr::Param(Param::typed(query.as_ref().to_owned()))),
+        )
+    }
+
     fn like_predicate(
         self,
         pattern: impl AsRef<str>,
@@ -129,6 +170,14 @@ impl FieldRef<String> {
             case_insensitive,
             negated,
             escape: false,
+        }
+    }
+
+    fn similar_predicate(self, pattern: impl AsRef<str>, negated: bool) -> BoolExpr {
+        BoolExpr::SimilarTo {
+            expr: self.expr(),
+            pattern: ValueExpr::Param(Param::typed(pattern.as_ref().to_owned())),
+            negated,
         }
     }
 

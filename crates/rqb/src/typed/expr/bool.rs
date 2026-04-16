@@ -1,4 +1,4 @@
-use super::BoolExpr;
+use super::{BoolExpr, BooleanTest, Field, FieldRef, ValueExpr};
 
 impl BoolExpr {
     pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
@@ -36,5 +36,91 @@ impl BoolExpr {
             Some(existing) => Self::and_pair(existing, next),
             None => next,
         }
+    }
+}
+
+impl ValueExpr {
+    pub fn is_true(self) -> BoolExpr {
+        self.boolean_test(BooleanTest::True, false)
+    }
+
+    pub fn is_not_true(self) -> BoolExpr {
+        self.boolean_test(BooleanTest::True, true)
+    }
+
+    pub fn is_false(self) -> BoolExpr {
+        self.boolean_test(BooleanTest::False, false)
+    }
+
+    pub fn is_not_false(self) -> BoolExpr {
+        self.boolean_test(BooleanTest::False, true)
+    }
+
+    pub fn is_unknown(self) -> BoolExpr {
+        self.boolean_test(BooleanTest::Unknown, false)
+    }
+
+    pub fn is_not_unknown(self) -> BoolExpr {
+        self.boolean_test(BooleanTest::Unknown, true)
+    }
+
+    fn boolean_test(self, test: BooleanTest, negated: bool) -> BoolExpr {
+        BoolExpr::IsBoolean {
+            expr: self,
+            test,
+            negated,
+        }
+    }
+}
+
+impl Field<bool> {
+    pub fn is_true(self) -> BoolExpr {
+        self.expr().is_true()
+    }
+
+    pub fn is_not_true(self) -> BoolExpr {
+        self.expr().is_not_true()
+    }
+
+    pub fn is_false(self) -> BoolExpr {
+        self.expr().is_false()
+    }
+
+    pub fn is_not_false(self) -> BoolExpr {
+        self.expr().is_not_false()
+    }
+
+    pub fn is_unknown(self) -> BoolExpr {
+        self.expr().is_unknown()
+    }
+
+    pub fn is_not_unknown(self) -> BoolExpr {
+        self.expr().is_not_unknown()
+    }
+}
+
+impl FieldRef<bool> {
+    pub fn is_true(self) -> BoolExpr {
+        self.expr().is_true()
+    }
+
+    pub fn is_not_true(self) -> BoolExpr {
+        self.expr().is_not_true()
+    }
+
+    pub fn is_false(self) -> BoolExpr {
+        self.expr().is_false()
+    }
+
+    pub fn is_not_false(self) -> BoolExpr {
+        self.expr().is_not_false()
+    }
+
+    pub fn is_unknown(self) -> BoolExpr {
+        self.expr().is_unknown()
+    }
+
+    pub fn is_not_unknown(self) -> BoolExpr {
+        self.expr().is_not_unknown()
     }
 }

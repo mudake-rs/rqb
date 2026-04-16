@@ -1,181 +1,6 @@
 use super::*;
 
 impl Renderer {
-    pub(super) fn render_bool(&mut self, expr: &BoolExpr) -> Result<()> {
-        match expr {
-            BoolExpr::Constant(value) => {
-                self.sql.push_str(if *value { "TRUE" } else { "FALSE" });
-                Ok(())
-            }
-            BoolExpr::Compare { left, op, right } => {
-                self.render_value(left)?;
-                self.sql.push(' ');
-                self.sql.push_str(op.as_sql());
-                self.sql.push(' ');
-                self.render_value(right)
-            }
-            BoolExpr::IsNull { expr, negated } => {
-                self.render_value(expr)?;
-                self.sql
-                    .push_str(if *negated { " IS NOT NULL" } else { " IS NULL" });
-                Ok(())
-            }
-            BoolExpr::InList {
-                expr,
-                values,
-                negated,
-            } => {
-                self.render_value(expr)?;
-                self.sql
-                    .push_str(if *negated { " NOT IN (" } else { " IN (" });
-                for (idx, value) in values.iter().enumerate() {
-                    if idx > 0 {
-                        self.sql.push_str(", ");
-                    }
-                    self.render_value(value)?;
-                }
-                self.sql.push(')');
-                Ok(())
-            }
-            BoolExpr::InSubquery {
-                expr,
-                query,
-                negated,
-            } => {
-                self.render_value(expr)?;
-                self.sql
-                    .push_str(if *negated { " NOT IN (" } else { " IN (" });
-                self.render_stmt(query)?;
-                self.sql.push(')');
-                Ok(())
-            }
-            BoolExpr::Between {
-                expr,
-                low,
-                high,
-                negated,
-            } => {
-                self.render_value(expr)?;
-                self.sql.push_str(if *negated {
-                    " NOT BETWEEN "
-                } else {
-                    " BETWEEN "
-                });
-                self.render_value(low)?;
-                self.sql.push_str(" AND ");
-                self.render_value(high)
-            }
-            BoolExpr::Like {
-                expr,
-                pattern,
-                case_insensitive,
-                negated,
-                escape,
-            } => {
-                self.render_value(expr)?;
-                let op = match (*case_insensitive, *negated) {
-                    (false, false) => " LIKE ",
-                    (false, true) => " NOT LIKE ",
-                    (true, false) => " ILIKE ",
-                    (true, true) => " NOT ILIKE ",
-                };
-                self.sql.push_str(op);
-                self.render_value(pattern)?;
-                if *escape {
-                    self.sql.push_str(" ESCAPE '\\'");
-                }
-                Ok(())
-            }
-            BoolExpr::Regex {
-                expr,
-                pattern,
-                case_insensitive,
-                negated,
-            } => {
-                self.render_value(expr)?;
-                let op = match (case_insensitive, negated) {
-                    (false, false) => " ~ ",
-                    (false, true) => " !~ ",
-                    (true, false) => " ~* ",
-                    (true, true) => " !~* ",
-                };
-                self.sql.push_str(op);
-                self.render_value(pattern)
-            }
-            BoolExpr::Infix {
-                left,
-                op,
-                right,
-                negated,
-            } => {
-                if *negated {
-                    self.sql.push_str("NOT (");
-                }
-                self.render_value(left)?;
-                self.sql.push(' ');
-                self.sql.push_str(op);
-                self.sql.push(' ');
-                self.render_value(right)?;
-                if *negated {
-                    self.sql.push(')');
-                }
-                Ok(())
-            }
-            BoolExpr::Any {
-                value,
-                array,
-                negated,
-            } => {
-                if *negated {
-                    self.sql.push_str("NOT (");
-                }
-                self.render_value(value)?;
-                self.sql.push_str(" = ANY(");
-                self.render_value(array)?;
-                self.sql.push(')');
-                if *negated {
-                    self.sql.push(')');
-                }
-                Ok(())
-            }
-            BoolExpr::ArrayIsEmpty { expr, negated } => {
-                self.sql.push_str("cardinality(");
-                self.render_value(expr)?;
-                self.sql.push_str(if *negated { ") > 0" } else { ") = 0" });
-                Ok(())
-            }
-            BoolExpr::And(exprs) => self.render_bool_list("AND", exprs),
-            BoolExpr::Or(exprs) => self.render_bool_list("OR", exprs),
-            BoolExpr::Not(expr) => {
-                self.sql.push_str("NOT (");
-                self.render_bool(expr)?;
-                self.sql.push(')');
-                Ok(())
-            }
-            BoolExpr::Exists(stmt) => {
-                self.sql.push_str("EXISTS (");
-                self.render_stmt(stmt)?;
-                self.sql.push(')');
-                Ok(())
-            }
-            BoolExpr::Raw { sql, params } => self.render_raw(sql, params),
-        }
-    }
-
-    pub(super) fn render_bool_list(&mut self, op: &str, exprs: &[BoolExpr]) -> Result<()> {
-        self.sql.push('(');
-        for (idx, expr) in exprs.iter().enumerate() {
-            if idx > 0 {
-                self.sql.push(' ');
-                self.sql.push_str(op);
-                self.sql.push(' ');
-            }
-            self.render_bool(expr)?;
-        }
-        self.sql.push(')');
-        Ok(())
-    }
-
     pub(super) fn render_value(&mut self, expr: &ValueExpr) -> Result<()> {
         match expr {
             ValueExpr::Field { meta, qualifier } => {
@@ -191,6 +16,10 @@ impl Renderer {
                 self.push_param(param.clone());
                 Ok(())
             }
+            ValueExpr::Keyword(keyword) => {
+                self.sql.push_str(keyword);
+                Ok(())
+            }
             ValueExpr::Function { name, args } => self.render_call(name, args),
             ValueExpr::Aggregate {
                 name,
@@ -200,6 +29,20 @@ impl Renderer {
                 filter,
             } => {
                 self.render_aggregate(name, args, *distinct, order_by)?;
+                if let Some(filter) = filter {
+                    self.sql.push_str(" FILTER (WHERE ");
+                    self.render_bool(filter)?;
+                    self.sql.push(')');
+                }
+                Ok(())
+            }
+            ValueExpr::OrderedSetAggregate {
+                name,
+                args,
+                within_group,
+                filter,
+            } => {
+                self.render_ordered_set_aggregate(name, args, within_group)?;
                 if let Some(filter) = filter {
                     self.sql.push_str(" FILTER (WHERE ");
                     self.render_bool(filter)?;
@@ -240,6 +83,56 @@ impl Renderer {
                 self.sql.push(')');
                 Ok(())
             }
+            ValueExpr::Subscript { expr, index } => {
+                self.render_value(expr)?;
+                self.sql.push('[');
+                self.render_value(index)?;
+                self.sql.push(']');
+                Ok(())
+            }
+            ValueExpr::Slice { expr, start, end } => {
+                self.render_value(expr)?;
+                self.sql.push('[');
+                if let Some(start) = start {
+                    self.render_value(start)?;
+                }
+                self.sql.push(':');
+                if let Some(end) = end {
+                    self.render_value(end)?;
+                }
+                self.sql.push(']');
+                Ok(())
+            }
+            ValueExpr::Array(values) => {
+                self.sql.push_str("ARRAY[");
+                for (idx, value) in values.iter().enumerate() {
+                    if idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    self.render_value(value)?;
+                }
+                self.sql.push(']');
+                Ok(())
+            }
+            ValueExpr::Row(values) => {
+                self.sql.push_str("ROW(");
+                for (idx, value) in values.iter().enumerate() {
+                    if idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    self.render_value(value)?;
+                }
+                self.sql.push(')');
+                Ok(())
+            }
+            ValueExpr::Extract { field, expr } => {
+                self.sql.push_str("extract(");
+                self.sql.push_str(field);
+                self.sql.push_str(" FROM ");
+                self.render_value(expr)?;
+                self.sql.push(')');
+                Ok(())
+            }
             ValueExpr::Window {
                 function,
                 args,
@@ -277,7 +170,18 @@ impl Renderer {
                         self.render_value(&item.expr)?;
                         self.sql.push(' ');
                         self.sql.push_str(item.direction.as_sql());
+                        if let Some(nulls) = item.nulls {
+                            self.sql.push(' ');
+                            self.sql.push_str(nulls.as_sql());
+                        }
                     }
+                    needs_space = true;
+                }
+                if let Some(frame) = &spec.frame {
+                    if needs_space {
+                        self.sql.push(' ');
+                    }
+                    self.render_window_frame(frame)?;
                 }
                 self.sql.push(')');
                 Ok(())
@@ -336,9 +240,79 @@ impl Renderer {
                 self.render_value(&item.expr)?;
                 self.sql.push(' ');
                 self.sql.push_str(item.direction.as_sql());
+                if let Some(nulls) = item.nulls {
+                    self.sql.push(' ');
+                    self.sql.push_str(nulls.as_sql());
+                }
             }
         }
         self.sql.push(')');
+        Ok(())
+    }
+
+    pub(super) fn render_ordered_set_aggregate(
+        &mut self,
+        name: &str,
+        args: &[ValueExpr],
+        within_group: &[crate::typed::OrderItem],
+    ) -> Result<()> {
+        self.sql.push_str(name);
+        self.sql.push('(');
+        for (idx, arg) in args.iter().enumerate() {
+            if idx > 0 {
+                self.sql.push_str(", ");
+            }
+            self.render_value(arg)?;
+        }
+        self.sql.push_str(") WITHIN GROUP (ORDER BY ");
+        for (idx, item) in within_group.iter().enumerate() {
+            if idx > 0 {
+                self.sql.push_str(", ");
+            }
+            self.render_value(&item.expr)?;
+            self.sql.push(' ');
+            self.sql.push_str(item.direction.as_sql());
+            if let Some(nulls) = item.nulls {
+                self.sql.push(' ');
+                self.sql.push_str(nulls.as_sql());
+            }
+        }
+        self.sql.push(')');
+        Ok(())
+    }
+
+    pub(super) fn render_window_frame(&mut self, frame: &WindowFrame) -> Result<()> {
+        self.sql.push_str(frame.kind.as_sql());
+        if let Some(end) = &frame.end {
+            self.sql.push_str(" BETWEEN ");
+            self.render_frame_bound(&frame.start)?;
+            self.sql.push_str(" AND ");
+            self.render_frame_bound(end)?;
+        } else {
+            self.sql.push(' ');
+            self.render_frame_bound(&frame.start)?;
+        }
+        if let Some(exclude) = frame.exclude {
+            self.sql.push(' ');
+            self.sql.push_str(exclude.as_sql());
+        }
+        Ok(())
+    }
+
+    pub(super) fn render_frame_bound(&mut self, bound: &FrameBound) -> Result<()> {
+        match bound {
+            FrameBound::UnboundedPreceding => self.sql.push_str("UNBOUNDED PRECEDING"),
+            FrameBound::Preceding(expr) => {
+                self.render_value(expr)?;
+                self.sql.push_str(" PRECEDING");
+            }
+            FrameBound::CurrentRow => self.sql.push_str("CURRENT ROW"),
+            FrameBound::Following(expr) => {
+                self.render_value(expr)?;
+                self.sql.push_str(" FOLLOWING");
+            }
+            FrameBound::UnboundedFollowing => self.sql.push_str("UNBOUNDED FOLLOWING"),
+        }
         Ok(())
     }
 }

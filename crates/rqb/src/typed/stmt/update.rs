@@ -5,6 +5,7 @@ impl Update {
         Self {
             target,
             assignments: Vec::new(),
+            from: Vec::new(),
             filter: None,
             returning: Vec::new(),
         }
@@ -17,6 +18,11 @@ impl Update {
 
     pub fn changes(mut self, changes: impl Changeset) -> Self {
         extend_assignments(&mut self.assignments, changes.changeset_assignments());
+        self
+    }
+
+    pub fn from(mut self, source: Source) -> Self {
+        self.from.push(source);
         self
     }
 

@@ -2,13 +2,15 @@ use crate::Result;
 use crate::typed::ident::{write_quoted_ident, write_quoted_qualified};
 use crate::typed::{
     Assignment, BoolExpr, BuiltQuery, ConflictAction, ConflictClause, ConflictTarget, Cte, Delete,
-    Insert, Param, Params, RawStmt, Select, SelectItem, SetQuery, Source, Stmt, ValueExpr, ValueOp,
+    FetchClause, FrameBound, GroupByItem, Insert, Merge, MergeAction, MergeWhen, Param, Params,
+    RawStmt, Select, SelectItem, SetQuery, Source, Stmt, ValueExpr, ValueOp, WindowFrame,
 };
 
-mod expr;
+mod bool;
 mod raw;
 mod source;
 mod stmt;
+mod value;
 mod write;
 
 #[derive(Default)]
@@ -81,6 +83,13 @@ impl Delete {
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_delete(self))
+    }
+}
+
+impl Merge {
+    pub fn build(&self) -> Result<BuiltQuery> {
+        self.validate()?;
+        Renderer::build_with(|renderer| renderer.render_merge(self))
     }
 }
 

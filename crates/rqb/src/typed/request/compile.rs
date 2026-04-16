@@ -298,6 +298,7 @@ impl SearchSort {
                 qualifier: source.explicit_alias().map(str::to_owned),
             },
             direction: self.dir.into(),
+            nulls: None,
         })
     }
 }

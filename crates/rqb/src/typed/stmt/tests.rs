@@ -1,5 +1,6 @@
 use crate::typed::{
-    BoolExpr, BoolOp, Field, Insert, Meta, OpSet, OrderItem, Select, SelectItem, Source, ValueExpr,
+    BoolExpr, BoolOp, FetchClause, Field, Insert, Meta, OpSet, OrderItem, Select, SelectItem,
+    Source, ValueExpr,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -32,6 +33,7 @@ fn subquery_value_expr_collects_nested_params_at_expression_position() {
         order: Vec::new(),
         limit: None,
         offset: None,
+        fetch: None,
         lock: None,
     }));
     let outer = ValueExpr::Subquery(Box::new(subquery));
@@ -70,6 +72,7 @@ fn select_params_follow_sql_text_order() {
         order: vec![OrderItem::asc(ID)],
         limit: Some(crate::typed::Param::typed(10_i64)),
         offset: Some(crate::typed::Param::typed(5_i64)),
+        fetch: None,
         lock: None,
     }));
 
@@ -80,9 +83,65 @@ fn select_params_follow_sql_text_order() {
 }
 
 #[test]
+fn fetch_with_ties_requires_order_and_excludes_limit() {
+    let without_order = crate::typed::Stmt::Select(Box::new(Select {
+        ctes: Vec::new(),
+        source: users(),
+        joins: Vec::new(),
+        distinct: false,
+        distinct_on: Vec::new(),
+        projection: Vec::new(),
+        filter: None,
+        group_by: Vec::new(),
+        having: None,
+        order: Vec::new(),
+        limit: None,
+        offset: None,
+        fetch: Some(FetchClause {
+            count: ValueExpr::from(10_i32),
+            with_ties: true,
+        }),
+        lock: None,
+    }));
+
+    assert!(matches!(
+        without_order.validate().unwrap_err(),
+        crate::Error::InvalidSelectShape { message }
+            if message == "fetch with ties requires order_by"
+    ));
+
+    let with_limit = crate::typed::Stmt::Select(Box::new(Select {
+        ctes: Vec::new(),
+        source: users(),
+        joins: Vec::new(),
+        distinct: false,
+        distinct_on: Vec::new(),
+        projection: Vec::new(),
+        filter: None,
+        group_by: Vec::new(),
+        having: None,
+        order: vec![OrderItem::asc(ID)],
+        limit: Some(crate::typed::Param::typed(10_i64)),
+        offset: None,
+        fetch: Some(FetchClause {
+            count: ValueExpr::from(10_i32),
+            with_ties: false,
+        }),
+        lock: None,
+    }));
+
+    assert!(matches!(
+        with_limit.validate().unwrap_err(),
+        crate::Error::InvalidSelectShape { message }
+            if message == "limit and fetch cannot both be set"
+    ));
+}
+
+#[test]
 fn delete_requires_filter() {
     let stmt = crate::typed::Stmt::Delete(Box::new(crate::typed::Delete {
         target: users(),
+        using: Vec::new(),
         filter: None,
         returning: Vec::new(),
     }));

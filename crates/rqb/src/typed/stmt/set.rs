@@ -9,6 +9,7 @@ impl SetQuery {
             order: Vec::new(),
             limit: None,
             offset: None,
+            fetch: None,
         }
     }
 
@@ -51,8 +52,47 @@ impl SetQuery {
         self
     }
 
+    pub fn order_asc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::asc_nulls_first(expr));
+        self
+    }
+
+    pub fn order_asc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::asc_nulls_last(expr));
+        self
+    }
+
+    pub fn order_desc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::desc_nulls_first(expr));
+        self
+    }
+
+    pub fn order_desc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::desc_nulls_last(expr));
+        self
+    }
+
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(Param::typed(i64::from(limit)));
+        self.fetch = None;
+        self
+    }
+
+    pub fn fetch_first(mut self, count: impl Into<ValueExpr>) -> Self {
+        self.fetch = Some(FetchClause {
+            count: count.into(),
+            with_ties: false,
+        });
+        self.limit = None;
+        self
+    }
+
+    pub fn fetch_first_with_ties(mut self, count: impl Into<ValueExpr>) -> Self {
+        self.fetch = Some(FetchClause {
+            count: count.into(),
+            with_ties: true,
+        });
+        self.limit = None;
         self
     }
 

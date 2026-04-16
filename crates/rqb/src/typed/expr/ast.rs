@@ -12,6 +12,23 @@ pub enum BoolOp {
     IsNotDistinctFrom,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BooleanTest {
+    True,
+    False,
+    Unknown,
+}
+
+impl BooleanTest {
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::True => "TRUE",
+            Self::False => "FALSE",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
 impl BoolOp {
     pub const fn as_sql(self) -> &'static str {
         match self {
@@ -60,12 +77,51 @@ pub enum WindowFunction {
     DenseRank,
     Lag,
     Lead,
+    FirstValue,
+    LastValue,
+    NthValue,
+    Ntile,
+    PercentRank,
+    CumeDist,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowFrameKind {
+    Rows,
+    Range,
+    Groups,
+}
+
+#[derive(Clone, Debug)]
+pub enum FrameBound {
+    UnboundedPreceding,
+    Preceding(Box<ValueExpr>),
+    CurrentRow,
+    Following(Box<ValueExpr>),
+    UnboundedFollowing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameExclude {
+    CurrentRow,
+    Group,
+    Ties,
+    NoOthers,
+}
+
+#[derive(Clone, Debug)]
+pub struct WindowFrame {
+    pub kind: WindowFrameKind,
+    pub start: FrameBound,
+    pub end: Option<FrameBound>,
+    pub exclude: Option<FrameExclude>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct WindowSpec {
     pub partition_by: Vec<ValueExpr>,
     pub order_by: Vec<OrderItem>,
+    pub frame: Option<Box<WindowFrame>>,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +150,11 @@ pub enum BoolExpr {
         expr: ValueExpr,
         negated: bool,
     },
+    IsBoolean {
+        expr: ValueExpr,
+        test: BooleanTest,
+        negated: bool,
+    },
     InList {
         expr: ValueExpr,
         values: Vec<ValueExpr>,
@@ -116,6 +177,11 @@ pub enum BoolExpr {
         case_insensitive: bool,
         negated: bool,
         escape: bool,
+    },
+    SimilarTo {
+        expr: ValueExpr,
+        pattern: ValueExpr,
+        negated: bool,
     },
     Regex {
         expr: ValueExpr,
@@ -156,6 +222,7 @@ pub enum ValueExpr {
     },
     Excluded(Meta),
     Param(Param),
+    Keyword(&'static str),
     Function {
         name: &'static str,
         args: Vec<ValueExpr>,
@@ -165,6 +232,12 @@ pub enum ValueExpr {
         args: Vec<ValueExpr>,
         distinct: bool,
         order_by: Vec<OrderItem>,
+        filter: Option<Box<BoolExpr>>,
+    },
+    OrderedSetAggregate {
+        name: &'static str,
+        args: Vec<ValueExpr>,
+        within_group: Vec<OrderItem>,
         filter: Option<Box<BoolExpr>>,
     },
     Case {
@@ -179,6 +252,21 @@ pub enum ValueExpr {
         left: Box<ValueExpr>,
         op: ValueOp,
         right: Box<ValueExpr>,
+    },
+    Subscript {
+        expr: Box<ValueExpr>,
+        index: Box<ValueExpr>,
+    },
+    Slice {
+        expr: Box<ValueExpr>,
+        start: Option<Box<ValueExpr>>,
+        end: Option<Box<ValueExpr>>,
+    },
+    Array(Vec<ValueExpr>),
+    Row(Vec<ValueExpr>),
+    Extract {
+        field: &'static str,
+        expr: Box<ValueExpr>,
     },
     Window {
         function: WindowFunction,

@@ -16,6 +16,10 @@ pub fn delete_from(target: Source) -> Delete {
     Delete::from(target)
 }
 
+pub fn merge_into(target: Source, using: Source, on: BoolExpr) -> Merge {
+    Merge::into(target, using, on)
+}
+
 pub fn raw(sql: impl Into<String>) -> RawStmt {
     RawStmt::new(sql)
 }

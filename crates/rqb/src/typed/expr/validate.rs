@@ -12,7 +12,7 @@ impl BoolExpr {
                 left.validate()?;
                 right.validate()
             }
-            Self::IsNull { expr, .. } => expr.validate(),
+            Self::IsNull { expr, .. } | Self::IsBoolean { expr, .. } => expr.validate(),
             Self::InList { expr, values, .. } => {
                 validate_equality_expr(expr, "in")?;
                 expr.validate()?;
@@ -35,6 +35,11 @@ impl BoolExpr {
                 high.validate()
             }
             Self::Like { expr, pattern, .. } => {
+                validate_like_expr(expr)?;
+                expr.validate()?;
+                pattern.validate()
+            }
+            Self::SimilarTo { expr, pattern, .. } => {
                 validate_like_expr(expr)?;
                 expr.validate()?;
                 pattern.validate()
@@ -103,6 +108,29 @@ impl ValueExpr {
                 }
                 Ok(())
             }
+            Self::OrderedSetAggregate {
+                filter,
+                args,
+                within_group,
+                ..
+            } => {
+                for arg in args {
+                    arg.validate()?;
+                }
+                if within_group.is_empty() {
+                    return Err(Error::InvalidTypedOperator {
+                        field: "ordered_set_aggregate".to_owned(),
+                        operator: "within_group".to_owned(),
+                    });
+                }
+                for item in within_group {
+                    item.validate()?;
+                }
+                if let Some(filter) = filter {
+                    filter.validate()?;
+                }
+                Ok(())
+            }
             Self::Function { args, .. } => {
                 for arg in args {
                     arg.validate()?;
@@ -124,6 +152,27 @@ impl ValueExpr {
                 left.validate()?;
                 right.validate()
             }
+            Self::Subscript { expr, index } => {
+                expr.validate()?;
+                index.validate()
+            }
+            Self::Slice { expr, start, end } => {
+                expr.validate()?;
+                if let Some(start) = start {
+                    start.validate()?;
+                }
+                if let Some(end) = end {
+                    end.validate()?;
+                }
+                Ok(())
+            }
+            Self::Array(values) | Self::Row(values) => {
+                for value in values {
+                    value.validate()?;
+                }
+                Ok(())
+            }
+            Self::Extract { expr, .. } => expr.validate(),
             Self::Window { args, spec, .. } => {
                 for arg in args {
                     arg.validate()?;
@@ -134,12 +183,34 @@ impl ValueExpr {
                 for item in &spec.order_by {
                     item.validate()?;
                 }
+                if let Some(frame) = &spec.frame {
+                    frame.validate()?;
+                }
                 Ok(())
             }
             Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
             Self::Subquery(stmt) => stmt.validate(),
-            Self::Field { .. } | Self::Excluded(_) | Self::Param(_) => Ok(()),
+            Self::Field { .. } | Self::Excluded(_) | Self::Param(_) | Self::Keyword(_) => Ok(()),
         }
+    }
+}
+
+impl super::FrameBound {
+    fn validate(&self) -> Result<()> {
+        match self {
+            Self::Preceding(expr) | Self::Following(expr) => expr.validate(),
+            Self::UnboundedPreceding | Self::CurrentRow | Self::UnboundedFollowing => Ok(()),
+        }
+    }
+}
+
+impl super::WindowFrame {
+    fn validate(&self) -> Result<()> {
+        self.start.validate()?;
+        if let Some(end) = &self.end {
+            end.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -206,7 +277,7 @@ fn validate_infix_expr(expr: &ValueExpr, op: &'static str) -> Result<()> {
     };
     let supported = match op {
         "?" | "?|" | "?&" => matches!(meta.pg, "jsonb"),
-        "@>" | "<@" | "&&" => {
+        "@>" | "<@" | "&&" | "-|-" | "<<" | ">>" | "&<" | "&>" => {
             meta.pg.ends_with("[]")
                 || matches!(
                     meta.pg,
@@ -221,6 +292,10 @@ fn validate_infix_expr(expr: &ValueExpr, op: &'static str) -> Result<()> {
                         | "cidr"
                 )
         }
+        "@@" => matches!(
+            meta.pg,
+            "text" | "varchar" | "bpchar" | "citext" | "tsvector"
+        ),
         _ => true,
     };
     if supported {

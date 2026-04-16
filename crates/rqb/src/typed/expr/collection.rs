@@ -41,6 +41,14 @@ where
     pub fn is_not_empty(self) -> BoolExpr {
         self.reference().is_not_empty()
     }
+
+    pub fn element(self, index: i32) -> ValueExpr {
+        self.reference().element(index)
+    }
+
+    pub fn slice(self, start: Option<i32>, end: Option<i32>) -> ValueExpr {
+        self.reference().slice(start, end)
+    }
 }
 
 impl<T> FieldRef<Vec<T>>
@@ -84,6 +92,21 @@ where
         BoolExpr::ArrayIsEmpty {
             expr: self.expr(),
             negated: true,
+        }
+    }
+
+    pub fn element(self, index: i32) -> ValueExpr {
+        ValueExpr::Subscript {
+            expr: Box::new(self.expr()),
+            index: Box::new(ValueExpr::Param(Param::typed(index))),
+        }
+    }
+
+    pub fn slice(self, start: Option<i32>, end: Option<i32>) -> ValueExpr {
+        ValueExpr::Slice {
+            expr: Box::new(self.expr()),
+            start: start.map(|value| Box::new(ValueExpr::Param(Param::typed(value)))),
+            end: end.map(|value| Box::new(ValueExpr::Param(Param::typed(value)))),
         }
     }
 
@@ -133,6 +156,22 @@ impl Field<serde_json::Value> {
     pub fn json_contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.reference().json_contained_by(value)
     }
+
+    pub fn get(self, key: impl Into<String>) -> ValueExpr {
+        self.reference().get(key)
+    }
+
+    pub fn get_text(self, key: impl Into<String>) -> ValueExpr {
+        self.reference().get_text(key)
+    }
+
+    pub fn path(self, path: Vec<String>) -> ValueExpr {
+        self.reference().path(path)
+    }
+
+    pub fn path_text(self, path: Vec<String>) -> ValueExpr {
+        self.reference().path_text(path)
+    }
 }
 
 impl<T> Field<sqlx::postgres::types::PgRange<T>>
@@ -159,6 +198,26 @@ where
 
     pub fn overlaps(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().overlaps(value)
+    }
+
+    pub fn adjacent_to(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.reference().adjacent_to(value)
+    }
+
+    pub fn strictly_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.reference().strictly_left_of(value)
+    }
+
+    pub fn strictly_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.reference().strictly_right_of(value)
+    }
+
+    pub fn does_not_extend_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.reference().does_not_extend_right_of(value)
+    }
+
+    pub fn does_not_extend_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.reference().does_not_extend_left_of(value)
     }
 }
 
@@ -191,6 +250,26 @@ where
 
     pub fn overlaps(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("&&", value)
+    }
+
+    pub fn adjacent_to(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.range_infix("-|-", value)
+    }
+
+    pub fn strictly_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.range_infix("<<", value)
+    }
+
+    pub fn strictly_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.range_infix(">>", value)
+    }
+
+    pub fn does_not_extend_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.range_infix("&<", value)
+    }
+
+    pub fn does_not_extend_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
+        self.range_infix("&>", value)
     }
 
     fn range_infix(self, op: &'static str, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
@@ -232,12 +311,36 @@ impl FieldRef<serde_json::Value> {
         self.json_infix("<@", Param::typed(value))
     }
 
+    pub fn get(self, key: impl Into<String>) -> ValueExpr {
+        self.json_value_infix("->", Param::typed(key.into()))
+    }
+
+    pub fn get_text(self, key: impl Into<String>) -> ValueExpr {
+        self.json_value_infix("->>", Param::typed(key.into()))
+    }
+
+    pub fn path(self, path: Vec<String>) -> ValueExpr {
+        self.json_value_infix("#>", Param::typed(path))
+    }
+
+    pub fn path_text(self, path: Vec<String>) -> ValueExpr {
+        self.json_value_infix("#>>", Param::typed(path))
+    }
+
     fn json_infix(self, op: &'static str, param: Param) -> BoolExpr {
         BoolExpr::Infix {
             left: self.expr(),
             op,
             right: ValueExpr::Param(param),
             negated: false,
+        }
+    }
+
+    fn json_value_infix(self, op: &'static str, param: Param) -> ValueExpr {
+        ValueExpr::Binary {
+            left: Box::new(self.expr()),
+            op: super::ValueOp::Custom(op),
+            right: Box::new(ValueExpr::Param(param)),
         }
     }
 }

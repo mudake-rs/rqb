@@ -44,6 +44,15 @@ impl OrderDirection {
     }
 }
 
+impl NullsPosition {
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::First => "NULLS FIRST",
+            Self::Last => "NULLS LAST",
+        }
+    }
+}
+
 impl LockMode {
     pub const fn as_sql(self) -> &'static str {
         match self {
@@ -70,6 +79,7 @@ impl RowLock {
         Self {
             mode,
             wait: LockWait::Wait,
+            of: Vec::new(),
         }
     }
 
@@ -80,6 +90,11 @@ impl RowLock {
 
     pub const fn skip_locked(mut self) -> Self {
         self.wait = LockWait::SkipLocked;
+        self
+    }
+
+    pub fn of(mut self, relation: impl Into<String>) -> Self {
+        self.of.push(relation.into());
         self
     }
 }
@@ -95,6 +110,7 @@ impl OrderItem {
         Self {
             expr: expr.into(),
             direction: OrderDirection::Asc,
+            nulls: None,
         }
     }
 
@@ -102,6 +118,51 @@ impl OrderItem {
         Self {
             expr: expr.into(),
             direction: OrderDirection::Desc,
+            nulls: None,
         }
+    }
+
+    pub fn nulls_first(mut self) -> Self {
+        self.nulls = Some(NullsPosition::First);
+        self
+    }
+
+    pub fn nulls_last(mut self) -> Self {
+        self.nulls = Some(NullsPosition::Last);
+        self
+    }
+
+    pub fn asc_nulls_first(expr: impl Into<ValueExpr>) -> Self {
+        Self::asc(expr).nulls_first()
+    }
+
+    pub fn asc_nulls_last(expr: impl Into<ValueExpr>) -> Self {
+        Self::asc(expr).nulls_last()
+    }
+
+    pub fn desc_nulls_first(expr: impl Into<ValueExpr>) -> Self {
+        Self::desc(expr).nulls_first()
+    }
+
+    pub fn desc_nulls_last(expr: impl Into<ValueExpr>) -> Self {
+        Self::desc(expr).nulls_last()
+    }
+}
+
+impl GroupByItem {
+    pub fn expr(expr: impl Into<ValueExpr>) -> Self {
+        Self::Expr(expr.into())
+    }
+
+    pub fn rollup(exprs: impl IntoIterator<Item = ValueExpr>) -> Self {
+        Self::Rollup(exprs.into_iter().collect())
+    }
+
+    pub fn cube(exprs: impl IntoIterator<Item = ValueExpr>) -> Self {
+        Self::Cube(exprs.into_iter().collect())
+    }
+
+    pub fn grouping_sets(sets: impl IntoIterator<Item = Vec<ValueExpr>>) -> Self {
+        Self::GroupingSets(sets.into_iter().collect())
     }
 }

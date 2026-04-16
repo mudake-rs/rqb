@@ -29,6 +29,28 @@ pub enum Source {
         params: Vec<Param>,
         fields: Vec<Meta>,
     },
+    Function {
+        name: &'static str,
+        args: Vec<crate::typed::ValueExpr>,
+        alias: String,
+        fields: Vec<Meta>,
+        ordinality: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CteMaterialization {
+    Materialized,
+    NotMaterialized,
+}
+
+impl CteMaterialization {
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Materialized => "MATERIALIZED",
+            Self::NotMaterialized => "NOT MATERIALIZED",
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +58,7 @@ pub struct Cte {
     pub name: String,
     pub columns: Vec<String>,
     pub recursive: bool,
+    pub materialization: Option<CteMaterialization>,
     pub stmt: Box<Stmt>,
     pub fields: Vec<Meta>,
 }
@@ -108,6 +131,21 @@ pub fn raw_source(
         alias: alias.into(),
         params: params.into(),
         fields: fields.into(),
+    }
+}
+
+pub fn function_source(
+    name: &'static str,
+    args: impl Into<Vec<crate::typed::ValueExpr>>,
+    alias: impl Into<String>,
+    fields: impl Into<Vec<Meta>>,
+) -> Source {
+    Source::Function {
+        name,
+        args: args.into(),
+        alias: alias.into(),
+        fields: fields.into(),
+        ordinality: false,
     }
 }
 
@@ -193,6 +231,7 @@ impl Cte {
             name: name.into(),
             columns: Vec::new(),
             recursive: false,
+            materialization: None,
             stmt: Box::new(stmt.into()),
             fields: fields.into(),
         }
@@ -209,6 +248,16 @@ impl Cte {
 
     pub fn recursive(mut self) -> Self {
         self.recursive = true;
+        self
+    }
+
+    pub fn materialized(mut self) -> Self {
+        self.materialization = Some(CteMaterialization::Materialized);
+        self
+    }
+
+    pub fn not_materialized(mut self) -> Self {
+        self.materialization = Some(CteMaterialization::NotMaterialized);
         self
     }
 
@@ -243,6 +292,7 @@ impl Source {
             Self::Cte { .. } => "cte",
             Self::Subquery { .. } => "subquery",
             Self::Raw { .. } => "raw",
+            Self::Function { .. } => "function",
         }
     }
 
@@ -256,9 +306,16 @@ impl Source {
             Self::Table { alias: current, .. }
             | Self::View { alias: current, .. }
             | Self::Cte { alias: current, .. } => *current = Some(alias),
-            Self::Subquery { alias: current, .. } | Self::Raw { alias: current, .. } => {
-                *current = alias;
-            }
+            Self::Subquery { alias: current, .. }
+            | Self::Raw { alias: current, .. }
+            | Self::Function { alias: current, .. } => *current = alias,
+        }
+        self
+    }
+
+    pub fn with_ordinality(mut self) -> Self {
+        if let Self::Function { ordinality, .. } = &mut self {
+            *ordinality = true;
         }
         self
     }
@@ -268,7 +325,9 @@ impl Source {
             Self::Table { alias, .. } | Self::View { alias, .. } | Self::Cte { alias, .. } => {
                 alias.as_deref()
             }
-            Self::Subquery { alias, .. } | Self::Raw { alias, .. } => Some(alias),
+            Self::Subquery { alias, .. }
+            | Self::Raw { alias, .. }
+            | Self::Function { alias, .. } => Some(alias),
         }
     }
 
@@ -279,11 +338,10 @@ impl Source {
                     f(field);
                 }
             }
-            Self::Cte { fields, .. } | Self::Subquery { fields, .. } | Self::Raw { fields, .. } => {
-                for field in fields {
-                    f(field);
-                }
-            }
+            Self::Cte { fields, .. }
+            | Self::Subquery { fields, .. }
+            | Self::Raw { fields, .. }
+            | Self::Function { fields, .. } => fields.iter().for_each(f),
         }
     }
 
@@ -291,6 +349,12 @@ impl Source {
         match self {
             Self::Subquery { stmt, .. } => stmt.validate(),
             Self::Raw { sql, params, .. } => raw::validate_bind_count(sql, params.len()),
+            Self::Function { args, .. } => {
+                for arg in args {
+                    arg.validate()?;
+                }
+                Ok(())
+            }
             Self::Table { .. } | Self::View { .. } | Self::Cte { .. } => Ok(()),
         }
     }
@@ -301,6 +365,11 @@ impl Source {
             Self::Raw {
                 params: raw_params, ..
             } => params.extend(raw_params.iter().cloned()),
+            Self::Function { args, .. } => {
+                for arg in args {
+                    arg.collect_params(params);
+                }
+            }
             Self::Table { .. } | Self::View { .. } | Self::Cte { .. } => {}
         }
     }

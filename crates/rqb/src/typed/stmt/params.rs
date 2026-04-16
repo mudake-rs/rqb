@@ -6,6 +6,32 @@ impl OrderItem {
     }
 }
 
+impl FetchClause {
+    fn collect_params(&self, params: &mut Vec<Param>) {
+        self.count.collect_params(params);
+    }
+}
+
+impl GroupByItem {
+    fn collect_params(&self, params: &mut Vec<Param>) {
+        match self {
+            Self::Expr(expr) => expr.collect_params(params),
+            Self::Rollup(exprs) | Self::Cube(exprs) => {
+                for expr in exprs {
+                    expr.collect_params(params);
+                }
+            }
+            Self::GroupingSets(sets) => {
+                for set in sets {
+                    for expr in set {
+                        expr.collect_params(params);
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl Stmt {
     pub fn params(&self) -> Params {
         let mut params = Vec::new();
@@ -20,6 +46,7 @@ impl Stmt {
             Self::Insert(insert) => insert.collect_params(params),
             Self::Update(update) => update.collect_params(params),
             Self::Delete(delete) => delete.collect_params(params),
+            Self::Merge(merge) => merge.collect_params(params),
             Self::Raw(raw_stmt) => params.extend(raw_stmt.params.iter().cloned()),
         }
     }
@@ -37,6 +64,9 @@ impl SetQuery {
         }
         if let Some(offset) = &self.offset {
             params.push(offset.clone());
+        }
+        if let Some(fetch) = &self.fetch {
+            fetch.collect_params(params);
         }
     }
 }
@@ -73,6 +103,9 @@ impl Select {
         }
         if let Some(offset) = &self.offset {
             params.push(offset.clone());
+        }
+        if let Some(fetch) = &self.fetch {
+            fetch.collect_params(params);
         }
     }
 }
@@ -122,6 +155,9 @@ impl Update {
         for assignment in &self.assignments {
             assignment.value.collect_params(params);
         }
+        for source in &self.from {
+            source.collect_from_params(params);
+        }
         if let Some(filter) = &self.filter {
             filter.collect_params(params);
         }
@@ -131,8 +167,53 @@ impl Update {
 
 impl Delete {
     fn collect_params(&self, params: &mut Vec<Param>) {
+        for source in &self.using {
+            source.collect_from_params(params);
+        }
         if let Some(filter) = &self.filter {
             filter.collect_params(params);
+        }
+        collect_returning_params(&self.returning, params);
+    }
+}
+
+impl MergeAction {
+    fn collect_params(&self, params: &mut Vec<Param>) {
+        match self {
+            Self::DoNothing { condition, .. } | Self::Delete { condition, .. } => {
+                if let Some(condition) = condition {
+                    condition.collect_params(params);
+                }
+            }
+            Self::Insert {
+                condition,
+                assignments,
+            }
+            | Self::Update {
+                condition,
+                assignments,
+                ..
+            } => {
+                if let Some(condition) = condition {
+                    condition.collect_params(params);
+                }
+                for assignment in assignments {
+                    assignment.value.collect_params(params);
+                }
+            }
+        }
+    }
+}
+
+impl Merge {
+    fn collect_params(&self, params: &mut Vec<Param>) {
+        for cte in &self.ctes {
+            cte.collect_params(params);
+        }
+        self.using.collect_from_params(params);
+        self.on.collect_params(params);
+        for action in &self.actions {
+            action.collect_params(params);
         }
         collect_returning_params(&self.returning, params);
     }

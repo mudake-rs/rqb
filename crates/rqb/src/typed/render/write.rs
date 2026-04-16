@@ -46,6 +46,7 @@ impl Renderer {
         self.render_write_target(&update.target);
         self.sql.push_str(" SET ");
         self.render_assignments(&update.assignments)?;
+        self.render_update_from(&update.from)?;
         if let Some(filter) = &update.filter {
             self.sql.push_str(" WHERE ");
             self.render_bool(filter)?;
@@ -57,11 +58,129 @@ impl Renderer {
     pub(super) fn render_delete(&mut self, delete: &Delete) -> Result<()> {
         self.sql.push_str("DELETE FROM ");
         self.render_write_target(&delete.target);
+        self.render_delete_using(&delete.using)?;
         if let Some(filter) = &delete.filter {
             self.sql.push_str(" WHERE ");
             self.render_bool(filter)?;
         }
         self.render_returning(&delete.returning)?;
+        Ok(())
+    }
+
+    pub(super) fn render_merge(&mut self, merge: &Merge) -> Result<()> {
+        self.render_ctes(&merge.ctes)?;
+        self.sql.push_str("MERGE INTO ");
+        self.render_merge_target(&merge.target);
+        self.sql.push_str(" USING ");
+        self.render_source(&merge.using)?;
+        self.sql.push_str(" ON ");
+        self.render_bool(&merge.on)?;
+        for action in &merge.actions {
+            self.render_merge_action(action)?;
+        }
+        self.render_returning(&merge.returning)?;
+        Ok(())
+    }
+
+    pub(super) fn render_merge_target(&mut self, target: &Source) {
+        match target {
+            Source::Table { name, alias, .. } | Source::View { name, alias, .. } => {
+                write_quoted_qualified(&mut self.sql, name);
+                self.render_optional_alias(alias.as_deref());
+            }
+            Source::Cte { name, alias, .. } => {
+                write_quoted_ident(&mut self.sql, name);
+                self.render_optional_alias(alias.as_deref());
+            }
+            Source::Subquery { .. } | Source::Raw { .. } | Source::Function { .. } => {
+                unreachable!("merge target validated as table")
+            }
+        }
+    }
+
+    pub(super) fn render_merge_action(&mut self, action: &MergeAction) -> Result<()> {
+        match action {
+            MergeAction::DoNothing { when, condition } => {
+                self.render_merge_when(*when, condition.as_deref())?;
+                self.sql.push_str(" THEN DO NOTHING");
+                Ok(())
+            }
+            MergeAction::Insert {
+                condition,
+                assignments,
+            } => {
+                self.render_merge_when(MergeWhen::NotMatched, condition.as_deref())?;
+                self.sql.push_str(" THEN INSERT (");
+                for (idx, assignment) in assignments.iter().enumerate() {
+                    if idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    write_quoted_ident(&mut self.sql, assignment.field.db);
+                }
+                self.sql.push_str(") VALUES (");
+                for (idx, assignment) in assignments.iter().enumerate() {
+                    if idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    self.render_value(&assignment.value)?;
+                }
+                self.sql.push(')');
+                Ok(())
+            }
+            MergeAction::Update {
+                when,
+                condition,
+                assignments,
+            } => {
+                self.render_merge_when(*when, condition.as_deref())?;
+                self.sql.push_str(" THEN UPDATE SET ");
+                self.render_assignments(assignments)
+            }
+            MergeAction::Delete { when, condition } => {
+                self.render_merge_when(*when, condition.as_deref())?;
+                self.sql.push_str(" THEN DELETE");
+                Ok(())
+            }
+        }
+    }
+
+    pub(super) fn render_merge_when(
+        &mut self,
+        when: MergeWhen,
+        condition: Option<&BoolExpr>,
+    ) -> Result<()> {
+        self.sql.push_str(" WHEN ");
+        self.sql.push_str(when.as_sql());
+        if let Some(condition) = condition {
+            self.sql.push_str(" AND ");
+            self.render_bool(condition)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn render_update_from(&mut self, sources: &[Source]) -> Result<()> {
+        if sources.is_empty() {
+            return Ok(());
+        }
+        self.sql.push_str(" FROM ");
+        self.render_source_list(sources)
+    }
+
+    pub(super) fn render_delete_using(&mut self, sources: &[Source]) -> Result<()> {
+        if sources.is_empty() {
+            return Ok(());
+        }
+        self.sql.push_str(" USING ");
+        self.render_source_list(sources)
+    }
+
+    pub(super) fn render_source_list(&mut self, sources: &[Source]) -> Result<()> {
+        for (idx, source) in sources.iter().enumerate() {
+            if idx > 0 {
+                self.sql.push_str(", ");
+            }
+            self.render_source(source)?;
+        }
         Ok(())
     }
     pub(super) fn render_assignments(&mut self, assignments: &[Assignment]) -> Result<()> {

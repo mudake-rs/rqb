@@ -1,7 +1,8 @@
 use crate::typed::{OrderItem, Param};
 
 use super::{
-    OffsetWindowFunctionBuilder, ValueExpr, WindowFunction, WindowFunctionBuilder, WindowSpec,
+    FrameBound, FrameExclude, OffsetWindowFunctionBuilder, ValueExpr, WindowFrame, WindowFrameKind,
+    WindowFunction, WindowFunctionBuilder, WindowSpec,
 };
 
 impl WindowFunction {
@@ -12,7 +13,55 @@ impl WindowFunction {
             Self::DenseRank => "dense_rank",
             Self::Lag => "lag",
             Self::Lead => "lead",
+            Self::FirstValue => "first_value",
+            Self::LastValue => "last_value",
+            Self::NthValue => "nth_value",
+            Self::Ntile => "ntile",
+            Self::PercentRank => "percent_rank",
+            Self::CumeDist => "cume_dist",
         }
+    }
+}
+
+impl WindowFrameKind {
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Rows => "ROWS",
+            Self::Range => "RANGE",
+            Self::Groups => "GROUPS",
+        }
+    }
+}
+
+impl FrameExclude {
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::CurrentRow => "EXCLUDE CURRENT ROW",
+            Self::Group => "EXCLUDE GROUP",
+            Self::Ties => "EXCLUDE TIES",
+            Self::NoOthers => "EXCLUDE NO OTHERS",
+        }
+    }
+}
+
+impl WindowFrame {
+    pub fn new(kind: WindowFrameKind, start: FrameBound) -> Self {
+        Self {
+            kind,
+            start,
+            end: None,
+            exclude: None,
+        }
+    }
+
+    pub fn between(mut self, end: FrameBound) -> Self {
+        self.end = Some(end);
+        self
+    }
+
+    pub fn exclude(mut self, exclude: FrameExclude) -> Self {
+        self.exclude = Some(exclude);
+        self
     }
 }
 
@@ -39,6 +88,43 @@ impl WindowSpec {
     pub fn order_desc(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::desc(expr));
         self
+    }
+
+    pub fn order_asc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order_by.push(OrderItem::asc_nulls_first(expr));
+        self
+    }
+
+    pub fn order_asc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order_by.push(OrderItem::asc_nulls_last(expr));
+        self
+    }
+
+    pub fn order_desc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order_by.push(OrderItem::desc_nulls_first(expr));
+        self
+    }
+
+    pub fn order_desc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order_by.push(OrderItem::desc_nulls_last(expr));
+        self
+    }
+
+    pub fn frame(mut self, frame: WindowFrame) -> Self {
+        self.frame = Some(Box::new(frame));
+        self
+    }
+
+    pub fn rows(self, start: FrameBound) -> Self {
+        self.frame(WindowFrame::new(WindowFrameKind::Rows, start))
+    }
+
+    pub fn range(self, start: FrameBound) -> Self {
+        self.frame(WindowFrame::new(WindowFrameKind::Range, start))
+    }
+
+    pub fn groups(self, start: FrameBound) -> Self {
+        self.frame(WindowFrame::new(WindowFrameKind::Groups, start))
     }
 }
 
@@ -91,71 +177,6 @@ pub fn window() -> WindowSpec {
     WindowSpec::new()
 }
 
-pub fn count_all() -> ValueExpr {
-    aggregate("count", [], false)
-}
-
-pub fn count(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("count", [expr.into()], false)
-}
-
-pub fn count_distinct(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("count", [expr.into()], true)
-}
-
-pub fn sum(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("sum", [expr.into()], false)
-}
-
-pub fn avg(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("avg", [expr.into()], false)
-}
-
-pub fn min(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("min", [expr.into()], false)
-}
-
-pub fn max(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("max", [expr.into()], false)
-}
-
-pub fn array_agg(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("array_agg", [expr.into()], false)
-}
-
-pub fn array_agg_distinct(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("array_agg", [expr.into()], true)
-}
-
-pub fn json_agg(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("json_agg", [expr.into()], false)
-}
-
-pub fn string_agg(expr: impl Into<ValueExpr>, separator: impl Into<String>) -> ValueExpr {
-    aggregate(
-        "string_agg",
-        [
-            expr.into(),
-            ValueExpr::Param(Param::typed(separator.into())),
-        ],
-        false,
-    )
-}
-
-pub fn aggregate(
-    name: &'static str,
-    args: impl IntoIterator<Item = ValueExpr>,
-    distinct: bool,
-) -> ValueExpr {
-    ValueExpr::Aggregate {
-        name,
-        args: args.into_iter().collect(),
-        distinct,
-        order_by: Vec::new(),
-        filter: None,
-    }
-}
-
 pub fn partition_by(expr: impl Into<ValueExpr>) -> WindowSpec {
     WindowSpec::new().partition_by(expr)
 }
@@ -170,6 +191,30 @@ pub fn rank() -> WindowFunctionBuilder {
 
 pub fn dense_rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::DenseRank, [])
+}
+
+pub fn first_value(expr: impl Into<ValueExpr>) -> WindowFunctionBuilder {
+    window_function(WindowFunction::FirstValue, [expr.into()])
+}
+
+pub fn last_value(expr: impl Into<ValueExpr>) -> WindowFunctionBuilder {
+    window_function(WindowFunction::LastValue, [expr.into()])
+}
+
+pub fn nth_value(expr: impl Into<ValueExpr>, nth: impl Into<ValueExpr>) -> WindowFunctionBuilder {
+    window_function(WindowFunction::NthValue, [expr.into(), nth.into()])
+}
+
+pub fn ntile(buckets: impl Into<ValueExpr>) -> WindowFunctionBuilder {
+    window_function(WindowFunction::Ntile, [buckets.into()])
+}
+
+pub fn percent_rank() -> WindowFunctionBuilder {
+    window_function(WindowFunction::PercentRank, [])
+}
+
+pub fn cume_dist() -> WindowFunctionBuilder {
+    window_function(WindowFunction::CumeDist, [])
 }
 
 pub fn lag(expr: impl Into<ValueExpr>) -> OffsetWindowFunctionBuilder {
@@ -188,6 +233,38 @@ where
         function,
         args: args.into_iter().collect(),
     }
+}
+
+pub fn rows(start: FrameBound) -> WindowFrame {
+    WindowFrame::new(WindowFrameKind::Rows, start)
+}
+
+pub fn range(start: FrameBound) -> WindowFrame {
+    WindowFrame::new(WindowFrameKind::Range, start)
+}
+
+pub fn groups(start: FrameBound) -> WindowFrame {
+    WindowFrame::new(WindowFrameKind::Groups, start)
+}
+
+pub fn unbounded_preceding() -> FrameBound {
+    FrameBound::UnboundedPreceding
+}
+
+pub fn preceding(expr: impl Into<ValueExpr>) -> FrameBound {
+    FrameBound::Preceding(Box::new(expr.into()))
+}
+
+pub fn current_row() -> FrameBound {
+    FrameBound::CurrentRow
+}
+
+pub fn following(expr: impl Into<ValueExpr>) -> FrameBound {
+    FrameBound::Following(Box::new(expr.into()))
+}
+
+pub fn unbounded_following() -> FrameBound {
+    FrameBound::UnboundedFollowing
 }
 
 fn offset_window_function(

@@ -8,6 +8,7 @@ impl Renderer {
             Stmt::Insert(insert) => self.render_insert(insert),
             Stmt::Update(update) => self.render_update(update),
             Stmt::Delete(delete) => self.render_delete(delete),
+            Stmt::Merge(merge) => self.render_merge(merge),
             Stmt::Raw(raw) => self.render_raw_stmt(raw),
         }
     }
@@ -41,7 +42,8 @@ impl Renderer {
             self.sql.push_str(" OFFSET ");
             self.push_param(offset.clone());
         }
-        self.render_lock(select.lock);
+        self.render_fetch(select.fetch.as_ref())?;
+        self.render_lock(select.lock.as_ref());
         Ok(())
     }
     pub(super) fn render_set(&mut self, set: &SetQuery) -> Result<()> {
@@ -61,6 +63,7 @@ impl Renderer {
             self.sql.push_str(" OFFSET ");
             self.push_param(offset.clone());
         }
+        self.render_fetch(set.fetch.as_ref())?;
         Ok(())
     }
     pub(super) fn render_projection(&mut self, select: &Select) -> Result<()> {
@@ -112,30 +115,96 @@ impl Renderer {
             self.render_value(&item.expr)?;
             self.sql.push(' ');
             self.sql.push_str(item.direction.as_sql());
+            if let Some(nulls) = item.nulls {
+                self.sql.push(' ');
+                self.sql.push_str(nulls.as_sql());
+            }
         }
         Ok(())
     }
 
-    pub(super) fn render_group_by(&mut self, group_by: &[ValueExpr]) -> Result<()> {
+    pub(super) fn render_fetch(&mut self, fetch: Option<&FetchClause>) -> Result<()> {
+        let Some(fetch) = fetch else {
+            return Ok(());
+        };
+        self.sql.push_str(" FETCH FIRST ");
+        self.render_value(&fetch.count)?;
+        self.sql.push_str(if fetch.with_ties {
+            " ROWS WITH TIES"
+        } else {
+            " ROWS ONLY"
+        });
+        Ok(())
+    }
+
+    pub(super) fn render_group_by(&mut self, group_by: &[GroupByItem]) -> Result<()> {
         if group_by.is_empty() {
             return Ok(());
         }
         self.sql.push_str(" GROUP BY ");
-        for (idx, expr) in group_by.iter().enumerate() {
+        for (idx, item) in group_by.iter().enumerate() {
+            if idx > 0 {
+                self.sql.push_str(", ");
+            }
+            self.render_group_by_item(item)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn render_group_by_item(&mut self, item: &GroupByItem) -> Result<()> {
+        match item {
+            GroupByItem::Expr(expr) => self.render_value(expr),
+            GroupByItem::Rollup(exprs) => self.render_grouping_exprs("ROLLUP", exprs),
+            GroupByItem::Cube(exprs) => self.render_grouping_exprs("CUBE", exprs),
+            GroupByItem::GroupingSets(sets) => {
+                self.sql.push_str("GROUPING SETS (");
+                for (idx, set) in sets.iter().enumerate() {
+                    if idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    self.sql.push('(');
+                    for (expr_idx, expr) in set.iter().enumerate() {
+                        if expr_idx > 0 {
+                            self.sql.push_str(", ");
+                        }
+                        self.render_value(expr)?;
+                    }
+                    self.sql.push(')');
+                }
+                self.sql.push(')');
+                Ok(())
+            }
+        }
+    }
+
+    pub(super) fn render_grouping_exprs(&mut self, name: &str, exprs: &[ValueExpr]) -> Result<()> {
+        self.sql.push_str(name);
+        self.sql.push('(');
+        for (idx, expr) in exprs.iter().enumerate() {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
             self.render_value(expr)?;
         }
+        self.sql.push(')');
         Ok(())
     }
 
-    pub(super) fn render_lock(&mut self, lock: Option<crate::typed::RowLock>) {
+    pub(super) fn render_lock(&mut self, lock: Option<&crate::typed::RowLock>) {
         let Some(lock) = lock else {
             return;
         };
         self.sql.push(' ');
         self.sql.push_str(lock.mode.as_sql());
+        if !lock.of.is_empty() {
+            self.sql.push_str(" OF ");
+            for (idx, relation) in lock.of.iter().enumerate() {
+                if idx > 0 {
+                    self.sql.push_str(", ");
+                }
+                write_quoted_qualified(&mut self.sql, relation);
+            }
+        }
         if let Some(wait) = lock.wait.as_sql() {
             self.sql.push(' ');
             self.sql.push_str(wait);

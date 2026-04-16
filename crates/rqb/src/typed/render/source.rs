@@ -25,7 +25,12 @@ impl Renderer {
                 }
                 self.sql.push(')');
             }
-            self.sql.push_str(" AS (");
+            self.sql.push_str(" AS");
+            if let Some(materialization) = cte.materialization {
+                self.sql.push(' ');
+                self.sql.push_str(materialization.as_sql());
+            }
+            self.sql.push_str(" (");
             self.render_stmt(&cte.stmt)?;
             self.sql.push(')');
         }
@@ -75,6 +80,31 @@ impl Renderer {
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
             }
+            Source::Function {
+                name,
+                args,
+                alias,
+                ordinality,
+                fields,
+                ..
+            } => {
+                self.render_call(name, args)?;
+                if *ordinality {
+                    self.sql.push_str(" WITH ORDINALITY");
+                }
+                self.sql.push_str(" AS ");
+                write_quoted_ident(&mut self.sql, alias);
+                if !fields.is_empty() {
+                    self.sql.push_str(" (");
+                    for (idx, field) in fields.iter().enumerate() {
+                        if idx > 0 {
+                            self.sql.push_str(", ");
+                        }
+                        write_quoted_ident(&mut self.sql, field.db);
+                    }
+                    self.sql.push(')');
+                }
+            }
         }
         Ok(())
     }
@@ -103,11 +133,15 @@ impl Renderer {
 
     pub(super) fn render_write_target(&mut self, source: &Source) {
         match source {
-            Source::Table { name, .. } | Source::View { name, .. } => {
+            Source::Table { name, alias, .. } | Source::View { name, alias, .. } => {
                 write_quoted_qualified(&mut self.sql, name);
+                self.render_optional_alias(alias.as_deref());
             }
-            Source::Cte { name, .. } => write_quoted_ident(&mut self.sql, name),
-            Source::Subquery { .. } | Source::Raw { .. } => {
+            Source::Cte { name, alias, .. } => {
+                write_quoted_ident(&mut self.sql, name);
+                self.render_optional_alias(alias.as_deref());
+            }
+            Source::Subquery { .. } | Source::Raw { .. } | Source::Function { .. } => {
                 unreachable!("write target validated as table")
             }
         }

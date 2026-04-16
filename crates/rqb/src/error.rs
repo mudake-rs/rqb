@@ -192,7 +192,7 @@ pub enum Error {
     #[error("empty typed logical expression `{logical}`")]
     EmptyTypedLogical { logical: String },
 
-    #[error("{statement} target must be a table source, got {source_kind}")]
+    #[error("{statement} target must be a table or view source, got {source_kind}")]
     InvalidTypedWriteTarget {
         statement: &'static str,
         source_kind: &'static str,
@@ -206,6 +206,12 @@ pub enum Error {
 
     #[error("invalid insert shape: {message}")]
     InvalidInsertShape { message: &'static str },
+
+    #[error("invalid select shape: {message}")]
+    InvalidSelectShape { message: &'static str },
+
+    #[error("invalid merge shape: {message}")]
+    InvalidMergeShape { message: &'static str },
 
     #[error("invalid CTE `{name}`: {message}")]
     InvalidCteShape { name: String, message: &'static str },

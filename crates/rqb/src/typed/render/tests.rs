@@ -1,11 +1,13 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
-    Stmt, ValueExpr, array_agg, count_all, count_distinct, cte, insert, json_agg, lag, row_number,
-    select, table, update, window,
+    Stmt, ValueExpr, array, array_agg, bool_and, coalesce, count_all, count_distinct, cte,
+    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont,
+    row_number, select, table, to_jsonb, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
 static EMAIL_META: Meta = Meta::new("email", "email_address", "text").ops(OpSet::ordered());
+static ACTIVE_META: Meta = Meta::new("active", "active", "bool").ops(OpSet::equality());
 static UUID_META: Meta = Meta::new("id", "id", "uuid").ops(OpSet::equality());
 static ORDER_USER_ID_META: Meta = Meta::new("user_id", "user_id", "int4").ops(OpSet::ordered());
 static TOTAL_META: Meta = Meta::new("total_cents", "total_cents", "int8").ops(OpSet::ordered());
@@ -24,6 +26,7 @@ static ORDERS_FIELDS: [&Meta; 5] = [
 ];
 const ID: Field<i32> = Field::new(&ID_META);
 const EMAIL: Field<String> = Field::new(&EMAIL_META);
+const ACTIVE: Field<bool> = Field::new(&ACTIVE_META);
 const UUID_ID: Field<uuid::Uuid> = Field::new(&UUID_META);
 const ORDER_USER_ID: Field<i32> = Field::new(&ORDER_USER_ID_META);
 const TOTAL: Field<i64> = Field::new(&TOTAL_META);
@@ -62,6 +65,7 @@ fn select_renders_typed_predicate_and_default_projection() {
         order: Vec::new(),
         limit: None,
         offset: None,
+        fetch: None,
         lock: None,
     }));
 
@@ -104,6 +108,7 @@ fn raw_fragments_are_numbered_in_render_order() {
         order: Vec::new(),
         limit: None,
         offset: None,
+        fetch: None,
         lock: None,
     }));
 
@@ -183,6 +188,7 @@ fn typed_field_can_bind_any_sqlx_supported_type() {
         order: Vec::new(),
         limit: None,
         offset: None,
+        fetch: None,
         lock: None,
     }));
 
@@ -600,14 +606,15 @@ fn aggregate_helpers_render_common_postgres_aggregates() {
                 .aggregate_filter(ID.gt(20))
                 .alias("ids_json"),
         )
+        .item(crate::typed::string_agg(EMAIL, ",").alias("emails_csv"))
         .build()
         .unwrap();
 
     assert_eq!(
         built.sql,
-        "SELECT count(*) AS \"total\", count(DISTINCT \"email_address\") AS \"unique_emails\", array_agg(\"email_address\" ORDER BY \"id\" DESC) FILTER (WHERE \"id\" > $1) AS \"emails\", json_agg(\"id\" ORDER BY \"email_address\" ASC) FILTER (WHERE \"id\" > $2) AS \"ids_json\" FROM \"public\".\"app_users\""
+        "SELECT count(*) AS \"total\", count(DISTINCT \"email_address\") AS \"unique_emails\", array_agg(\"email_address\" ORDER BY \"id\" DESC) FILTER (WHERE \"id\" > $1) AS \"emails\", json_agg(\"id\" ORDER BY \"email_address\" ASC) FILTER (WHERE \"id\" > $2) AS \"ids_json\", string_agg(\"email_address\", $3) AS \"emails_csv\" FROM \"public\".\"app_users\""
     );
-    assert_eq!(built.params.len(), 2);
+    assert_eq!(built.params.len(), 3);
 }
 
 #[test]
@@ -630,4 +637,170 @@ fn array_and_json_predicates_render_without_raw_sql() {
         "SELECT \"user_id\", \"total_cents\", \"tags\", \"payload\", \"score_range\" FROM \"public\".\"orders\" WHERE (\"tags\" @> $1 AND $2 = ANY(\"tags\") AND cardinality(\"tags\") > 0 AND \"payload\" ? $3 AND \"payload\" ?| $4 AND \"payload\" @> $5 AND \"score_range\" @> $6)"
     );
     assert_eq!(built.params.len(), 6);
+}
+
+#[test]
+fn postgres_tier1_select_clauses_render_without_raw_sql() {
+    let built = select(orders())
+        .column(ORDER_USER_ID)
+        .item(crate::typed::sum(TOTAL).alias("total"))
+        .rollup([ORDER_USER_ID])
+        .grouping_sets(vec![vec![ORDER_USER_ID.expr()], vec![TOTAL.expr()]])
+        .order_desc_nulls_last(TOTAL)
+        .fetch_first_with_ties(param(10_i64))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"user_id\", sum(\"total_cents\") AS \"total\" FROM \"public\".\"orders\" GROUP BY ROLLUP(\"user_id\"), GROUPING SETS ((\"user_id\"), (\"total_cents\")) ORDER BY \"total_cents\" DESC NULLS LAST FETCH FIRST $1 ROWS WITH TIES"
+    );
+    assert_eq!(built.params.len(), 1);
+}
+
+#[test]
+fn update_from_delete_using_and_lock_of_render_with_aliases() {
+    let update_sql = update(users().alias("u"))
+        .set(EMAIL.set("merged@example.com".to_owned()))
+        .from(orders().alias("o"))
+        .filter(ID.at("u").eq_field(ORDER_USER_ID.at("o")))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        update_sql.sql,
+        "UPDATE \"public\".\"app_users\" AS \"u\" SET \"email_address\" = $1 FROM \"public\".\"orders\" AS \"o\" WHERE \"u\".\"id\" = \"o\".\"user_id\""
+    );
+    assert_eq!(update_sql.params.len(), 1);
+
+    let delete_sql = crate::typed::delete_from(users().alias("u"))
+        .using(orders().alias("o"))
+        .filter(ID.at("u").eq_field(ORDER_USER_ID.at("o")))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        delete_sql.sql,
+        "DELETE FROM \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"o\" WHERE \"u\".\"id\" = \"o\".\"user_id\""
+    );
+
+    let lock_sql = select(users().alias("u"))
+        .for_update_of("u")
+        .nowait()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        lock_sql.sql,
+        "SELECT \"u\".\"id\", \"u\".\"email_address\" AS \"email\" FROM \"public\".\"app_users\" AS \"u\" FOR UPDATE OF \"u\" NOWAIT"
+    );
+}
+
+#[test]
+fn window_frames_and_more_window_functions_render() {
+    let built = select(users())
+        .item(
+            crate::typed::first_value(EMAIL)
+                .over(
+                    window()
+                        .partition_by(ACTIVE)
+                        .order_asc_nulls_last(ID)
+                        .frame(
+                            crate::typed::rows(crate::typed::unbounded_preceding())
+                                .between(crate::typed::current_row()),
+                        ),
+                )
+                .alias("first_email"),
+        )
+        .item(
+            crate::typed::nth_value(EMAIL, param(2_i32))
+                .over(window().order_desc(ID))
+                .alias("second_email"),
+        )
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT first_value(\"email_address\") OVER (PARTITION BY \"active\" ORDER BY \"id\" ASC NULLS LAST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"first_email\", nth_value(\"email_address\", $1) OVER (ORDER BY \"id\" DESC) AS \"second_email\" FROM \"public\".\"app_users\""
+    );
+    assert_eq!(built.params.len(), 1);
+}
+
+#[test]
+fn helper_functions_cover_common_postgres_builtins() {
+    let built = select(orders())
+        .item(bool_and(ACTIVE).alias("all_active"))
+        .item(percentile_cont(param(0.95_f64), TOTAL).alias("p95"))
+        .item(
+            coalesce([
+                json_get_text(PAYLOAD, param("source".to_owned())),
+                param("unknown".to_owned()),
+            ])
+            .alias("source"),
+        )
+        .item(to_jsonb(array([ORDER_USER_ID.expr(), TOTAL.expr()])).alias("ids"))
+        .filter(BoolExpr::and([
+            ACTIVE.is_not_false(),
+            EMAIL.similar_to("%(example|test)%"),
+            EMAIL.websearch("rust postgres"),
+            PAYLOAD
+                .path_text(vec!["customer".to_owned(), "tier".to_owned()])
+                .is_not_null(),
+        ]))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT bool_and(\"active\") AS \"all_active\", percentile_cont($1) WITHIN GROUP (ORDER BY \"total_cents\" ASC) AS \"p95\", coalesce((\"payload\" ->> $2), $3) AS \"source\", to_jsonb(ARRAY[\"user_id\", \"total_cents\"]) AS \"ids\" FROM \"public\".\"orders\" WHERE (\"active\" IS NOT FALSE AND \"email_address\" SIMILAR TO $4 AND to_tsvector(\"email_address\") @@ websearch_to_tsquery($5) AND (\"payload\" #>> $6) IS NOT NULL)"
+    );
+    assert_eq!(built.params.len(), 6);
+}
+
+#[test]
+fn cte_hints_function_sources_and_merge_render() {
+    static SERIES_META: Meta = Meta::new("value", "value", "int4").ops(OpSet::ordered());
+    let series = function_source(
+        "generate_series",
+        vec![param(1_i32), param(3_i32)],
+        "g",
+        vec![SERIES_META],
+    )
+    .with_ordinality();
+    let generated = cte("generated", select(series), vec![SERIES_META])
+        .columns(["value"])
+        .materialized();
+
+    let built = select(generated.source())
+        .with(generated)
+        .column(Field::<i32>::new(&SERIES_META))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "WITH \"generated\" (\"value\") AS MATERIALIZED (SELECT \"g\".\"value\" FROM generate_series($1, $2) WITH ORDINALITY AS \"g\" (\"value\")) SELECT \"value\" FROM \"generated\""
+    );
+    assert_eq!(built.params.len(), 2);
+
+    let merge = merge_into(
+        users().alias("u"),
+        orders().alias("incoming"),
+        ID.at("u").eq_field(ORDER_USER_ID.at("incoming")),
+    )
+    .when_matched_update_if(
+        TOTAL.at("incoming").gt(1000),
+        [EMAIL.set("merged@example.com".to_owned())],
+    )
+    .when_not_matched_insert([ID.set(1), EMAIL.set("new@example.com".to_owned())])
+    .returning_item(SelectItem::new(ID.at("u").expr()));
+
+    let built = merge.build().unwrap();
+
+    assert_eq!(
+        built.sql,
+        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"incoming\" ON \"u\".\"id\" = \"incoming\".\"user_id\" WHEN MATCHED AND \"incoming\".\"total_cents\" > $1 THEN UPDATE SET \"email_address\" = $2 WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($3, $4) RETURNING \"u\".\"id\""
+    );
+    assert_eq!(built.params.len(), 4);
 }

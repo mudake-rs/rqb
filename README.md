@@ -134,6 +134,15 @@ Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `FILTER`, window functions, array/jsonb/range predicates, `insert(...).from_select(...)`,
 and `on_conflict(...).do_update_set(...)`.
 
+SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
+like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
+service module.
+
+```rust
+use rqb::dsl::{coalesce, date_trunc, jsonb_build_object};
+use rqb::prelude::*;
+```
+
 ## JSON Search
 
 `SearchRequest` is for client-controlled search parameters only. It cannot

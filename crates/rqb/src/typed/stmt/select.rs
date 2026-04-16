@@ -15,6 +15,7 @@ impl Select {
             order: Vec::new(),
             limit: None,
             offset: None,
+            fetch: None,
             lock: None,
         }
     }
@@ -127,7 +128,43 @@ impl Select {
     }
 
     pub fn group_by(mut self, expr: impl Into<ValueExpr>) -> Self {
-        self.group_by.push(expr.into());
+        self.group_by.push(GroupByItem::expr(expr));
+        self
+    }
+
+    pub fn rollup<I, E>(mut self, exprs: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<ValueExpr>,
+    {
+        self.group_by.push(GroupByItem::Rollup(
+            exprs.into_iter().map(Into::into).collect(),
+        ));
+        self
+    }
+
+    pub fn cube<I, E>(mut self, exprs: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<ValueExpr>,
+    {
+        self.group_by.push(GroupByItem::Cube(
+            exprs.into_iter().map(Into::into).collect(),
+        ));
+        self
+    }
+
+    pub fn grouping_sets<I, S, E>(mut self, sets: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: IntoIterator<Item = E>,
+        E: Into<ValueExpr>,
+    {
+        self.group_by.push(GroupByItem::GroupingSets(
+            sets.into_iter()
+                .map(|set| set.into_iter().map(Into::into).collect())
+                .collect(),
+        ));
         self
     }
 
@@ -146,8 +183,47 @@ impl Select {
         self
     }
 
+    pub fn order_asc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::asc_nulls_first(expr));
+        self
+    }
+
+    pub fn order_asc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::asc_nulls_last(expr));
+        self
+    }
+
+    pub fn order_desc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::desc_nulls_first(expr));
+        self
+    }
+
+    pub fn order_desc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
+        self.order.push(OrderItem::desc_nulls_last(expr));
+        self
+    }
+
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(Param::typed(i64::from(limit)));
+        self.fetch = None;
+        self
+    }
+
+    pub fn fetch_first(mut self, count: impl Into<ValueExpr>) -> Self {
+        self.fetch = Some(FetchClause {
+            count: count.into(),
+            with_ties: false,
+        });
+        self.limit = None;
+        self
+    }
+
+    pub fn fetch_first_with_ties(mut self, count: impl Into<ValueExpr>) -> Self {
+        self.fetch = Some(FetchClause {
+            count: count.into(),
+            with_ties: true,
+        });
+        self.limit = None;
         self
     }
 
@@ -161,20 +237,46 @@ impl Select {
         self
     }
 
+    pub fn lock_of(mut self, mode: LockMode, relation: impl Into<String>) -> Self {
+        self.lock = Some(RowLock::new(mode).of(relation));
+        self
+    }
+
     pub fn for_update(self) -> Self {
         self.lock(LockMode::Update)
+    }
+
+    pub fn for_update_of(self, relation: impl Into<String>) -> Self {
+        self.lock_of(LockMode::Update, relation)
     }
 
     pub fn for_no_key_update(self) -> Self {
         self.lock(LockMode::NoKeyUpdate)
     }
 
+    pub fn for_no_key_update_of(self, relation: impl Into<String>) -> Self {
+        self.lock_of(LockMode::NoKeyUpdate, relation)
+    }
+
     pub fn for_share(self) -> Self {
         self.lock(LockMode::Share)
     }
 
+    pub fn for_share_of(self, relation: impl Into<String>) -> Self {
+        self.lock_of(LockMode::Share, relation)
+    }
+
     pub fn for_key_share(self) -> Self {
         self.lock(LockMode::KeyShare)
+    }
+
+    pub fn for_key_share_of(self, relation: impl Into<String>) -> Self {
+        self.lock_of(LockMode::KeyShare, relation)
+    }
+
+    pub fn lock_relation(mut self, relation: impl Into<String>) -> Self {
+        self.lock = Some(self.lock.unwrap_or_default().of(relation));
+        self
     }
 
     pub fn nowait(mut self) -> Self {

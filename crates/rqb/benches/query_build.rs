@@ -2,6 +2,7 @@ use std::hint::black_box;
 
 use divan::Bencher;
 use rqb::chrono::{DateTime, Utc};
+use rqb::dsl::json_agg;
 use rqb::prelude::*;
 use rqb::serde_json::json;
 use rqb::uuid::Uuid;

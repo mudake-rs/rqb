@@ -19,6 +19,20 @@ impl ValueExpr {
         }
     }
 
+    pub fn is_null(self) -> BoolExpr {
+        BoolExpr::IsNull {
+            expr: self,
+            negated: false,
+        }
+    }
+
+    pub fn is_not_null(self) -> BoolExpr {
+        BoolExpr::IsNull {
+            expr: self,
+            negated: true,
+        }
+    }
+
     pub fn aggregate_order_by(mut self, item: OrderItem) -> Self {
         if let Self::Aggregate { order_by, .. } = &mut self {
             order_by.push(item);
@@ -35,14 +49,19 @@ impl ValueExpr {
     }
 
     pub fn aggregate_filter(mut self, filter: BoolExpr) -> Self {
-        if let Self::Aggregate {
-            filter: current, ..
-        } = &mut self
-        {
-            *current = Some(Box::new(BoolExpr::and_option(
-                current.take().map(|existing| *existing),
-                filter,
-            )));
+        match &mut self {
+            Self::Aggregate {
+                filter: current, ..
+            }
+            | Self::OrderedSetAggregate {
+                filter: current, ..
+            } => {
+                *current = Some(Box::new(BoolExpr::and_option(
+                    current.take().map(|existing| *existing),
+                    filter,
+                )));
+            }
+            _ => {}
         }
         self
     }
@@ -60,3 +79,29 @@ impl From<Param> for ValueExpr {
         Self::Param(param)
     }
 }
+
+impl From<String> for ValueExpr {
+    fn from(value: String) -> Self {
+        Self::Param(Param::typed(value))
+    }
+}
+
+impl From<&str> for ValueExpr {
+    fn from(value: &str) -> Self {
+        Self::Param(Param::typed(value.to_owned()))
+    }
+}
+
+macro_rules! impl_param_value_expr {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl From<$ty> for ValueExpr {
+                fn from(value: $ty) -> Self {
+                    Self::Param(Param::typed(value))
+                }
+            }
+        )*
+    };
+}
+
+impl_param_value_expr!(bool, i16, i32, i64, f32, f64);

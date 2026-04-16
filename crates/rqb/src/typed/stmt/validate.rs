@@ -14,6 +14,34 @@ impl OrderItem {
     }
 }
 
+impl GroupByItem {
+    fn validate(&self) -> Result<()> {
+        match self {
+            Self::Expr(expr) => expr.validate(),
+            Self::Rollup(exprs) | Self::Cube(exprs) => {
+                for expr in exprs {
+                    expr.validate()?;
+                }
+                Ok(())
+            }
+            Self::GroupingSets(sets) => {
+                for set in sets {
+                    for expr in set {
+                        expr.validate()?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl FetchClause {
+    fn validate(&self) -> Result<()> {
+        self.count.validate()
+    }
+}
+
 impl Stmt {
     pub fn validate(&self) -> Result<()> {
         match self {
@@ -22,6 +50,7 @@ impl Stmt {
             Self::Insert(insert) => insert.validate(),
             Self::Update(update) => update.validate(),
             Self::Delete(delete) => delete.validate(),
+            Self::Merge(merge) => merge.validate(),
             Self::Raw(raw_stmt) => raw_stmt.validate(),
         }
     }
@@ -33,6 +62,10 @@ impl SetQuery {
         self.right.validate()?;
         for item in &self.order {
             item.validate()?;
+        }
+        if let Some(fetch) = &self.fetch {
+            validate_fetch_shape(self.limit.as_ref(), &self.order, fetch)?;
+            fetch.validate()?;
         }
         Ok(())
     }
@@ -65,6 +98,10 @@ impl Select {
         }
         for item in &self.order {
             item.validate()?;
+        }
+        if let Some(fetch) = &self.fetch {
+            validate_fetch_shape(self.limit.as_ref(), &self.order, fetch)?;
+            fetch.validate()?;
         }
         Ok(())
     }
@@ -141,6 +178,9 @@ impl Update {
         for assignment in &self.assignments {
             assignment.value.validate()?;
         }
+        for source in &self.from {
+            source.validate()?;
+        }
         if let Some(filter) = &self.filter {
             filter.validate()?;
         }
@@ -154,6 +194,9 @@ impl Delete {
         let Some(filter) = &self.filter else {
             return Err(Error::TypedDeleteWithoutFilter);
         };
+        for source in &self.using {
+            source.validate()?;
+        }
         filter.validate()?;
         validate_returning(&self.returning)
     }
@@ -166,13 +209,31 @@ impl RawStmt {
 }
 
 fn validate_table_target(statement: &'static str, target: &Source) -> Result<()> {
-    if target.is_table() {
+    if matches!(target, Source::Table { .. } | Source::View { .. }) {
         return Ok(());
     }
     Err(Error::InvalidTypedWriteTarget {
         statement,
         source_kind: target.kind(),
     })
+}
+
+fn validate_fetch_shape(
+    limit: Option<&Param>,
+    order: &[OrderItem],
+    fetch: &FetchClause,
+) -> Result<()> {
+    if limit.is_some() {
+        return Err(Error::InvalidSelectShape {
+            message: "limit and fetch cannot both be set",
+        });
+    }
+    if fetch.with_ties && order.is_empty() {
+        return Err(Error::InvalidSelectShape {
+            message: "fetch with ties requires order_by",
+        });
+    }
+    Ok(())
 }
 
 fn validate_nonempty_assignments(
@@ -190,6 +251,75 @@ fn validate_nonempty_columns(statement: &'static str, columns: &[Meta]) -> Resul
         return Err(Error::EmptyTypedColumns { statement });
     }
     Ok(())
+}
+
+impl MergeAction {
+    fn validate(&self) -> Result<()> {
+        match self {
+            Self::DoNothing { condition, .. } | Self::Delete { condition, .. } => {
+                if let Some(condition) = condition {
+                    condition.validate()?;
+                }
+                Ok(())
+            }
+            Self::Insert {
+                condition,
+                assignments,
+            } => {
+                if let Some(condition) = condition {
+                    condition.validate()?;
+                }
+                validate_nonempty_assignments("merge-insert", assignments)?;
+                for assignment in assignments {
+                    assignment.value.validate()?;
+                }
+                Ok(())
+            }
+            Self::Update {
+                when,
+                condition,
+                assignments,
+            } => {
+                if *when == MergeWhen::NotMatched {
+                    return Err(Error::InvalidMergeShape {
+                        message: "merge update is not valid for WHEN NOT MATCHED",
+                    });
+                }
+                if let Some(condition) = condition {
+                    condition.validate()?;
+                }
+                validate_nonempty_assignments("merge-update", assignments)?;
+                for assignment in assignments {
+                    assignment.value.validate()?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Merge {
+    pub fn validate(&self) -> Result<()> {
+        validate_cte_names(&self.ctes)?;
+        for cte in &self.ctes {
+            cte.validate()?;
+        }
+        validate_table_target("merge", &self.target)?;
+        self.using.validate()?;
+        self.on.validate()?;
+        if self.actions.is_empty() {
+            return Err(Error::InvalidMergeShape {
+                message: "merge requires at least one action",
+            });
+        }
+        for action in &self.actions {
+            action.validate()?;
+        }
+        for item in &self.returning {
+            item.expr.validate()?;
+        }
+        Ok(())
+    }
 }
 
 fn validate_cte_names(ctes: &[Cte]) -> Result<()> {

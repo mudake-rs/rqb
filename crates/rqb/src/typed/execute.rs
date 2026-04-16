@@ -2,7 +2,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{Decode, FromRow, PgExecutor, Postgres, Type};
 
 use crate::Result;
-use crate::typed::{BuiltQuery, Delete, Insert, RawStmt, Select, SetQuery, Stmt, Update};
+use crate::typed::{BuiltQuery, Delete, Insert, Merge, RawStmt, Select, SetQuery, Stmt, Update};
 
 impl BuiltQuery {
     pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
@@ -248,4 +248,5 @@ impl_statement_execute!(SetQuery);
 impl_statement_execute!(Insert);
 impl_statement_execute!(Update);
 impl_statement_execute!(Delete);
+impl_statement_execute!(Merge);
 impl_statement_execute!(RawStmt);

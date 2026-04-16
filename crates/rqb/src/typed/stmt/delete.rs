@@ -4,9 +4,15 @@ impl Delete {
     pub fn from(target: Source) -> Self {
         Self {
             target,
+            using: Vec::new(),
             filter: None,
             returning: Vec::new(),
         }
+    }
+
+    pub fn using(mut self, source: Source) -> Self {
+        self.using.push(source);
+        self
     }
 
     pub fn filter(mut self, filter: BoolExpr) -> Self {

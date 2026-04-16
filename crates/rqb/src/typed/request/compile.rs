@@ -106,22 +106,22 @@ impl SearchOperator {
         value: &JsonValue,
     ) -> Result<BoolExpr> {
         match self {
-            Self::Equals | Self::NotEquals | Self::Gt | Self::Gte | Self::Lt | Self::Lte => {
-                let op = self
-                    .bool_op()
-                    .expect("comparison branch must contain only comparison search operators");
-                validate_search_capability(
-                    field_name,
-                    meta,
-                    self.as_name(),
-                    op.requires_ordering(),
-                )?;
-                Ok(BoolExpr::Compare {
-                    left: field,
-                    op,
-                    right: ValueExpr::Param(json_param(field_name, json, value)?),
-                })
+            Self::Equals => {
+                comparison_expr(field_name, meta, "equals", BoolOp::Eq, field, json, value)
             }
+            Self::NotEquals => comparison_expr(
+                field_name,
+                meta,
+                "notEquals",
+                BoolOp::Ne,
+                field,
+                json,
+                value,
+            ),
+            Self::Gt => comparison_expr(field_name, meta, "gt", BoolOp::Gt, field, json, value),
+            Self::Gte => comparison_expr(field_name, meta, "gte", BoolOp::Gte, field, json, value),
+            Self::Lt => comparison_expr(field_name, meta, "lt", BoolOp::Lt, field, json, value),
+            Self::Lte => comparison_expr(field_name, meta, "lte", BoolOp::Lte, field, json, value),
             Self::IsNull | Self::IsNotNull => Ok(BoolExpr::IsNull {
                 expr: field,
                 negated: matches!(self, Self::IsNotNull),
@@ -223,37 +223,6 @@ impl SearchOperator {
         }
     }
 
-    const fn bool_op(self) -> Option<BoolOp> {
-        match self {
-            Self::Equals => Some(BoolOp::Eq),
-            Self::NotEquals => Some(BoolOp::Ne),
-            Self::Gt => Some(BoolOp::Gt),
-            Self::Gte => Some(BoolOp::Gte),
-            Self::Lt => Some(BoolOp::Lt),
-            Self::Lte => Some(BoolOp::Lte),
-            Self::IsNull
-            | Self::IsNotNull
-            | Self::In
-            | Self::NotIn
-            | Self::Between
-            | Self::NotBetween
-            | Self::Contains
-            | Self::NotContains
-            | Self::StartsWith
-            | Self::NotStartsWith
-            | Self::EndsWith
-            | Self::NotEndsWith
-            | Self::Like
-            | Self::NotLike
-            | Self::ILike
-            | Self::NotILike
-            | Self::Regex
-            | Self::NotRegex
-            | Self::IRegex
-            | Self::NotIRegex => None,
-        }
-    }
-
     const fn as_name(self) -> &'static str {
         match self {
             Self::Equals => "equals",
@@ -284,6 +253,23 @@ impl SearchOperator {
             Self::NotIRegex => "notIRegex",
         }
     }
+}
+
+fn comparison_expr(
+    field_name: &str,
+    meta: Meta,
+    operator_name: &'static str,
+    op: BoolOp,
+    field: ValueExpr,
+    json: JsonKind,
+    value: &JsonValue,
+) -> Result<BoolExpr> {
+    validate_search_capability(field_name, meta, operator_name, op.requires_ordering())?;
+    Ok(BoolExpr::Compare {
+        left: field,
+        op,
+        right: ValueExpr::Param(json_param(field_name, json, value)?),
+    })
 }
 
 impl SearchSort {

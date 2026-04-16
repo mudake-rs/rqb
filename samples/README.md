@@ -53,7 +53,7 @@ and use the same schema crate:
 
 ```bash
 make db-up
-DATABASE_URL=postgres://rqb:rqb@localhost/rqb cargo run --manifest-path samples/rest-api/Cargo.toml
+DATABASE_URL=postgres://rqb:rqb@localhost:55432/rqb cargo run --manifest-path samples/rest-api/Cargo.toml
 ```
 
 The focused samples intentionally do not connect: they keep CI fast and make

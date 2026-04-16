@@ -82,10 +82,10 @@ struct UserRow {
     email: String,
 }
 
-let rows = select(users())
-    .column(ID)
-    .column(EMAIL)
-    .filter(STATUS.eq("active"))
+let rows = select(schema::users::table())
+    .column(schema::users::ID)
+    .column(schema::users::EMAIL)
+    .filter(schema::users::STATUS.eq("active"))
     .fetch_all_as::<UserRow>(&pool)
     .await?;
 ```
@@ -187,8 +187,8 @@ response fields.
 Apply it to a trusted Rust query:
 
 ```rust
-let query = select(order_search_view())
-    .filter(ORGANIZATION_ID.eq(current_org_id))
+let query = select(schema::order_search_view::view())
+    .filter(schema::order_search_view::ORGANIZATION_ID.eq(current_org_id))
     .request(search_request)?
     .build()?;
 ```
@@ -202,17 +202,17 @@ Writes use field assignments or derive-generated assignments. There is no
 serde write bridge.
 
 ```rust
-let created = insert(users())
-    .set(ID.set(user_id))
-    .set(EMAIL.set("ada@example.com"))
-    .set(STATUS.set("active"))
-    .returning(ID)
+let created = insert(schema::users::table())
+    .set(schema::users::ID.set(user_id))
+    .set(schema::users::EMAIL.set("ada@example.com"))
+    .set(schema::users::STATUS.set("active"))
+    .returning(schema::users::ID)
     .fetch_one_scalar::<Uuid>(&pool)
     .await?;
 
-update(users())
-    .set(STATUS.set("disabled"))
-    .filter(ID.eq(user_id))
+update(schema::users::table())
+    .set(schema::users::STATUS.set("disabled"))
+    .filter(schema::users::ID.eq(user_id))
     .execute(&pool)
     .await?;
 ```
@@ -251,10 +251,10 @@ roll back together:
 
 ```rust
 tx!(&pool, |conn| {
-    let created_id = insert(users())
-        .set(ID.set(user_id))
-        .set(EMAIL.set("ada@example.com"))
-        .returning(ID)
+    let created_id = insert(schema::users::table())
+        .set(schema::users::ID.set(user_id))
+        .set(schema::users::EMAIL.set("ada@example.com"))
+        .returning(schema::users::ID)
         .fetch_one_scalar::<Uuid>(conn)
         .await?;
     Ok(created_id)

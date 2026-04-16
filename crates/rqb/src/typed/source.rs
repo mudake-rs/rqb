@@ -3,6 +3,7 @@ use crate::{Result, typed::raw};
 
 /// Relation-like object that can appear in a `FROM`, `JOIN`, `UPDATE`, or write target.
 #[derive(Clone, Debug)]
+#[must_use]
 pub enum Source {
     /// Database table from static schema metadata.
     Table {
@@ -87,6 +88,7 @@ impl CteMaterialization {
 
 /// Common table expression definition.
 #[derive(Clone, Debug)]
+#[must_use]
 pub struct Cte {
     /// CTE name.
     pub name: String,
@@ -119,6 +121,7 @@ pub enum JoinKind {
 
 /// Join clause attached to a select statement.
 #[derive(Clone, Debug)]
+#[must_use]
 pub struct Join {
     /// Join kind.
     pub kind: JoinKind,

@@ -6,6 +6,7 @@ use super::{BoolExpr, BoolOp, ValueExpr};
 
 /// Typed database field generated from schema metadata.
 #[derive(Debug, PartialEq, Eq)]
+#[must_use]
 pub struct Field<T> {
     /// Static field metadata.
     pub meta: &'static Meta,
@@ -14,6 +15,7 @@ pub struct Field<T> {
 
 /// Qualified typed database field, usually created through an alias handle.
 #[derive(Debug, PartialEq, Eq)]
+#[must_use]
 pub struct FieldRef<T> {
     /// Static field metadata.
     pub meta: &'static Meta,

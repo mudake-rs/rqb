@@ -30,6 +30,7 @@ trait ErasedParam: Send + Sync {
 
 /// Type-erased value that can be bound to Postgres through sqlx.
 #[derive(Clone)]
+#[must_use]
 pub struct Param {
     // Arc keeps Param::clone() to a refcount bump instead of a heap-allocating dyn clone.
     inner: Arc<dyn ErasedParam>,
@@ -65,6 +66,7 @@ impl fmt::Debug for Param {
 
 /// Ordered bind parameters for a built query.
 #[derive(Clone, Debug, Default)]
+#[must_use]
 pub struct Params {
     params: Vec<Param>,
 }

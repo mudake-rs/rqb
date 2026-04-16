@@ -133,6 +133,7 @@ pub enum WindowFrameKind {
 
 /// Window frame boundary.
 #[derive(Clone, Debug)]
+#[must_use]
 pub enum FrameBound {
     /// `UNBOUNDED PRECEDING`.
     UnboundedPreceding,
@@ -161,6 +162,7 @@ pub enum FrameExclude {
 
 /// Window frame specification.
 #[derive(Clone, Debug)]
+#[must_use]
 pub struct WindowFrame {
     /// Frame unit.
     pub kind: WindowFrameKind,
@@ -174,6 +176,7 @@ pub struct WindowFrame {
 
 /// Window specification used by `OVER (...)`.
 #[derive(Clone, Debug, Default)]
+#[must_use]
 pub struct WindowSpec {
     /// Partition expressions.
     pub partition_by: Vec<ValueExpr>,
@@ -185,6 +188,7 @@ pub struct WindowSpec {
 
 /// Builder for window functions without offset/default arguments.
 #[derive(Clone, Debug)]
+#[must_use]
 pub struct WindowFunctionBuilder {
     pub(super) function: WindowFunction,
     pub(super) args: Vec<ValueExpr>,
@@ -192,6 +196,7 @@ pub struct WindowFunctionBuilder {
 
 /// Builder for `lag` / `lead` window functions.
 #[derive(Clone, Debug)]
+#[must_use]
 pub struct OffsetWindowFunctionBuilder {
     pub(super) function: WindowFunction,
     pub(super) value: ValueExpr,
@@ -201,12 +206,14 @@ pub struct OffsetWindowFunctionBuilder {
 
 /// Builder for SQL `CASE WHEN ... THEN ... ELSE ... END` expressions.
 #[derive(Clone, Debug, Default)]
+#[must_use]
 pub struct CaseBuilder {
     pub(super) branches: Vec<(BoolExpr, ValueExpr)>,
 }
 
 /// Boolean expression AST.
 #[derive(Clone, Debug)]
+#[must_use]
 pub enum BoolExpr {
     /// Boolean constant.
     Constant(bool),
@@ -343,6 +350,7 @@ pub enum BoolExpr {
 
 /// SQL value expression AST.
 #[derive(Clone, Debug)]
+#[must_use]
 pub enum ValueExpr {
     /// Field reference.
     Field {

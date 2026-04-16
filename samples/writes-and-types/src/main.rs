@@ -52,7 +52,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let update_sql = update(invoices::table())
-        .changes(&mark_paid)
+        .patch(&mark_paid)
         .filter(invoices::ID.eq(invoice_id))
         .returning(invoices::ID)
         .build()?;

@@ -37,13 +37,13 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Builder validation errors are raised before SQL is rendered.
     assert!(matches!(
         delete_from(orders::table()).build(),
-        Err(rqb::Error::TypedDeleteWithoutFilter)
+        Err(rqb::Error::DeleteWithoutFilter)
     ));
     assert!(matches!(
         select(orders::table())
             .filter(orders::METADATA.gt(json!({ "tier": "gold" })))
             .build(),
-        Err(rqb::Error::InvalidTypedOperator { field, operator })
+        Err(rqb::Error::InvalidOperator { field, operator })
             if field == "metadata" && operator == "gt"
     ));
 

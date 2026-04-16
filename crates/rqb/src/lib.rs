@@ -56,7 +56,7 @@ pub use typed::{
     OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, RowLock,
     SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
     SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame,
-    WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, case, cte, cte_source,
+    WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, case, cte, cte_ref,
     delete_from, except, except_all, function_source, insert, intersect, intersect_all, merge_into,
     raw, raw_source, select, subquery, table, union, union_all, update, view,
 };
@@ -212,8 +212,8 @@ pub mod dsl {
     }
 
     pub use crate::typed::{
-        abs, age, aggregate, all, any, array, array_agg, array_agg_distinct, array_append,
-        array_length, array_position, array_positions, array_prepend, array_remove, array_replace,
+        abs, age, aggregate, and, array, array_agg, array_agg_distinct, array_append, array_length,
+        array_position, array_positions, array_prepend, array_remove, array_replace,
         array_to_string, avg, bool_and, bool_or, btrim, cardinality, case, ceil, char_length,
         coalesce, concat, concat_op, concat_ws, count, count_all, count_distinct, cume_dist,
         current_date, current_row, current_timestamp, date_trunc, dense_rank, every, exists, exp,
@@ -224,9 +224,9 @@ pub mod dsl {
         jsonb_path_exists, jsonb_path_query, jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag,
         last_value, lead, least, left, length, ln, log, lower, lpad, ltrim, make_date, make_time,
         make_timestamp, make_timestamptz, max, merge_action, min, mod_, mode, not, not_similar_to,
-        now, nth_value, ntile, nullif, ordered_set_aggregate, param, partition_by, percent_rank,
-        percentile_cont, percentile_disc, plainto_tsquery, pow, power, preceding, random,
-        random_between, range, rank, regexp_matches, regexp_replace, regexp_split_to_array,
+        now, nth_value, ntile, nullif, or, ordered_set_aggregate, param, partition_by,
+        percent_rank, percentile_cont, percentile_disc, plainto_tsquery, pow, power, preceding,
+        random, random_between, range, rank, regexp_matches, regexp_replace, regexp_split_to_array,
         replace, right, round, row, row_number, rows, rpad, rtrim, similar_to, slice, split_part,
         sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array, subscript, substring,
         sum, timezone, to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config, trim, trunc,
@@ -253,7 +253,7 @@ pub mod prelude {
         SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
         SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
         WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, cte,
-        cte_source, delete_from, except, except_all, field, function_source, insert, intersect,
+        cte_ref, delete_from, except, except_all, field, function_source, insert, intersect,
         intersect_all, jsonb_agg_object, merge_into, raw, raw_source, schema, select, subquery,
         table, tx, union, union_all, update, view,
     };
@@ -272,7 +272,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            Error::InvalidTypedOperator { field, operator }
+            Error::InvalidOperator { field, operator }
                 if field == "id" && operator == "gt"
         ));
     }
@@ -311,7 +311,7 @@ mod tests {
 
         let built = crate::select(crate::table("public.users", &FIELDS))
             .item(crate::dsl::lower(EMAIL).alias("lower_email"))
-            .filter(crate::dsl::all([EMAIL.ilike("%@example.com")]))
+            .filter(crate::dsl::and([EMAIL.ilike("%@example.com")]))
             .build()
             .unwrap();
 

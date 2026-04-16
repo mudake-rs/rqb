@@ -68,7 +68,7 @@ impl BoolExpr {
             }
             Self::And(exprs) | Self::Or(exprs) => {
                 if exprs.is_empty() {
-                    return Err(Error::EmptyTypedLogical {
+                    return Err(Error::EmptyLogical {
                         logical: match self {
                             Self::And(_) => "and",
                             Self::Or(_) => "or",
@@ -120,7 +120,7 @@ impl ValueExpr {
                     arg.validate()?;
                 }
                 if within_group.is_empty() {
-                    return Err(Error::InvalidTypedOperator {
+                    return Err(Error::InvalidOperator {
                         field: "ordered_set_aggregate".to_owned(),
                         operator: "within_group".to_owned(),
                     });
@@ -228,7 +228,7 @@ fn validate_compare(left: &ValueExpr, op: BoolOp) -> Result<()> {
     if supported {
         return Ok(());
     }
-    Err(Error::InvalidTypedOperator {
+    Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: op.as_name().to_owned(),
     })
@@ -241,7 +241,7 @@ fn validate_equality_expr(expr: &ValueExpr, operator: &'static str) -> Result<()
     if meta.ops.equality {
         return Ok(());
     }
-    Err(Error::InvalidTypedOperator {
+    Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: operator.to_owned(),
     })
@@ -254,7 +254,7 @@ fn validate_ordered_expr(expr: &ValueExpr, operator: &'static str) -> Result<()>
     if meta.ops.ordering {
         return Ok(());
     }
-    Err(Error::InvalidTypedOperator {
+    Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: operator.to_owned(),
     })
@@ -267,7 +267,7 @@ fn validate_like_expr(expr: &ValueExpr) -> Result<()> {
     if matches!(meta.pg, "text" | "varchar" | "bpchar" | "citext") {
         return Ok(());
     }
-    Err(Error::InvalidTypedOperator {
+    Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: "like".to_owned(),
     })
@@ -303,7 +303,7 @@ fn validate_infix_expr(expr: &ValueExpr, op: &'static str) -> Result<()> {
     if supported {
         return Ok(());
     }
-    Err(Error::InvalidTypedOperator {
+    Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: op.to_owned(),
     })
@@ -316,7 +316,7 @@ fn validate_array_expr(expr: &ValueExpr, operator: &'static str) -> Result<()> {
     if meta.pg.ends_with("[]") {
         return Ok(());
     }
-    Err(Error::InvalidTypedOperator {
+    Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: operator.to_owned(),
     })

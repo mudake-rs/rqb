@@ -290,7 +290,7 @@ impl SearchSort {
     fn to_order_item(&self, source: &Source) -> Result<OrderItem> {
         let meta = find_json_meta(source, &self.field)?;
         if !meta.ops.ordering {
-            return Err(Error::InvalidTypedSort {
+            return Err(Error::InvalidSort {
                 field: self.field.clone(),
             });
         }

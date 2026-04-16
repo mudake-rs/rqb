@@ -164,7 +164,7 @@ pub fn cte(name: impl Into<String>, stmt: impl Into<Stmt>, fields: impl Into<Vec
 ///
 /// `Cte::source()` is usually clearer because it snapshots the CTE name and
 /// field list from the CTE value.
-pub fn cte_source(name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
+pub fn cte_ref(name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
     Source::Cte {
         name: name.into(),
         alias: None,
@@ -354,7 +354,7 @@ impl Cte {
     /// The returned source owns a snapshot of the CTE name and exposed fields,
     /// so call this after finalizing the CTE metadata you want to query.
     pub fn source(&self) -> Source {
-        cte_source(self.name.clone(), self.fields.clone())
+        cte_ref(self.name.clone(), self.fields.clone())
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
@@ -526,7 +526,7 @@ fn validate_source_alias(alias: &str, message: &'static str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CteMaterialization, Source, cte, cte_source, function_source, raw_source, table};
+    use super::{CteMaterialization, Source, cte, cte_ref, function_source, raw_source, table};
     use crate::typed::{Field, Meta, OpSet, Param, select};
 
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -551,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn cte_source_snapshots_name_and_fields() {
+    fn cte_ref_snapshots_name_and_fields() {
         let cte = cte(
             "ids",
             select(table("public.users", &FIELDS)).column(ID),
@@ -671,7 +671,7 @@ mod tests {
             "NOT MATERIALIZED"
         );
 
-        let source = cte_source("ids", vec![ID_META]);
+        let source = cte_ref("ids", vec![ID_META]);
         assert_eq!(source.kind(), "cte");
     }
 }

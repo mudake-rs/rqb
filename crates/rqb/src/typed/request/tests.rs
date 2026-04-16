@@ -339,7 +339,7 @@ fn sort_rejects_fields_without_ordering_capability() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedSort { field } if field == "active"
+        crate::Error::InvalidSort { field } if field == "active"
     ));
 }
 

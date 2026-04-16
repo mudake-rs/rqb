@@ -7,7 +7,7 @@ rows when the query is executed.
 
 - `select(users::table())` renders known metadata fields, not `SELECT *`.
 - `.filter(...)` composes typed predicates and binds Rust values as `$N`.
-- `all([...])` and `any([...])` express nested `AND` / `OR` groups.
+- `and([...])` and `or([...])` express nested `AND` / `OR` groups.
 - `.filter_if(...)` and `.filter_option(...)` keep optional filters readable.
 - `.column(...)` narrows projection without string column names.
 - `.order_asc_nulls_last(...)`, `.limit(...)`, and `.offset(...)` stay in the

@@ -7,7 +7,7 @@ impl OrderItem {
         if let Some(meta) = self.expr.field_meta()
             && !meta.ops.ordering
         {
-            return Err(Error::InvalidTypedSort {
+            return Err(Error::InvalidSort {
                 field: meta.api.to_owned(),
             });
         }
@@ -196,7 +196,7 @@ impl Delete {
     pub fn validate(&self) -> Result<()> {
         validate_table_target("delete", &self.target)?;
         let Some(filter) = &self.filter else {
-            return Err(Error::TypedDeleteWithoutFilter);
+            return Err(Error::DeleteWithoutFilter);
         };
         for source in &self.using {
             source.validate()?;
@@ -217,7 +217,7 @@ fn validate_table_target(statement: &'static str, target: &Source) -> Result<()>
     if matches!(target, Source::Table { .. } | Source::View { .. }) {
         return Ok(());
     }
-    Err(Error::InvalidTypedWriteTarget {
+    Err(Error::InvalidWriteTarget {
         statement,
         source_kind: target.kind(),
     })
@@ -246,14 +246,14 @@ fn validate_nonempty_assignments(
     assignments: &[Assignment],
 ) -> Result<()> {
     if assignments.is_empty() {
-        return Err(Error::EmptyTypedAssignments { statement });
+        return Err(Error::EmptyAssignments { statement });
     }
     Ok(())
 }
 
 fn validate_nonempty_columns(statement: &'static str, columns: &[Meta]) -> Result<()> {
     if columns.is_empty() {
-        return Err(Error::EmptyTypedColumns { statement });
+        return Err(Error::EmptyColumns { statement });
     }
     Ok(())
 }

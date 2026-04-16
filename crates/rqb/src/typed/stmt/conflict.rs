@@ -2,7 +2,7 @@ use super::*;
 
 impl ColumnConflictBuilder {
     /// Adds another column to the conflict target.
-    pub fn and<T>(mut self, field: Field<T>) -> Self {
+    pub fn column<T>(mut self, field: Field<T>) -> Self {
         push_column(&mut self.fields, *field.meta);
         self
     }

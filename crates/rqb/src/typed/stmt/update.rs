@@ -18,8 +18,8 @@ impl Update {
         self
     }
 
-    /// Adds assignments produced by a [`Changeset`] DTO.
-    pub fn changes(mut self, changes: impl Changeset) -> Self {
+    /// Applies assignments produced by a partial update [`Changeset`] DTO.
+    pub fn patch(mut self, changes: impl Changeset) -> Self {
         extend_assignments(&mut self.assignments, changes.changeset_assignments());
         self
     }

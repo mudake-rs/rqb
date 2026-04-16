@@ -107,7 +107,7 @@ fn changeset_derive_skips_none_option_fields() {
     };
 
     let built = update(users::table())
-        .changes(&changes)
+        .patch(&changes)
         .filter(users::ID.eq(1))
         .build()
         .unwrap();

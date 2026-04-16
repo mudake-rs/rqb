@@ -1,7 +1,7 @@
 use crate::typed::{
     BoolExpr, BoolOp, FetchClause, Field, Insert, Join, JoinKind, MergeAction, MergeWhen, Meta,
     OpSet, OrderItem, Param, RawStmt, Select, SelectItem, SetOperator, SetQuery, Source, ValueExpr,
-    cte, cte_source, delete_from, insert, merge_into, raw, select, subquery, update,
+    cte, cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -185,7 +185,7 @@ fn delete_requires_filter() {
 
     assert!(matches!(
         stmt.validate().unwrap_err(),
-        crate::Error::TypedDeleteWithoutFilter
+        crate::Error::DeleteWithoutFilter
     ));
 }
 
@@ -275,7 +275,7 @@ fn insert_from_select_requires_target_columns() {
 
     assert!(matches!(
         err,
-        crate::Error::EmptyTypedColumns { statement } if statement == "insert-select"
+        crate::Error::EmptyColumns { statement } if statement == "insert-select"
     ));
 }
 
@@ -341,7 +341,7 @@ fn conflict_update_requires_assignments() {
 
     assert!(matches!(
         err,
-        crate::Error::EmptyTypedAssignments { statement } if statement == "conflict update"
+        crate::Error::EmptyAssignments { statement } if statement == "conflict update"
     ));
 }
 
@@ -375,7 +375,7 @@ fn update_requires_assignments() {
 
     assert!(matches!(
         err,
-        crate::Error::EmptyTypedAssignments { statement } if statement == "update"
+        crate::Error::EmptyAssignments { statement } if statement == "update"
     ));
 }
 
@@ -387,7 +387,7 @@ fn write_targets_reject_subquery_sources() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedWriteTarget {
+        crate::Error::InvalidWriteTarget {
             statement: "insert",
             source_kind: "subquery",
         }
@@ -520,13 +520,13 @@ fn merge_insert_requires_assignments() {
 
     assert!(matches!(
         err,
-        crate::Error::EmptyTypedAssignments { statement } if statement == "merge-insert"
+        crate::Error::EmptyAssignments { statement } if statement == "merge-insert"
     ));
 }
 
 #[test]
 fn merge_rejects_non_table_target() {
-    let target = cte_source("target_cte", vec![ID_META]);
+    let target = cte_ref("target_cte", vec![ID_META]);
     let merge = merge_into(
         target,
         users().alias("source"),
@@ -537,7 +537,7 @@ fn merge_rejects_non_table_target() {
 
     assert!(matches!(
         merge.validate().unwrap_err(),
-        crate::Error::InvalidTypedWriteTarget {
+        crate::Error::InvalidWriteTarget {
             statement: "merge",
             source_kind: "cte",
         }

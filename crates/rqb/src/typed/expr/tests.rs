@@ -48,7 +48,7 @@ fn operator_validation_uses_meta_not_rust_type_traits() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "payload" && operator == "gt"
     ));
 }
@@ -85,20 +85,20 @@ fn and_pair_flattens_nonempty_groups_without_hiding_empty_groups() {
     let invalid = BoolExpr::and_pair(BoolExpr::and([]), ID.ne(5));
     assert!(matches!(
         invalid.validate().unwrap_err(),
-        crate::Error::EmptyTypedLogical { logical } if logical == "and"
+        crate::Error::EmptyLogical { logical } if logical == "and"
     ));
 }
 
 #[test]
-fn all_and_any_free_functions_build_logical_groups() {
+fn and_or_free_functions_build_logical_groups() {
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
     const ID: Field<i32> = Field::new(&ID_META);
 
-    let all = crate::typed::all([ID.gt(1), ID.lt(10)]);
-    let any = crate::typed::any([ID.eq(1), ID.eq(2)]);
+    let and_group = crate::typed::and([ID.gt(1), ID.lt(10)]);
+    let or_group = crate::typed::or([ID.eq(1), ID.eq(2)]);
 
-    assert!(matches!(all, BoolExpr::And(ref exprs) if exprs.len() == 2));
-    assert!(matches!(any, BoolExpr::Or(ref exprs) if exprs.len() == 2));
+    assert!(matches!(and_group, BoolExpr::And(ref exprs) if exprs.len() == 2));
+    assert!(matches!(or_group, BoolExpr::Or(ref exprs) if exprs.len() == 2));
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn empty_or_group_is_invalid_like_empty_and_group() {
 
     assert!(matches!(
         err,
-        crate::Error::EmptyTypedLogical { logical } if logical == "or"
+        crate::Error::EmptyLogical { logical } if logical == "or"
     ));
 }
 
@@ -144,7 +144,7 @@ fn meta_defaults_to_no_typed_operators() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "score" && operator == "eq"
     ));
 }
@@ -219,7 +219,7 @@ fn ordered_predicates_reject_equality_only_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "status" && operator == "gt"
     ));
 }
@@ -241,7 +241,7 @@ fn text_predicates_reject_non_text_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "id" && operator == "like"
     ));
 }
@@ -262,7 +262,7 @@ fn jsonb_infix_predicates_reject_non_jsonb_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "id" && operator == "?"
     ));
 }
@@ -281,7 +281,7 @@ fn array_predicates_reject_non_array_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "id" && operator == "array_empty"
     ));
 }
@@ -301,7 +301,7 @@ fn any_predicate_rejects_non_array_operands() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "id" && operator == "any"
     ));
 }
@@ -322,7 +322,7 @@ fn range_infix_predicates_reject_plain_scalar_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "id" && operator == "&&"
     ));
 }
@@ -412,7 +412,7 @@ fn ordered_set_aggregate_requires_within_group_ordering() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidTypedOperator { field, operator }
+        crate::Error::InvalidOperator { field, operator }
             if field == "ordered_set_aggregate" && operator == "within_group"
     ));
 }

@@ -248,18 +248,18 @@ pub enum Error {
         binds: usize,
     },
 
-    /// A typed field was used with an operator it does not support.
-    #[error("operator `{operator}` is not supported for typed field `{field}`")]
-    InvalidTypedOperator {
+    /// A field was used with an operator it does not support.
+    #[error("operator `{operator}` is not supported for field `{field}`")]
+    InvalidOperator {
         /// Field API name.
         field: String,
         /// Operator name.
         operator: String,
     },
 
-    /// A typed field without ordering support was used for sorting.
-    #[error("typed field `{field}` is not sortable")]
-    InvalidTypedSort {
+    /// A field without ordering support was used for sorting.
+    #[error("field `{field}` is not sortable")]
+    InvalidSort {
         /// Field API name.
         field: String,
     },
@@ -303,16 +303,16 @@ pub enum Error {
         logical: &'static str,
     },
 
-    /// Typed builder used an empty `AND` or `OR` group.
-    #[error("empty typed logical expression `{logical}`")]
-    EmptyTypedLogical {
+    /// Builder used an empty `AND` or `OR` group.
+    #[error("empty logical expression `{logical}`")]
+    EmptyLogical {
         /// Logical operator name.
         logical: String,
     },
 
     /// A write statement targeted a source kind that cannot be written to.
     #[error("{statement} target must be a table or view source, got {source_kind}")]
-    InvalidTypedWriteTarget {
+    InvalidWriteTarget {
         /// Statement kind.
         statement: &'static str,
         /// Source kind that was used as the write target.
@@ -321,14 +321,14 @@ pub enum Error {
 
     /// A write statement had no assignments.
     #[error("{statement} statement requires at least one assignment")]
-    EmptyTypedAssignments {
+    EmptyAssignments {
         /// Statement kind.
         statement: &'static str,
     },
 
     /// A write statement had no target columns.
     #[error("{statement} statement requires at least one column")]
-    EmptyTypedColumns {
+    EmptyColumns {
         /// Statement kind.
         statement: &'static str,
     },
@@ -363,9 +363,9 @@ pub enum Error {
         message: &'static str,
     },
 
-    /// A typed delete statement was built without a filter.
-    #[error("typed delete without filter is not allowed")]
-    TypedDeleteWithoutFilter,
+    /// A delete statement was built without a filter.
+    #[error("delete without filter is not allowed")]
+    DeleteWithoutFilter,
 
     /// A non-cross join was built without an `ON` condition.
     #[error("{join} requires an ON condition")]

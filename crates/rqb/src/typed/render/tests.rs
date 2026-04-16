@@ -1,6 +1,6 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
-    Stmt, ValueExpr, all, array, array_agg, bool_and, case, coalesce, count_all, count_distinct,
+    Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce, count_all, count_distinct,
     cte, current_date, current_timestamp, extract, function_source, insert, json_agg,
     json_get_text, lag, merge_into, param, percentile_cont, row, row_number, select, slice,
     subscript, table, to_jsonb, update, window,
@@ -207,7 +207,7 @@ fn ergonomic_constructors_build_the_same_typed_ast() {
     let built = select(table("public.app_users", &USERS_FIELDS))
         .column(ID)
         .item(EMAIL.alias("email"))
-        .filter(all([ID.gt(10), ID.lt(20)]))
+        .filter(and([ID.gt(10), ID.lt(20)]))
         .filter_if(false, ID.eq(999))
         .filter_option(Some("egor".to_owned()), |email| EMAIL.ne(email))
         .apply(|query| query.order_desc(ID))
@@ -554,9 +554,9 @@ fn select_into_source_rejects_projection_aliases_that_need_explicit_fields() {
 }
 
 #[test]
-fn recursive_cte_source_renders_columns_and_body_params() {
+fn recursive_cte_ref_renders_columns_and_body_params() {
     let seed = select(users()).column(ID).filter(ID.eq(1));
-    let recursive_arm = select(crate::typed::cte_source("active_users", vec![ID_META]))
+    let recursive_arm = select(crate::typed::cte_ref("active_users", vec![ID_META]))
         .column(ID)
         .filter(ID.lt(10));
     let active_users =

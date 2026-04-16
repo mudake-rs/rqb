@@ -1,12 +1,12 @@
 use super::{BoolExpr, BooleanTest, Field, FieldRef, ValueExpr};
 
 /// Builds a logical `AND` group.
-pub fn all(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
+pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
     BoolExpr::and(exprs)
 }
 
 /// Builds a logical `OR` group.
-pub fn any(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
+pub fn or(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
     BoolExpr::or(exprs)
 }
 

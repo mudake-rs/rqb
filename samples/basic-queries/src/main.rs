@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rqb::dsl::{all, any};
+use rqb::dsl::{and, or};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
@@ -28,12 +28,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(simple.params.len(), 2);
 
     let email_fragment = Some("@example.com");
-    // Multiple filters compose with AND. `all([...])` is the explicit helper
+    // Multiple filters compose with AND. `and([...])` is the explicit helper
     // when a nested predicate group reads better than a chain of `.filter(...)`.
     let composed = select(users::table())
         .column(users::ID)
         .column(users::EMAIL)
-        .filter(all([
+        .filter(and([
             users::STATUS.in_list(["active", "invited"]),
             users::DISPLAY_NAME.is_not_null(),
         ]))
@@ -49,17 +49,17 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(composed.params.len(), 5);
 
-    // `all([...])` and `any([...])` can be nested to express grouped boolean
+    // `and([...])` and `or([...])` can be nested to express grouped boolean
     // logic without raw SQL: active users whose status is active, or invited
     // users that already have a display name.
     let nested = select(users::table())
         .column(users::ID)
         .column(users::EMAIL)
-        .filter(all([
+        .filter(and([
             users::ACTIVE.eq(true),
-            any([
+            or([
                 users::STATUS.eq("active"),
-                all([
+                and([
                     users::STATUS.eq("invited"),
                     users::DISPLAY_NAME.is_not_null(),
                 ]),

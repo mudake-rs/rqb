@@ -16,8 +16,6 @@ anyhow = "1.0.100"
 clap = { version = "4.5.53", features = ["derive", "env"] }
 heck = "0.5.0"
 itoa = "1"
-prettyplease = "0.2.37"
-pretty_assertions = "1"
 proc-macro2 = "1.0.103"
 quote = "1.0.42"
 rqb-macros = { path = "crates/rqb-macros", version = "0.1.0" }

@@ -302,13 +302,11 @@ mod tests {
                 Column {
                     name: "id".to_owned(),
                     const_name: "ID".to_owned(),
-                    meta_name: "ID_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Uuid),
                 },
                 Column {
                     name: "embedding".to_owned(),
                     const_name: "EMBEDDING".to_owned(),
-                    meta_name: "EMBEDDING_META".to_owned(),
                     ty: ColumnType::RawOnly {
                         pg: "vector".to_owned(),
                     },
@@ -332,7 +330,6 @@ mod tests {
         let id = Column {
             name: "id".to_owned(),
             const_name: "ID".to_owned(),
-            meta_name: "ID_META".to_owned(),
             ty: ColumnType::Known(KnownType::Uuid),
         };
         let code = render(&[
@@ -365,31 +362,26 @@ mod tests {
                 Column {
                     name: "id".to_owned(),
                     const_name: "ID".to_owned(),
-                    meta_name: "ID_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Uuid),
                 },
                 Column {
                     name: "amount".to_owned(),
                     const_name: "AMOUNT".to_owned(),
-                    meta_name: "AMOUNT_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Numeric),
                 },
                 Column {
                     name: "created_at".to_owned(),
                     const_name: "CREATED_AT".to_owned(),
-                    meta_name: "CREATED_AT_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Timestamptz),
                 },
                 Column {
                     name: "billing_window".to_owned(),
                     const_name: "BILLING_WINDOW".to_owned(),
-                    meta_name: "BILLING_WINDOW_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Range(Box::new(KnownType::Date))),
                 },
                 Column {
                     name: "metadata".to_owned(),
                     const_name: "METADATA".to_owned(),
-                    meta_name: "METADATA_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Json),
                 },
             ],
@@ -416,7 +408,6 @@ mod tests {
             columns: vec![Column {
                 name: "event-type".to_owned(),
                 const_name: "EVENT_TYPE".to_owned(),
-                meta_name: "EVENT_TYPE_META".to_owned(),
                 ty: ColumnType::RawOnly {
                     pg: "custom-type[]".to_owned(),
                 },
@@ -433,7 +424,6 @@ mod tests {
         let id = Column {
             name: "id".to_owned(),
             const_name: "ID".to_owned(),
-            meta_name: "ID_META".to_owned(),
             ty: ColumnType::Known(KnownType::Uuid),
         };
         let code = render(&[Relation {
@@ -457,13 +447,11 @@ mod tests {
                 Column {
                     name: "source".to_owned(),
                     const_name: "SOURCE".to_owned(),
-                    meta_name: "SOURCE_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Text),
                 },
                 Column {
                     name: "source_".to_owned(),
                     const_name: "SOURCE_1".to_owned(),
-                    meta_name: "SOURCE_1_META".to_owned(),
                     ty: ColumnType::Known(KnownType::Text),
                 },
             ],

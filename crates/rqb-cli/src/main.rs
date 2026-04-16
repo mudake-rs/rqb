@@ -16,6 +16,7 @@ use introspect::introspect;
 
 #[derive(Parser)]
 #[command(name = "rqb")]
+#[command(version)]
 #[command(about = "Schema introspection and code generation for rqb")]
 struct Cli {
     #[command(subcommand)]
@@ -24,14 +25,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    #[command(about = "Generate an rqb::schema! module from a Postgres schema")]
     Generate {
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", help = "Postgres connection URL")]
         database_url: String,
-        #[arg(long, default_value = "public")]
+        #[arg(long, default_value = "public", help = "Postgres schema to introspect")]
         schema: String,
-        #[arg(long)]
+        #[arg(long, help = "Limit generation to a table or view; may be repeated")]
         table: Vec<String>,
-        #[arg(long)]
+        #[arg(long, help = "Output Rust file path")]
         out: PathBuf,
     },
 }

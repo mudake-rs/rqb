@@ -86,7 +86,6 @@ pub(crate) async fn introspect(
         let udt_name: String = row.try_get("udt_name")?;
         relation.columns.push(Column {
             const_name: sanitize_ident(&name.to_shouty_snake_case()),
-            meta_name: sanitize_ident(&format!("{}_META", name.to_shouty_snake_case())),
             ty: map_column_type(&data_type, &udt_name),
             name,
         });
@@ -105,19 +104,9 @@ fn assign_unique_names(relations: &mut BTreeMap<String, Relation>) {
                 .map(|column| column.const_name.clone()),
             &["FIELDS"],
         );
-        let meta_names = unique_ident_strings(
-            relation
-                .columns
-                .iter()
-                .map(|column| column.meta_name.clone()),
-            &["FIELDS"],
-        );
 
-        for ((column, const_name), meta_name) in
-            relation.columns.iter_mut().zip(const_names).zip(meta_names)
-        {
+        for (column, const_name) in relation.columns.iter_mut().zip(const_names) {
             column.const_name = const_name;
-            column.meta_name = meta_name;
         }
     }
 }
@@ -130,11 +119,10 @@ mod tests {
 
     use super::assign_unique_names;
 
-    fn column(name: &str, const_name: &str, meta_name: &str) -> Column {
+    fn column(name: &str, const_name: &str) -> Column {
         Column {
             name: name.to_owned(),
             const_name: const_name.to_owned(),
-            meta_name: meta_name.to_owned(),
             ty: ColumnType::Known(KnownType::Text),
         }
     }
@@ -147,10 +135,7 @@ mod tests {
                 schema: "public".to_owned(),
                 name: "events".to_owned(),
                 kind: RelationKind::Table,
-                columns: vec![
-                    column("source", "SOURCE", "SOURCE_META"),
-                    column("source_", "SOURCE", "SOURCE_META"),
-                ],
+                columns: vec![column("source", "SOURCE"), column("source_", "SOURCE")],
             },
         )]);
 
@@ -159,8 +144,6 @@ mod tests {
         let relation = relations.get("events").unwrap();
         assert_eq!(relation.columns[0].const_name, "SOURCE");
         assert_eq!(relation.columns[1].const_name, "SOURCE_1");
-        assert_eq!(relation.columns[0].meta_name, "SOURCE_META");
-        assert_eq!(relation.columns[1].meta_name, "SOURCE_META_1");
     }
 
     #[test]
@@ -171,7 +154,7 @@ mod tests {
                 schema: "public".to_owned(),
                 name: "events".to_owned(),
                 kind: RelationKind::Table,
-                columns: vec![column("fields", "FIELDS", "FIELDS_META")],
+                columns: vec![column("fields", "FIELDS")],
             },
         )]);
 
@@ -179,6 +162,5 @@ mod tests {
 
         let relation = relations.get("events").unwrap();
         assert_eq!(relation.columns[0].const_name, "FIELDS_1");
-        assert_eq!(relation.columns[0].meta_name, "FIELDS_META");
     }
 }

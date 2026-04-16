@@ -16,7 +16,6 @@ pub(crate) enum RelationKind {
 pub(crate) struct Column {
     pub(crate) name: String,
     pub(crate) const_name: String,
-    pub(crate) meta_name: String,
     pub(crate) ty: ColumnType,
 }
 

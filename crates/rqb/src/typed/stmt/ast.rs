@@ -1,94 +1,144 @@
 use super::*;
 
+/// Projection item in a `SELECT` or `RETURNING` list.
 #[derive(Clone, Debug)]
 pub struct SelectItem {
+    /// Projected expression.
     pub expr: ValueExpr,
+    /// Optional SQL alias.
     pub alias: Option<String>,
 }
 
+/// Sort direction for `ORDER BY`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OrderDirection {
+    /// Ascending order.
     Asc,
+    /// Descending order.
     Desc,
 }
 
+/// Null placement for `ORDER BY`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NullsPosition {
+    /// Render `NULLS FIRST`.
     First,
+    /// Render `NULLS LAST`.
     Last,
 }
 
+/// One `ORDER BY` expression.
 #[derive(Clone, Debug)]
 pub struct OrderItem {
+    /// Expression to order by.
     pub expr: ValueExpr,
+    /// Sort direction.
     pub direction: OrderDirection,
+    /// Optional null placement.
     pub nulls: Option<NullsPosition>,
 }
 
+/// One `GROUP BY` item.
 #[derive(Clone, Debug)]
 pub enum GroupByItem {
+    /// Regular grouped expression.
     Expr(ValueExpr),
+    /// PostgreSQL `ROLLUP`.
     Rollup(Vec<ValueExpr>),
+    /// PostgreSQL `CUBE`.
     Cube(Vec<ValueExpr>),
+    /// PostgreSQL `GROUPING SETS`.
     GroupingSets(Vec<Vec<ValueExpr>>),
 }
 
+/// SQL `FETCH FIRST` clause.
 #[derive(Clone, Debug)]
 pub struct FetchClause {
+    /// Row count expression.
     pub count: ValueExpr,
+    /// Whether to render `WITH TIES`.
     pub with_ties: bool,
 }
 
+/// PostgreSQL row lock mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LockMode {
+    /// `FOR UPDATE`.
     Update,
+    /// `FOR NO KEY UPDATE`.
     NoKeyUpdate,
+    /// `FOR SHARE`.
     Share,
+    /// `FOR KEY SHARE`.
     KeyShare,
 }
 
+/// PostgreSQL row lock wait behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LockWait {
+    /// Wait for locked rows.
     #[default]
     Wait,
+    /// Render `NOWAIT`.
     NoWait,
+    /// Render `SKIP LOCKED`.
     SkipLocked,
 }
 
+/// Row lock clause for a select statement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RowLock {
+    /// Lock mode.
     pub mode: LockMode,
+    /// Wait behavior.
     pub wait: LockWait,
+    /// Optional relation aliases in `FOR ... OF`.
     pub of: Vec<String>,
 }
 
+/// Field assignment used by insert, update, merge, and changesets.
 #[derive(Clone, Debug)]
 pub struct Assignment {
+    /// Target field metadata.
     pub field: Meta,
+    /// Assigned value expression.
     pub value: ValueExpr,
 }
 
+/// Target of an `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 pub enum ConflictTarget {
+    /// Conflict target by one or more columns.
     Columns {
+        /// Target columns.
         fields: Vec<Meta>,
+        /// Optional target predicate.
         predicate: Option<Box<BoolExpr>>,
     },
+    /// Conflict target by named constraint.
     Constraint(String),
 }
 
+/// Action performed for an `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 pub enum ConflictAction {
+    /// Render `DO NOTHING`.
     DoNothing,
+    /// Render `DO UPDATE SET`.
     DoUpdate {
+        /// Update assignments.
         assignments: Vec<Assignment>,
+        /// Optional update predicate.
         filter: Option<Box<BoolExpr>>,
     },
 }
 
+/// Full `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 pub struct ConflictClause {
+    /// Conflict target.
     pub target: ConflictTarget,
+    /// Conflict action.
     pub action: ConflictAction,
 }
 
@@ -113,6 +163,7 @@ pub struct NotMatchedBySourceMergeBuilder {
     pub(super) condition: Option<Box<BoolExpr>>,
 }
 
+/// Builder returned by `Insert::on_conflict(...)` for column targets.
 #[derive(Clone, Debug)]
 pub struct ColumnConflictBuilder {
     pub(super) insert: Insert,
@@ -120,13 +171,16 @@ pub struct ColumnConflictBuilder {
     pub(super) predicate: Option<Box<BoolExpr>>,
 }
 
+/// Builder returned by `Insert::on_conflict_constraint(...)`.
 #[derive(Clone, Debug)]
 pub struct ConstraintConflictBuilder {
     pub(super) insert: Insert,
     pub(super) constraint: String,
 }
 
+/// Trait implemented by DTOs that can provide insert assignments.
 pub trait Insertable {
+    /// Returns assignments to apply to an insert statement.
     fn insert_assignments(&self) -> Vec<Assignment>;
 }
 
@@ -139,7 +193,9 @@ where
     }
 }
 
+/// Trait implemented by DTOs that can provide update assignments.
 pub trait Changeset {
+    /// Returns assignments to apply to an update statement.
     fn changeset_assignments(&self) -> Vec<Assignment>;
 }
 
@@ -157,8 +213,10 @@ where
 /// Use a single field, a tuple of fields, or explicit metadata for dynamic
 /// schema code.
 pub trait ConflictFields {
+    /// Returns the number of fields this target will push.
     fn conflict_field_count(&self) -> usize;
 
+    /// Pushes conflict target fields into `fields`, preserving order and de-duping.
     fn push_conflict_fields(self, fields: &mut Vec<Meta>);
 }
 
@@ -265,123 +323,207 @@ where
     }
 }
 
+/// Typed select statement.
 #[derive(Clone, Debug)]
 pub struct Select {
+    /// CTEs attached to this select.
     pub ctes: Vec<Cte>,
+    /// Root source.
     pub source: Source,
+    /// Joined sources.
     pub joins: Vec<Join>,
+    /// Whether to render `DISTINCT`.
     pub distinct: bool,
+    /// Expressions for `DISTINCT ON`.
     pub distinct_on: Vec<ValueExpr>,
+    /// Projection list. Empty means default root-source projection.
     pub projection: Vec<SelectItem>,
+    /// Optional `WHERE` predicate.
     pub filter: Option<BoolExpr>,
+    /// Grouping expressions.
     pub group_by: Vec<GroupByItem>,
+    /// Optional `HAVING` predicate.
     pub having: Option<BoolExpr>,
+    /// Ordering expressions.
     pub order: Vec<OrderItem>,
+    /// Optional `LIMIT` parameter.
     pub limit: Option<Param>,
+    /// Optional `OFFSET` parameter.
     pub offset: Option<Param>,
+    /// Optional SQL `FETCH FIRST` clause.
     pub fetch: Option<FetchClause>,
+    /// Optional row lock clause.
     pub lock: Option<RowLock>,
 }
 
+/// Typed insert statement.
 #[derive(Clone, Debug)]
 pub struct Insert {
+    /// Target table or view.
     pub target: Source,
+    /// Target columns in insert order.
     pub columns: Vec<Meta>,
+    /// Values for insert rows or explicit assignments.
     pub assignments: Vec<Assignment>,
+    /// Optional `INSERT ... SELECT` source.
     pub source: Option<Box<Select>>,
+    /// Optional conflict handling clause.
     pub conflict: Option<ConflictClause>,
+    /// Optional `RETURNING` projection.
     pub returning: Vec<SelectItem>,
 }
 
+/// Typed update statement.
 #[derive(Clone, Debug)]
 pub struct Update {
+    /// Target table or view.
     pub target: Source,
+    /// Assignments for `SET`.
     pub assignments: Vec<Assignment>,
+    /// Optional `FROM` sources.
     pub from: Vec<Source>,
+    /// Optional `WHERE` predicate.
     pub filter: Option<BoolExpr>,
+    /// Optional `RETURNING` projection.
     pub returning: Vec<SelectItem>,
 }
 
+/// Typed delete statement.
 #[derive(Clone, Debug)]
 pub struct Delete {
+    /// Target table or view.
     pub target: Source,
+    /// Optional `USING` sources.
     pub using: Vec<Source>,
+    /// Required `WHERE` predicate.
     pub filter: Option<BoolExpr>,
+    /// Optional `RETURNING` projection.
     pub returning: Vec<SelectItem>,
 }
 
+/// PostgreSQL `MERGE` match branch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MergeWhen {
+    /// `WHEN MATCHED`.
     Matched,
+    /// `WHEN NOT MATCHED`.
     NotMatched,
+    /// `WHEN NOT MATCHED BY SOURCE`.
     NotMatchedBySource,
 }
 
+/// Action inside a PostgreSQL `MERGE` statement.
 #[derive(Clone, Debug)]
 pub enum MergeAction {
+    /// `DO NOTHING`.
     DoNothing {
+        /// Match branch for the action.
         when: MergeWhen,
+        /// Optional branch condition.
         condition: Option<Box<BoolExpr>>,
     },
+    /// `INSERT`.
     Insert {
+        /// Optional branch condition.
         condition: Option<Box<BoolExpr>>,
+        /// Insert assignments.
         assignments: Vec<Assignment>,
     },
+    /// `UPDATE SET`.
     Update {
+        /// Match branch for the action.
         when: MergeWhen,
+        /// Optional branch condition.
         condition: Option<Box<BoolExpr>>,
+        /// Update assignments.
         assignments: Vec<Assignment>,
     },
+    /// `DELETE`.
     Delete {
+        /// Match branch for the action.
         when: MergeWhen,
+        /// Optional branch condition.
         condition: Option<Box<BoolExpr>>,
     },
 }
 
+/// Typed PostgreSQL `MERGE` statement.
 #[derive(Clone, Debug)]
 pub struct Merge {
+    /// CTEs attached to this merge.
     pub ctes: Vec<Cte>,
+    /// Merge target.
     pub target: Source,
+    /// Merge source.
     pub using: Source,
+    /// Join predicate between target and source.
     pub on: BoolExpr,
+    /// Ordered merge actions.
     pub actions: Vec<MergeAction>,
+    /// Optional `RETURNING` projection.
     pub returning: Vec<SelectItem>,
 }
 
+/// Server-owned raw SQL statement.
 #[derive(Clone, Debug)]
 pub struct RawStmt {
+    /// Raw SQL text using rqb `?` placeholders.
     pub sql: String,
+    /// Bind parameters for the raw SQL text.
     pub params: Vec<Param>,
 }
 
+/// SQL set query operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SetOperator {
+    /// `UNION`.
     Union,
+    /// `UNION ALL`.
     UnionAll,
+    /// `INTERSECT`.
     Intersect,
+    /// `INTERSECT ALL`.
     IntersectAll,
+    /// `EXCEPT`.
     Except,
+    /// `EXCEPT ALL`.
     ExceptAll,
 }
 
+/// SQL set query with optional ordering and row limits.
 #[derive(Clone, Debug)]
 pub struct SetQuery {
+    /// Left query.
     pub left: Box<Stmt>,
+    /// Set operator.
     pub operator: SetOperator,
+    /// Right query.
     pub right: Box<Stmt>,
+    /// Ordering after the set expression.
     pub order: Vec<OrderItem>,
+    /// Optional limit.
     pub limit: Option<Param>,
+    /// Optional offset.
     pub offset: Option<Param>,
+    /// Optional SQL `FETCH FIRST` clause.
     pub fetch: Option<FetchClause>,
 }
 
+/// Any top-level query statement rqb can render.
 #[derive(Clone, Debug)]
 pub enum Stmt {
+    /// Select statement.
     Select(Box<Select>),
+    /// Set query.
     Set(Box<SetQuery>),
+    /// Insert statement.
     Insert(Box<Insert>),
+    /// Update statement.
     Update(Box<Update>),
+    /// Delete statement.
     Delete(Box<Delete>),
+    /// Merge statement.
     Merge(Box<Merge>),
+    /// Raw SQL statement.
     Raw(RawStmt),
 }

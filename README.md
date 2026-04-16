@@ -137,16 +137,30 @@ in application code; the REST sample shows `limit` / `offset` plus
 `Select::count()` for a matching count query.
 
 For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
-and `Select::try_into_source` infer it from explicit field projections. Raw SQL,
-computed columns, and renamed projections use the explicit `cte(...)`,
-`subquery(...)`, or `raw_source(...)` constructors.
+and `Select::try_into_source` infer it from explicit field projections.
+Computed columns can use `rqb::field!`:
+
+```rust
+use rqb::dsl::{case, count_all};
+
+let item_count = rqb::field!("item_count": int8 => i64, ordered);
+
+let order_size = case()
+    .when(schema::orders::TOTAL_CENTS.gte(10_000), "large")
+    .else_("standard");
+```
+
+Raw SQL, computed columns with custom aliases, and renamed projections can still
+use the explicit `cte(...)`, `subquery(...)`, or `raw_source(...)` constructors.
 
 SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
 like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
-service module.
+service module. Import from the grouped modules when autocomplete noise matters:
 
 ```rust
-use rqb::dsl::{coalesce, date_trunc};
+use rqb::dsl::agg::{count_all, sum};
+use rqb::dsl::date::date_trunc;
+use rqb::dsl::scalar::coalesce;
 use rqb::prelude::*;
 ```
 
@@ -262,7 +276,13 @@ cargo run -p rqb-cli -- generate \
 
 Known sqlx-supported Postgres types generate typed `Field<T>` constants.
 Unknown extension types stay raw-only metadata: they can be part of server-owned
-SQL shape, but they are hidden from JSON requests by default.
+SQL shape, but they are hidden from JSON requests by default. Server-owned
+extension operators can be built from raw-only metadata:
+
+```rust
+let embedding = vector_documents::EMBEDDING_META.expr();
+let distance = embedding.op("<->", rqb::dsl::param("[0.1,0.2,0.3]".to_owned()).cast("vector"));
+```
 
 Generated field names match database column names. HTTP JSON casing belongs in
 application DTOs, not in generated schema metadata.

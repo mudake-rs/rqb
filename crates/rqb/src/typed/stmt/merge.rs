@@ -1,6 +1,7 @@
 use super::*;
 
 impl MergeWhen {
+    /// Returns the SQL branch token.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Matched => "MATCHED",
@@ -11,6 +12,7 @@ impl MergeWhen {
 }
 
 impl Merge {
+    /// Creates a PostgreSQL `MERGE` statement.
     pub fn into(target: impl Into<Source>, using: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             ctes: Vec::new(),
@@ -22,11 +24,13 @@ impl Merge {
         }
     }
 
+    /// Adds a CTE to the merge statement.
     pub fn with(mut self, cte: Cte) -> Self {
         self.ctes.push(cte);
         self
     }
 
+    /// Starts a `WHEN MATCHED` branch.
     pub fn when_matched(self) -> MatchedMergeBuilder {
         MatchedMergeBuilder {
             merge: self,
@@ -34,6 +38,7 @@ impl Merge {
         }
     }
 
+    /// Starts a conditional `WHEN MATCHED AND ...` branch.
     pub fn when_matched_if(self, condition: BoolExpr) -> MatchedMergeBuilder {
         MatchedMergeBuilder {
             merge: self,
@@ -41,6 +46,7 @@ impl Merge {
         }
     }
 
+    /// Starts a `WHEN NOT MATCHED` branch.
     pub fn when_not_matched(self) -> NotMatchedMergeBuilder {
         NotMatchedMergeBuilder {
             merge: self,
@@ -48,6 +54,7 @@ impl Merge {
         }
     }
 
+    /// Starts a conditional `WHEN NOT MATCHED AND ...` branch.
     pub fn when_not_matched_if(self, condition: BoolExpr) -> NotMatchedMergeBuilder {
         NotMatchedMergeBuilder {
             merge: self,
@@ -55,6 +62,7 @@ impl Merge {
         }
     }
 
+    /// Starts a `WHEN NOT MATCHED BY SOURCE` branch.
     pub fn when_not_matched_by_source(self) -> NotMatchedBySourceMergeBuilder {
         NotMatchedBySourceMergeBuilder {
             merge: self,
@@ -62,6 +70,7 @@ impl Merge {
         }
     }
 
+    /// Starts a conditional `WHEN NOT MATCHED BY SOURCE AND ...` branch.
     pub fn when_not_matched_by_source_if(
         self,
         condition: BoolExpr,
@@ -72,16 +81,19 @@ impl Merge {
         }
     }
 
+    /// Adds one item to `RETURNING`.
     pub fn returning(mut self, field: impl Into<SelectItem>) -> Self {
         self.returning.push(field.into());
         self
     }
 
+    /// Adds an arbitrary item to `RETURNING`.
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self
     }
 
+    /// Replaces `RETURNING` with every field exposed by the target source.
     pub fn returning_all(mut self) -> Self {
         let qualifier = self.target.explicit_alias().map(str::to_owned);
         let mut returning = Vec::new();
@@ -100,6 +112,7 @@ impl Merge {
 }
 
 impl MatchedMergeBuilder {
+    /// Finishes this branch with `UPDATE SET`.
     pub fn update(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
         finish_merge_action(
             self.merge,
@@ -111,6 +124,7 @@ impl MatchedMergeBuilder {
         )
     }
 
+    /// Finishes this branch with `DELETE`.
     pub fn delete(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -121,6 +135,7 @@ impl MatchedMergeBuilder {
         )
     }
 
+    /// Finishes this branch with `DO NOTHING`.
     pub fn do_nothing(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -133,6 +148,7 @@ impl MatchedMergeBuilder {
 }
 
 impl NotMatchedMergeBuilder {
+    /// Finishes this branch with `INSERT`.
     pub fn insert(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
         finish_merge_action(
             self.merge,
@@ -143,6 +159,7 @@ impl NotMatchedMergeBuilder {
         )
     }
 
+    /// Finishes this branch with `DO NOTHING`.
     pub fn do_nothing(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -155,6 +172,7 @@ impl NotMatchedMergeBuilder {
 }
 
 impl NotMatchedBySourceMergeBuilder {
+    /// Finishes this branch with `UPDATE SET`.
     pub fn update(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
         finish_merge_action(
             self.merge,
@@ -166,6 +184,7 @@ impl NotMatchedBySourceMergeBuilder {
         )
     }
 
+    /// Finishes this branch with `DELETE`.
     pub fn delete(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -176,6 +195,7 @@ impl NotMatchedBySourceMergeBuilder {
         )
     }
 
+    /// Finishes this branch with `DO NOTHING`.
     pub fn do_nothing(self) -> Merge {
         finish_merge_action(
             self.merge,

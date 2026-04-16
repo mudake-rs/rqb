@@ -33,6 +33,7 @@ impl GroupByItem {
 }
 
 impl Stmt {
+    /// Collects bind parameters in final SQL render order.
     pub fn params(&self) -> Params {
         let mut params = Vec::new();
         self.collect_params(&mut params);

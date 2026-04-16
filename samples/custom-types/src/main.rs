@@ -1,3 +1,4 @@
+use rqb::dsl::param;
 use rqb::prelude::*;
 use serde_json::Value;
 use uuid::Uuid;
@@ -23,23 +24,20 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(vector_documents::STATUS_META.db, "status");
     assert_eq!(vector_documents::EMBEDDING_META.pg, "vector");
 
-    // Server-owned raw predicates are the escape hatch for extension operators.
+    // Raw-only extension columns can still participate in server-owned custom
+    // operators when the SQL shape is known by the application.
+    let embedding = vector_documents::EMBEDDING_META.expr();
+    let probe = param("[0.1,0.2,0.3]".to_owned()).cast("vector");
     let vector_search = select(vector_documents::table())
-        .filter(BoolExpr::Raw {
-            sql: "embedding <-> ?::vector < ?".to_owned(),
-            params: vec![
-                Param::typed("[0.1,0.2,0.3]".to_owned()),
-                Param::typed(0.5_f64),
-            ],
-        })
+        .filter(embedding.op("<->", probe).lt(0.5_f64))
         .build()?;
 
     assert_eq!(
         vector_search.sql,
-        "SELECT \"id\", \"status\", \"embedding\", \"metadata\" FROM \"sample\".\"vector_documents\" WHERE embedding <-> $1::vector < $2"
+        "SELECT \"id\", \"status\", \"embedding\", \"metadata\" FROM \"sample\".\"vector_documents\" WHERE (\"embedding\" <-> CAST($1 AS vector)) < $2"
     );
     assert_eq!(vector_search.params.len(), 2);
-    assert!(!vector_search.cacheable);
+    assert!(vector_search.cacheable);
 
     println!("{}", default_projection.sql);
     println!("{}", vector_search.sql);

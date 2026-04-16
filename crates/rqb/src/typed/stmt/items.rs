@@ -1,6 +1,7 @@
 use super::*;
 
 impl SelectItem {
+    /// Creates an unaliased projection item.
     pub fn new(expr: impl Into<ValueExpr>) -> Self {
         Self {
             expr: expr.into(),
@@ -8,6 +9,7 @@ impl SelectItem {
         }
     }
 
+    /// Sets the SQL alias for this projection item.
     pub fn alias(mut self, alias: impl Into<String>) -> Self {
         self.alias = Some(alias.into());
         self
@@ -27,6 +29,7 @@ impl<T> From<FieldRef<T>> for SelectItem {
 }
 
 impl Assignment {
+    /// Creates a field assignment from a value expression.
     pub fn new<T>(field: Field<T>, value: impl Into<ValueExpr>) -> Self {
         Self {
             field: *field.meta,
@@ -36,6 +39,7 @@ impl Assignment {
 }
 
 impl OrderDirection {
+    /// Returns the SQL token for this order direction.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Asc => "ASC",
@@ -45,6 +49,7 @@ impl OrderDirection {
 }
 
 impl NullsPosition {
+    /// Returns the SQL token for this null placement.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::First => "NULLS FIRST",
@@ -54,6 +59,7 @@ impl NullsPosition {
 }
 
 impl LockMode {
+    /// Returns the SQL token for this lock mode.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Update => "FOR UPDATE",
@@ -65,6 +71,7 @@ impl LockMode {
 }
 
 impl LockWait {
+    /// Returns the optional SQL token for this lock wait behavior.
     pub const fn as_sql(self) -> Option<&'static str> {
         match self {
             Self::Wait => None,
@@ -75,6 +82,7 @@ impl LockWait {
 }
 
 impl RowLock {
+    /// Creates a row lock clause with default wait behavior.
     pub const fn new(mode: LockMode) -> Self {
         Self {
             mode,
@@ -83,16 +91,19 @@ impl RowLock {
         }
     }
 
+    /// Sets `NOWAIT`.
     pub const fn nowait(mut self) -> Self {
         self.wait = LockWait::NoWait;
         self
     }
 
+    /// Sets `SKIP LOCKED`.
     pub const fn skip_locked(mut self) -> Self {
         self.wait = LockWait::SkipLocked;
         self
     }
 
+    /// Restricts the lock to a relation alias.
     pub fn of(mut self, relation: impl Into<String>) -> Self {
         self.of.push(relation.into());
         self
@@ -106,6 +117,7 @@ impl Default for RowLock {
 }
 
 impl OrderItem {
+    /// Creates ascending order for an expression.
     pub fn asc(expr: impl Into<ValueExpr>) -> Self {
         Self {
             expr: expr.into(),
@@ -114,6 +126,7 @@ impl OrderItem {
         }
     }
 
+    /// Creates descending order for an expression.
     pub fn desc(expr: impl Into<ValueExpr>) -> Self {
         Self {
             expr: expr.into(),
@@ -122,46 +135,56 @@ impl OrderItem {
         }
     }
 
+    /// Adds `NULLS FIRST`.
     pub fn nulls_first(mut self) -> Self {
         self.nulls = Some(NullsPosition::First);
         self
     }
 
+    /// Adds `NULLS LAST`.
     pub fn nulls_last(mut self) -> Self {
         self.nulls = Some(NullsPosition::Last);
         self
     }
 
+    /// Creates ascending order with `NULLS FIRST`.
     pub fn asc_nulls_first(expr: impl Into<ValueExpr>) -> Self {
         Self::asc(expr).nulls_first()
     }
 
+    /// Creates ascending order with `NULLS LAST`.
     pub fn asc_nulls_last(expr: impl Into<ValueExpr>) -> Self {
         Self::asc(expr).nulls_last()
     }
 
+    /// Creates descending order with `NULLS FIRST`.
     pub fn desc_nulls_first(expr: impl Into<ValueExpr>) -> Self {
         Self::desc(expr).nulls_first()
     }
 
+    /// Creates descending order with `NULLS LAST`.
     pub fn desc_nulls_last(expr: impl Into<ValueExpr>) -> Self {
         Self::desc(expr).nulls_last()
     }
 }
 
 impl GroupByItem {
+    /// Creates a regular `GROUP BY` expression.
     pub fn expr(expr: impl Into<ValueExpr>) -> Self {
         Self::Expr(expr.into())
     }
 
+    /// Creates a `ROLLUP` group item.
     pub fn rollup(exprs: impl IntoIterator<Item = ValueExpr>) -> Self {
         Self::Rollup(exprs.into_iter().collect())
     }
 
+    /// Creates a `CUBE` group item.
     pub fn cube(exprs: impl IntoIterator<Item = ValueExpr>) -> Self {
         Self::Cube(exprs.into_iter().collect())
     }
 
+    /// Creates a `GROUPING SETS` item.
     pub fn grouping_sets(sets: impl IntoIterator<Item = Vec<ValueExpr>>) -> Self {
         Self::GroupingSets(sets.into_iter().collect())
     }

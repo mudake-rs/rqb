@@ -14,6 +14,7 @@ trait ErasedParam: Send + Sync {
     fn debug_name(&self) -> &'static str;
 }
 
+/// Type-erased value that can be bound to Postgres through sqlx.
 #[derive(Clone)]
 pub struct Param {
     // Arc keeps Param::clone() to a refcount bump instead of a heap-allocating dyn clone.
@@ -21,6 +22,7 @@ pub struct Param {
 }
 
 impl Param {
+    /// Stores a typed value for later insertion into `PgArguments`.
     pub fn typed<T>(value: T) -> Self
     where
         T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
@@ -30,10 +32,12 @@ impl Param {
         }
     }
 
+    /// Adds this value to an existing sqlx `PgArguments` buffer.
     pub fn add_to(&self, args: &mut PgArguments) -> Result<()> {
         self.inner.add_to(args)
     }
 
+    /// Returns the stored Rust type name for diagnostics and tests.
     pub fn debug_name(&self) -> &'static str {
         self.inner.debug_name()
     }
@@ -45,24 +49,29 @@ impl fmt::Debug for Param {
     }
 }
 
+/// Ordered bind parameters for a built query.
 #[derive(Clone, Debug, Default)]
 pub struct Params {
     params: Vec<Param>,
 }
 
 impl Params {
+    /// Creates an empty parameter list.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Creates a parameter list from an existing vector.
     pub fn from_vec(params: Vec<Param>) -> Self {
         Self { params }
     }
 
+    /// Appends an already-erased parameter.
     pub fn push(&mut self, param: Param) {
         self.params.push(param);
     }
 
+    /// Appends a typed value as a Postgres bind parameter.
     pub fn push_typed<T>(&mut self, value: T)
     where
         T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
@@ -70,22 +79,27 @@ impl Params {
         self.push(Param::typed(value));
     }
 
+    /// Returns the number of parameters.
     pub fn len(&self) -> usize {
         self.params.len()
     }
 
+    /// Returns true when there are no parameters.
     pub fn is_empty(&self) -> bool {
         self.params.is_empty()
     }
 
+    /// Returns the parameters as a slice in SQL placeholder order.
     pub fn as_slice(&self) -> &[Param] {
         &self.params
     }
 
+    /// Returns stored Rust type names in parameter order.
     pub fn debug_names(&self) -> Vec<&'static str> {
         self.params.iter().map(Param::debug_name).collect()
     }
 
+    /// Converts the stored values into sqlx Postgres arguments.
     pub fn arguments(&self) -> Result<PgArguments> {
         let mut args = PgArguments::default();
         for param in &self.params {

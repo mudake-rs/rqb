@@ -2,21 +2,37 @@ use sqlx::error::DatabaseError;
 use sqlx::postgres::{PgDatabaseError, PgErrorPosition};
 use thiserror::Error;
 
+/// Structured metadata extracted from a Postgres database error.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DbErrorInfo {
+    /// Schema name reported by Postgres.
     pub schema: Option<String>,
+    /// Table name reported by Postgres.
     pub table: Option<String>,
+    /// Column name reported by Postgres.
     pub column: Option<String>,
+    /// Data type name reported by Postgres.
     pub datatype: Option<String>,
+    /// Constraint name reported by Postgres.
     pub constraint: Option<String>,
+    /// Postgres `WHERE` context attached to the error.
     pub where_: Option<String>,
+    /// Error position in the original or internally rewritten query.
     pub position: Option<DbErrorPosition>,
 }
 
+/// Position metadata reported by Postgres for a database error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DbErrorPosition {
+    /// Byte position in the original submitted SQL.
     Original(usize),
-    Internal { position: usize, query: String },
+    /// Byte position in an internally generated query.
+    Internal {
+        /// Byte position in `query`.
+        position: usize,
+        /// Internal query text reported by Postgres.
+        query: String,
+    },
 }
 
 impl DbErrorInfo {
@@ -56,171 +72,307 @@ impl From<PgErrorPosition<'_>> for DbErrorPosition {
     }
 }
 
+/// Error type returned by rqb builders and sqlx execution helpers.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// A `fetch_one`-style operation did not return a row.
     #[error("query returned no rows")]
     NotFound,
 
+    /// Postgres unique constraint violation (`23505`).
     #[error("unique violation{}", constraint_suffix(.constraint))]
     UniqueViolation {
+        /// Constraint name when Postgres reported it.
         constraint: Option<String>,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres foreign key violation (`23503`).
     #[error("foreign key violation{}", constraint_suffix(.constraint))]
     ForeignKeyViolation {
+        /// Constraint name when Postgres reported it.
         constraint: Option<String>,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres restrict violation (`23001`).
     #[error("restrict violation{}", constraint_suffix(.constraint))]
     RestrictViolation {
+        /// Constraint name when Postgres reported it.
         constraint: Option<String>,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres not-null violation (`23502`).
     #[error("not null violation{}", column_suffix(.column))]
     NotNullViolation {
+        /// Column name when Postgres reported it.
         column: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres check constraint violation (`23514`).
     #[error("check violation{}", constraint_suffix(.constraint))]
     CheckViolation {
+        /// Constraint name when Postgres reported it.
         constraint: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres exclusion constraint violation (`23P01`).
     #[error("exclusion violation{}", constraint_suffix(.constraint))]
     ExclusionViolation {
+        /// Constraint name when Postgres reported it.
         constraint: Option<String>,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres serialization failure (`40001`).
     #[error("serialization failure: {message}")]
     SerializationFailure {
+        /// Postgres primary error message.
         message: String,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Postgres hint string.
         hint: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres deadlock detected (`40P01`).
     #[error("deadlock detected: {message}")]
     DeadlockDetected {
+        /// Postgres primary error message.
         message: String,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Postgres hint string.
         hint: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres query cancellation (`57014`).
     #[error("query canceled: {message}")]
     QueryCanceled {
+        /// Postgres primary error message.
         message: String,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Postgres hint string.
         hint: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Postgres insufficient privilege error (`42501`).
     #[error("insufficient privilege: {message}")]
     InsufficientPrivilege {
+        /// Postgres primary error message.
         message: String,
+        /// Postgres detail string.
         detail: Option<String>,
+        /// Postgres hint string.
         hint: Option<String>,
+        /// Table name when Postgres reported it.
         table: Option<String>,
+        /// Column name when Postgres reported it.
         column: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// A database error that is not mapped to a specialized variant.
     #[error("database error ({code}): {message}")]
     Database {
+        /// SQLSTATE error code.
         code: String,
+        /// Database primary error message.
         message: String,
+        /// Database detail string.
         detail: Option<String>,
+        /// Database hint string.
         hint: Option<String>,
+        /// Constraint name when available.
         constraint: Option<String>,
+        /// Table name when available.
         table: Option<String>,
+        /// Column name when available.
         column: Option<String>,
+        /// Additional structured database error metadata.
         info: DbErrorInfo,
     },
 
+    /// Connection-level failure.
     #[error("connection error: {0}")]
     Connection(String),
 
+    /// Unclassified sqlx error.
     #[error("sqlx error: {0}")]
     Sqlx(sqlx::Error),
 
+    /// A transaction body failed and rollback also failed.
     #[error("transaction rollback failed after error: {error}; rollback error: {rollback}")]
     TransactionRollbackFailed {
+        /// Original transaction body error.
         error: Box<Error>,
+        /// Rollback error.
         rollback: Box<Error>,
     },
 
+    /// Failed to encode a bound parameter into Postgres arguments.
     #[error("parameter encode error: {0}")]
     Encode(String),
 
+    /// Raw SQL placeholder count does not match supplied bind values.
     #[error("raw SQL fragment has {placeholders} placeholders but {binds} bind values")]
-    RawBindMismatch { placeholders: usize, binds: usize },
+    RawBindMismatch {
+        /// Number of `?` placeholders in the raw SQL fragment.
+        placeholders: usize,
+        /// Number of bind values supplied for the fragment.
+        binds: usize,
+    },
 
+    /// A typed field was used with an operator it does not support.
     #[error("operator `{operator}` is not supported for typed field `{field}`")]
-    InvalidTypedOperator { field: String, operator: String },
+    InvalidTypedOperator {
+        /// Field API name.
+        field: String,
+        /// Operator name.
+        operator: String,
+    },
 
+    /// A typed field without ordering support was used for sorting.
     #[error("typed field `{field}` is not sortable")]
-    InvalidTypedSort { field: String },
+    InvalidTypedSort {
+        /// Field API name.
+        field: String,
+    },
 
+    /// JSON search referenced a field that is not in the source metadata.
     #[error("unknown search field `{field}`")]
-    InvalidSearchField { field: String },
+    InvalidSearchField {
+        /// Field name from the JSON request.
+        field: String,
+    },
 
+    /// JSON search referenced a field that is not exposed to JSON requests.
     #[error("search field `{field}` is not exposed to JSON requests")]
-    SearchFieldNotExposed { field: String },
+    SearchFieldNotExposed {
+        /// Field name from the JSON request.
+        field: String,
+    },
 
+    /// JSON search used an unsupported operator for a field.
     #[error("operator `{operator}` is not supported for search field `{field}`")]
-    InvalidSearchOperator { field: String, operator: String },
+    InvalidSearchOperator {
+        /// Field name from the JSON request.
+        field: String,
+        /// Operator name from the JSON request.
+        operator: String,
+    },
 
+    /// JSON search value did not match the field's expected JSON shape.
     #[error("invalid JSON value for search field `{field}`; expected {expected}")]
     InvalidSearchValue {
+        /// Field name from the JSON request.
         field: String,
+        /// Human-readable expected value kind.
         expected: &'static str,
     },
 
+    /// JSON search used an empty `and` or `or` group.
     #[error("empty search logical expression `{logical}`")]
-    EmptySearchLogical { logical: &'static str },
+    EmptySearchLogical {
+        /// Logical operator name.
+        logical: &'static str,
+    },
 
+    /// Typed builder used an empty `AND` or `OR` group.
     #[error("empty typed logical expression `{logical}`")]
-    EmptyTypedLogical { logical: String },
+    EmptyTypedLogical {
+        /// Logical operator name.
+        logical: String,
+    },
 
+    /// A write statement targeted a source kind that cannot be written to.
     #[error("{statement} target must be a table or view source, got {source_kind}")]
     InvalidTypedWriteTarget {
+        /// Statement kind.
         statement: &'static str,
+        /// Source kind that was used as the write target.
         source_kind: &'static str,
     },
 
+    /// A write statement had no assignments.
     #[error("{statement} statement requires at least one assignment")]
-    EmptyTypedAssignments { statement: &'static str },
+    EmptyTypedAssignments {
+        /// Statement kind.
+        statement: &'static str,
+    },
 
+    /// A write statement had no target columns.
     #[error("{statement} statement requires at least one column")]
-    EmptyTypedColumns { statement: &'static str },
+    EmptyTypedColumns {
+        /// Statement kind.
+        statement: &'static str,
+    },
 
+    /// Insert builder state was not valid.
     #[error("invalid insert shape: {message}")]
-    InvalidInsertShape { message: &'static str },
+    InvalidInsertShape {
+        /// Validation message.
+        message: &'static str,
+    },
 
+    /// Select builder state was not valid.
     #[error("invalid select shape: {message}")]
-    InvalidSelectShape { message: &'static str },
+    InvalidSelectShape {
+        /// Validation message.
+        message: &'static str,
+    },
 
+    /// Merge builder state was not valid.
     #[error("invalid merge shape: {message}")]
-    InvalidMergeShape { message: &'static str },
+    InvalidMergeShape {
+        /// Validation message.
+        message: &'static str,
+    },
 
+    /// CTE definition or exposed field list was not valid.
     #[error("invalid CTE `{name}`: {message}")]
-    InvalidCteShape { name: String, message: &'static str },
+    InvalidCteShape {
+        /// CTE name.
+        name: String,
+        /// Validation message.
+        message: &'static str,
+    },
 
+    /// A typed delete statement was built without a filter.
     #[error("typed delete without filter is not allowed")]
     TypedDeleteWithoutFilter,
 
+    /// A non-cross join was built without an `ON` condition.
     #[error("{join} requires an ON condition")]
-    MissingJoinCondition { join: &'static str },
+    MissingJoinCondition {
+        /// Join kind.
+        join: &'static str,
+    },
 }
 
 fn constraint_suffix(constraint: &Option<String>) -> String {
@@ -324,6 +476,7 @@ impl Error {
         }
     }
 
+    /// Returns true for retryable transaction errors and connection failures.
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -331,10 +484,12 @@ impl Error {
         ) || self.is_connection()
     }
 
+    /// Returns true for connection-level failures.
     pub fn is_connection(&self) -> bool {
         matches!(self, Self::Connection(_))
     }
 
+    /// Returns the SQLSTATE code when this error maps to one.
     pub fn code(&self) -> Option<&str> {
         match self {
             Self::UniqueViolation { .. } => Some("23505"),
@@ -352,6 +507,7 @@ impl Error {
         }
     }
 
+    /// Returns the associated constraint name when available.
     pub fn constraint_name(&self) -> Option<&str> {
         match self {
             Self::UniqueViolation { constraint, .. }
@@ -369,6 +525,7 @@ impl Error {
         }
     }
 
+    /// Returns the associated table name when available.
     pub fn table_name(&self) -> Option<&str> {
         match self {
             Self::InsufficientPrivilege { table, .. } | Self::Database { table, .. } => table
@@ -378,6 +535,7 @@ impl Error {
         }
     }
 
+    /// Returns the associated column name when available.
     pub fn column_name(&self) -> Option<&str> {
         match self {
             Self::NotNullViolation { column, .. }
@@ -389,6 +547,7 @@ impl Error {
         }
     }
 
+    /// Returns the database detail message when available.
     pub fn detail(&self) -> Option<&str> {
         match self {
             Self::UniqueViolation { detail, .. }
@@ -404,6 +563,7 @@ impl Error {
         }
     }
 
+    /// Returns the database hint message when available.
     pub fn hint(&self) -> Option<&str> {
         match self {
             Self::SerializationFailure { hint, .. }
@@ -415,23 +575,28 @@ impl Error {
         }
     }
 
+    /// Returns the associated schema name when available.
     pub fn schema_name(&self) -> Option<&str> {
         self.db_error_info().and_then(|info| info.schema.as_deref())
     }
 
+    /// Returns the associated data type name when available.
     pub fn datatype_name(&self) -> Option<&str> {
         self.db_error_info()
             .and_then(|info| info.datatype.as_deref())
     }
 
+    /// Returns the Postgres `WHERE` error context when available.
     pub fn where_context(&self) -> Option<&str> {
         self.db_error_info().and_then(|info| info.where_.as_deref())
     }
 
+    /// Returns the database error position when available.
     pub fn position(&self) -> Option<&DbErrorPosition> {
         self.db_error_info().and_then(|info| info.position.as_ref())
     }
 
+    /// Returns the full structured database error metadata when available.
     pub fn db_error_info(&self) -> Option<&DbErrorInfo> {
         match self {
             Self::UniqueViolation { info, .. }

@@ -1,3 +1,8 @@
+//! Procedural macros used by the `rqb` facade crate.
+//!
+//! Applications normally use these macros through `rqb::schema!`,
+//! `#[derive(rqb::Insertable)]`, and `#[derive(rqb::Changeset)]`.
+
 use heck::ToShoutySnakeCase;
 use heck::ToSnakeCase;
 use proc_macro::TokenStream;

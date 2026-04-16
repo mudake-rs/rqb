@@ -1,6 +1,7 @@
 use super::*;
 
 impl ColumnConflictBuilder {
+    /// Adds another column to the conflict target.
     pub fn and<T>(mut self, field: Field<T>) -> Self {
         push_column(&mut self.fields, *field.meta);
         self
@@ -17,6 +18,7 @@ impl ColumnConflictBuilder {
         self
     }
 
+    /// Finishes the conflict clause with `DO NOTHING`.
     pub fn do_nothing(self) -> Insert {
         finish_conflict(
             self.insert,
@@ -25,6 +27,7 @@ impl ColumnConflictBuilder {
         )
     }
 
+    /// Finishes the conflict clause with `DO UPDATE SET`.
     pub fn do_update_set<I>(self, assignments: I) -> Insert
     where
         I: IntoIterator<Item = Assignment>,
@@ -36,6 +39,7 @@ impl ColumnConflictBuilder {
         )
     }
 
+    /// Finishes the conflict clause with `DO UPDATE SET ... WHERE`.
     pub fn do_update_set_where<I>(self, assignments: I, filter: BoolExpr) -> Insert
     where
         I: IntoIterator<Item = Assignment>,
@@ -49,6 +53,7 @@ impl ColumnConflictBuilder {
 }
 
 impl ConstraintConflictBuilder {
+    /// Finishes the constraint conflict clause with `DO NOTHING`.
     pub fn do_nothing(self) -> Insert {
         finish_conflict(
             self.insert,
@@ -57,6 +62,7 @@ impl ConstraintConflictBuilder {
         )
     }
 
+    /// Finishes the constraint conflict clause with `DO UPDATE SET`.
     pub fn do_update_set<I>(self, assignments: I) -> Insert
     where
         I: IntoIterator<Item = Assignment>,
@@ -68,6 +74,7 @@ impl ConstraintConflictBuilder {
         )
     }
 
+    /// Finishes the constraint conflict clause with `DO UPDATE SET ... WHERE`.
     pub fn do_update_set_where<I>(self, assignments: I, filter: BoolExpr) -> Insert
     where
         I: IntoIterator<Item = Assignment>,

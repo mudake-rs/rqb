@@ -1,6 +1,7 @@
 use super::*;
 
 impl OrderItem {
+    /// Validates the ordered expression and its field ordering capability.
     pub fn validate(&self) -> Result<()> {
         self.expr.validate()?;
         if let Some(meta) = self.expr.field_meta()
@@ -43,6 +44,7 @@ impl FetchClause {
 }
 
 impl Stmt {
+    /// Validates this statement before rendering.
     pub fn validate(&self) -> Result<()> {
         match self {
             Self::Select(select) => select.validate(),
@@ -57,6 +59,7 @@ impl Stmt {
 }
 
 impl SetQuery {
+    /// Validates both sides and trailing clauses of this set query.
     pub fn validate(&self) -> Result<()> {
         self.left.validate()?;
         self.right.validate()?;
@@ -72,6 +75,7 @@ impl SetQuery {
 }
 
 impl Select {
+    /// Validates source, joins, expressions, limits, locks, and CTEs.
     pub fn validate(&self) -> Result<()> {
         validate_cte_names(&self.ctes)?;
         for cte in &self.ctes {
@@ -108,6 +112,7 @@ impl Select {
 }
 
 impl Insert {
+    /// Validates target, assignments, conflict handling, and returning list.
     pub fn validate(&self) -> Result<()> {
         validate_table_target("insert", &self.target)?;
         match (&self.source, self.assignments.is_empty()) {
@@ -169,6 +174,7 @@ impl ConflictClause {
 }
 
 impl Update {
+    /// Validates target, assignments, optional sources, and returning list.
     pub fn validate(&self) -> Result<()> {
         validate_table_target("update", &self.target)?;
         validate_nonempty_assignments("update", &self.assignments)?;
@@ -186,6 +192,7 @@ impl Update {
 }
 
 impl Delete {
+    /// Validates target, required filter, optional sources, and returning list.
     pub fn validate(&self) -> Result<()> {
         validate_table_target("delete", &self.target)?;
         let Some(filter) = &self.filter else {
@@ -200,6 +207,7 @@ impl Delete {
 }
 
 impl RawStmt {
+    /// Validates raw placeholder count against supplied binds.
     pub fn validate(&self) -> Result<()> {
         raw_sql::validate_bind_count(&self.sql, self.params.len())
     }
@@ -296,6 +304,7 @@ impl MergeAction {
 }
 
 impl Merge {
+    /// Validates target, source, match predicate, actions, and returning list.
     pub fn validate(&self) -> Result<()> {
         validate_cte_names(&self.ctes)?;
         for cte in &self.ctes {

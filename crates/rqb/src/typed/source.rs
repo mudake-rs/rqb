@@ -1,50 +1,82 @@
 use crate::typed::{BoolExpr, Meta, Param, Stmt};
 use crate::{Result, typed::raw};
 
+/// Relation-like object that can appear in a `FROM`, `JOIN`, `UPDATE`, or write target.
 #[derive(Clone, Debug)]
 pub enum Source {
+    /// Database table from static schema metadata.
     Table {
+        /// Qualified table name, for example `public.users`.
         name: &'static str,
+        /// Optional SQL alias.
         alias: Option<String>,
+        /// Exposed fields.
         fields: &'static [&'static Meta],
     },
+    /// Database view from static schema metadata.
     View {
+        /// Qualified view name.
         name: &'static str,
+        /// Optional SQL alias.
         alias: Option<String>,
+        /// Exposed fields.
         fields: &'static [&'static Meta],
     },
+    /// Reference to a CTE defined in the surrounding statement.
     Cte {
+        /// CTE name.
         name: String,
+        /// Optional SQL alias.
         alias: Option<String>,
+        /// Exposed fields.
         fields: Vec<Meta>,
     },
+    /// Derived table from a nested query.
     Subquery {
+        /// Query rendered inside parentheses.
         stmt: Box<Stmt>,
+        /// Required SQL alias.
         alias: String,
+        /// Exposed fields.
         fields: Vec<Meta>,
     },
+    /// Server-owned raw SQL source.
     Raw {
+        /// Raw SQL fragment using rqb `?` placeholders.
         sql: String,
+        /// Required SQL alias.
         alias: String,
+        /// Bind parameters for the raw fragment.
         params: Vec<Param>,
+        /// Exposed fields.
         fields: Vec<Meta>,
     },
+    /// Table-valued function source.
     Function {
+        /// Function name rendered as SQL.
         name: &'static str,
+        /// Function arguments.
         args: Vec<crate::typed::ValueExpr>,
+        /// Required SQL alias.
         alias: String,
+        /// Exposed fields.
         fields: Vec<Meta>,
+        /// Whether to render `WITH ORDINALITY`.
         ordinality: bool,
     },
 }
 
+/// PostgreSQL CTE materialization hint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CteMaterialization {
+    /// Render `MATERIALIZED`.
     Materialized,
+    /// Render `NOT MATERIALIZED`.
     NotMaterialized,
 }
 
 impl CteMaterialization {
+    /// Returns the SQL keyword for this materialization hint.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Materialized => "MATERIALIZED",
@@ -53,30 +85,48 @@ impl CteMaterialization {
     }
 }
 
+/// Common table expression definition.
 #[derive(Clone, Debug)]
 pub struct Cte {
+    /// CTE name.
     pub name: String,
+    /// Optional explicit column aliases.
     pub columns: Vec<String>,
+    /// Whether to render `WITH RECURSIVE`.
     pub recursive: bool,
+    /// Optional materialization hint.
     pub materialization: Option<CteMaterialization>,
+    /// CTE body statement.
     pub stmt: Box<Stmt>,
+    /// Exposed field metadata for querying this CTE.
     pub fields: Vec<Meta>,
 }
 
+/// SQL join kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JoinKind {
+    /// Inner join.
     Inner,
+    /// Left outer join.
     Left,
+    /// Right outer join.
     Right,
+    /// Full outer join.
     Full,
+    /// Cross join.
     Cross,
 }
 
+/// Join clause attached to a select statement.
 #[derive(Clone, Debug)]
 pub struct Join {
+    /// Join kind.
     pub kind: JoinKind,
+    /// Joined source.
     pub source: Source,
+    /// Join condition. Cross joins do not require one.
     pub on: Option<BoolExpr>,
+    /// Whether to render `LATERAL`.
     pub lateral: bool,
 }
 
@@ -176,6 +226,7 @@ pub fn function_source(
 }
 
 impl JoinKind {
+    /// Returns the SQL keyword for this join kind.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Inner => "JOIN",
@@ -186,12 +237,14 @@ impl JoinKind {
         }
     }
 
+    /// Returns true when this join kind requires an `ON` condition.
     pub const fn requires_condition(self) -> bool {
         !matches!(self, Self::Cross)
     }
 }
 
 impl Join {
+    /// Creates a non-lateral join with an `ON` condition.
     pub fn new(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             kind,
@@ -201,6 +254,7 @@ impl Join {
         }
     }
 
+    /// Creates a lateral join with an `ON` condition.
     pub fn lateral(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             kind,
@@ -210,6 +264,7 @@ impl Join {
         }
     }
 
+    /// Creates a cross join.
     pub fn cross(source: impl Into<Source>) -> Self {
         Self {
             kind: JoinKind::Cross,
@@ -219,6 +274,7 @@ impl Join {
         }
     }
 
+    /// Creates a lateral cross join.
     pub fn cross_lateral(source: impl Into<Source>) -> Self {
         Self {
             kind: JoinKind::Cross,
@@ -228,6 +284,7 @@ impl Join {
         }
     }
 
+    /// Validates the joined source and required join condition.
     pub fn validate(&self) -> Result<()> {
         self.source.validate()?;
         match (&self.on, self.kind.requires_condition()) {
@@ -248,6 +305,7 @@ impl Join {
 }
 
 impl Cte {
+    /// Creates a CTE with explicit exposed field metadata.
     pub fn new(
         name: impl Into<String>,
         stmt: impl Into<Stmt>,
@@ -263,6 +321,7 @@ impl Cte {
         }
     }
 
+    /// Sets explicit CTE column aliases.
     pub fn columns<I, S>(mut self, columns: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -272,16 +331,19 @@ impl Cte {
         self
     }
 
+    /// Marks the CTE and surrounding `WITH` clause as recursive.
     pub fn recursive(mut self) -> Self {
         self.recursive = true;
         self
     }
 
+    /// Adds the PostgreSQL `MATERIALIZED` hint.
     pub fn materialized(mut self) -> Self {
         self.materialization = Some(CteMaterialization::Materialized);
         self
     }
 
+    /// Adds the PostgreSQL `NOT MATERIALIZED` hint.
     pub fn not_materialized(mut self) -> Self {
         self.materialization = Some(CteMaterialization::NotMaterialized);
         self
@@ -326,6 +388,7 @@ impl Cte {
 }
 
 impl Source {
+    /// Returns a stable source-kind name for diagnostics.
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::Table { .. } => "table",
@@ -337,10 +400,12 @@ impl Source {
         }
     }
 
+    /// Returns true when this source is a table.
     pub const fn is_table(&self) -> bool {
         matches!(self, Self::Table { .. })
     }
 
+    /// Sets or replaces the SQL alias for this source.
     pub fn alias(mut self, alias: impl Into<String>) -> Self {
         let alias = alias.into();
         match &mut self {
@@ -354,6 +419,7 @@ impl Source {
         self
     }
 
+    /// Enables `WITH ORDINALITY` for a table-valued function source.
     pub fn with_ordinality(mut self) -> Self {
         if let Self::Function { ordinality, .. } = &mut self {
             *ordinality = true;
@@ -386,6 +452,7 @@ impl Source {
         }
     }
 
+    /// Validates this source before rendering.
     pub fn validate(&self) -> Result<()> {
         match self {
             Self::Subquery {

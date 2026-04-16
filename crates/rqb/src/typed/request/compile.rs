@@ -12,6 +12,7 @@ use super::{
 };
 
 impl SearchRequest {
+    /// Merges this request into an existing select, preserving server filters.
     pub fn merge_in(&self, mut select: Select) -> Result<Select> {
         let request_filter = self.filter_expr(&select.source)?;
         select.filter = match (select.filter, request_filter) {
@@ -22,6 +23,7 @@ impl SearchRequest {
         self.apply_page_and_sort(select)
     }
 
+    /// Applies this request to an existing select, replacing server filter, sort, and page clauses.
     pub fn replace_in(&self, mut select: Select) -> Result<Select> {
         select.filter = self.filter_expr(&select.source)?;
         self.apply_page_and_sort(select)
@@ -313,10 +315,12 @@ impl From<SortDirection> for OrderDirection {
 }
 
 impl Select {
+    /// Merges a JSON search request into this select.
     pub fn request(self, request: SearchRequest) -> Result<Self> {
         request.merge_in(self)
     }
 
+    /// Applies a JSON search request to this select, replacing existing request-controlled clauses.
     pub fn replace_request(self, request: SearchRequest) -> Result<Self> {
         request.replace_in(self)
     }

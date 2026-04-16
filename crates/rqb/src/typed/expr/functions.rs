@@ -1,6 +1,6 @@
 use sqlx::{Encode, Postgres, Type};
 
-use crate::typed::{BoolExpr, Param};
+use crate::typed::{BoolExpr, CaseBuilder, Param};
 
 use super::{ValueExpr, ValueOp};
 
@@ -51,6 +51,7 @@ pub use text::{
 };
 pub use uuid::{uuid_extract_timestamp, uuid_extract_version, uuidv7};
 
+/// Wraps an owned Rust value as a typed bind parameter expression.
 pub fn param<T>(value: T) -> ValueExpr
 where
     T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
@@ -58,6 +59,12 @@ where
     ValueExpr::Param(Param::typed(value))
 }
 
+/// Starts a SQL `CASE` expression builder.
+pub fn case() -> CaseBuilder {
+    CaseBuilder::new()
+}
+
+/// Builds a generic SQL function call.
 pub fn function(
     name: &'static str,
     args: impl IntoIterator<Item = impl Into<ValueExpr>>,
@@ -68,14 +75,17 @@ pub fn function(
     }
 }
 
+/// Builds an SQL array expression from value expressions.
 pub fn array(values: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
     ValueExpr::Array(values.into_iter().map(Into::into).collect())
 }
 
+/// Builds an SQL row expression from value expressions.
 pub fn row(values: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
     ValueExpr::Row(values.into_iter().map(Into::into).collect())
 }
 
+/// Builds an array or JSON subscript expression.
 pub fn subscript(expr: impl Into<ValueExpr>, index: impl Into<ValueExpr>) -> ValueExpr {
     ValueExpr::Subscript {
         expr: Box::new(expr.into()),
@@ -83,6 +93,7 @@ pub fn subscript(expr: impl Into<ValueExpr>, index: impl Into<ValueExpr>) -> Val
     }
 }
 
+/// Builds an array or JSON slice expression.
 pub fn slice(
     expr: impl Into<ValueExpr>,
     start: Option<impl Into<ValueExpr>>,
@@ -95,6 +106,7 @@ pub fn slice(
     }
 }
 
+/// Builds a Postgres `||` concatenation expression.
 pub fn concat_op(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> ValueExpr {
     ValueExpr::Binary {
         left: Box::new(left.into()),
@@ -103,6 +115,7 @@ pub fn concat_op(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> Val
     }
 }
 
+/// Builds a `SIMILAR TO` predicate.
 pub fn similar_to(expr: impl Into<ValueExpr>, pattern: impl Into<ValueExpr>) -> BoolExpr {
     BoolExpr::SimilarTo {
         expr: expr.into(),
@@ -111,6 +124,7 @@ pub fn similar_to(expr: impl Into<ValueExpr>, pattern: impl Into<ValueExpr>) -> 
     }
 }
 
+/// Builds a negated `SIMILAR TO` predicate.
 pub fn not_similar_to(expr: impl Into<ValueExpr>, pattern: impl Into<ValueExpr>) -> BoolExpr {
     BoolExpr::SimilarTo {
         expr: expr.into(),

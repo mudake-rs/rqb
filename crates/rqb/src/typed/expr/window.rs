@@ -6,6 +6,7 @@ use super::{
 };
 
 impl WindowFunction {
+    /// Returns the SQL function name.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::RowNumber => "row_number",
@@ -24,6 +25,7 @@ impl WindowFunction {
 }
 
 impl WindowFrameKind {
+    /// Returns the SQL frame unit.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Rows => "ROWS",
@@ -34,6 +36,7 @@ impl WindowFrameKind {
 }
 
 impl FrameExclude {
+    /// Returns the SQL exclusion clause.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::CurrentRow => "EXCLUDE CURRENT ROW",
@@ -45,6 +48,7 @@ impl FrameExclude {
 }
 
 impl WindowFrame {
+    /// Creates a window frame with a start boundary.
     pub fn new(kind: WindowFrameKind, start: FrameBound) -> Self {
         Self {
             kind,
@@ -54,11 +58,13 @@ impl WindowFrame {
         }
     }
 
+    /// Adds an end boundary, rendering `BETWEEN start AND end`.
     pub fn between(mut self, end: FrameBound) -> Self {
         self.end = Some(end);
         self
     }
 
+    /// Adds an exclusion clause.
     pub fn exclude(mut self, exclude: FrameExclude) -> Self {
         self.exclude = Some(exclude);
         self
@@ -66,69 +72,83 @@ impl WindowFrame {
 }
 
 impl WindowSpec {
+    /// Creates an empty window specification.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Adds a `PARTITION BY` expression.
     pub fn partition_by(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.partition_by.push(expr.into());
         self
     }
 
+    /// Adds a fully specified `ORDER BY` item.
     pub fn order_by(mut self, item: OrderItem) -> Self {
         self.order_by.push(item);
         self
     }
 
+    /// Adds ascending order.
     pub fn order_asc(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::asc(expr));
         self
     }
 
+    /// Adds descending order.
     pub fn order_desc(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::desc(expr));
         self
     }
 
+    /// Adds ascending order with `NULLS FIRST`.
     pub fn order_asc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::asc_nulls_first(expr));
         self
     }
 
+    /// Adds ascending order with `NULLS LAST`.
     pub fn order_asc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::asc_nulls_last(expr));
         self
     }
 
+    /// Adds descending order with `NULLS FIRST`.
     pub fn order_desc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::desc_nulls_first(expr));
         self
     }
 
+    /// Adds descending order with `NULLS LAST`.
     pub fn order_desc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order_by.push(OrderItem::desc_nulls_last(expr));
         self
     }
 
+    /// Sets the window frame.
     pub fn frame(mut self, frame: WindowFrame) -> Self {
         self.frame = Some(Box::new(frame));
         self
     }
 
+    /// Sets a `ROWS` frame.
     pub fn rows(self, start: FrameBound) -> Self {
         self.frame(WindowFrame::new(WindowFrameKind::Rows, start))
     }
 
+    /// Sets a `RANGE` frame.
     pub fn range(self, start: FrameBound) -> Self {
         self.frame(WindowFrame::new(WindowFrameKind::Range, start))
     }
 
+    /// Sets a `GROUPS` frame.
     pub fn groups(self, start: FrameBound) -> Self {
         self.frame(WindowFrame::new(WindowFrameKind::Groups, start))
     }
 }
 
 impl WindowFunctionBuilder {
+    /// Attaches an `OVER (...)` clause and returns a value expression.
     pub fn over(self, spec: WindowSpec) -> ValueExpr {
         ValueExpr::Window {
             function: self.function,
@@ -139,16 +159,19 @@ impl WindowFunctionBuilder {
 }
 
 impl OffsetWindowFunctionBuilder {
+    /// Sets the `lag` / `lead` offset argument.
     pub fn offset(mut self, offset: impl Into<ValueExpr>) -> Self {
         self.offset = Some(offset.into());
         self
     }
 
+    /// Sets the `lag` / `lead` default argument.
     pub fn default(mut self, value: impl Into<ValueExpr>) -> Self {
         self.default = Some(value.into());
         self
     }
 
+    /// Attaches an `OVER (...)` clause and returns a value expression.
     pub fn over(self, spec: WindowSpec) -> ValueExpr {
         let mut args = vec![self.value];
         match (self.offset, self.default) {
@@ -173,54 +196,67 @@ impl OffsetWindowFunctionBuilder {
     }
 }
 
+/// Starts a window specification.
 pub fn window() -> WindowSpec {
     WindowSpec::new()
 }
 
+/// Starts a window specification with one partition expression.
 pub fn partition_by(expr: impl Into<ValueExpr>) -> WindowSpec {
     WindowSpec::new().partition_by(expr)
 }
 
+/// Builds `row_number()`.
 pub fn row_number() -> WindowFunctionBuilder {
     window_function(WindowFunction::RowNumber, [])
 }
 
+/// Builds `rank()`.
 pub fn rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::Rank, [])
 }
 
+/// Builds `dense_rank()`.
 pub fn dense_rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::DenseRank, [])
 }
 
+/// Builds `first_value(expr)`.
 pub fn first_value(expr: impl Into<ValueExpr>) -> WindowFunctionBuilder {
     window_function(WindowFunction::FirstValue, [expr.into()])
 }
 
+/// Builds `last_value(expr)`.
 pub fn last_value(expr: impl Into<ValueExpr>) -> WindowFunctionBuilder {
     window_function(WindowFunction::LastValue, [expr.into()])
 }
 
+/// Builds `nth_value(expr, nth)`.
 pub fn nth_value(expr: impl Into<ValueExpr>, nth: impl Into<ValueExpr>) -> WindowFunctionBuilder {
     window_function(WindowFunction::NthValue, [expr.into(), nth.into()])
 }
 
+/// Builds `ntile(buckets)`.
 pub fn ntile(buckets: impl Into<ValueExpr>) -> WindowFunctionBuilder {
     window_function(WindowFunction::Ntile, [buckets.into()])
 }
 
+/// Builds `percent_rank()`.
 pub fn percent_rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::PercentRank, [])
 }
 
+/// Builds `cume_dist()`.
 pub fn cume_dist() -> WindowFunctionBuilder {
     window_function(WindowFunction::CumeDist, [])
 }
 
+/// Builds `lag(expr)`.
 pub fn lag(expr: impl Into<ValueExpr>) -> OffsetWindowFunctionBuilder {
     offset_window_function(WindowFunction::Lag, expr)
 }
 
+/// Builds `lead(expr)`.
 pub fn lead(expr: impl Into<ValueExpr>) -> OffsetWindowFunctionBuilder {
     offset_window_function(WindowFunction::Lead, expr)
 }
@@ -235,34 +271,42 @@ where
     }
 }
 
+/// Starts a `ROWS` frame.
 pub fn rows(start: FrameBound) -> WindowFrame {
     WindowFrame::new(WindowFrameKind::Rows, start)
 }
 
+/// Starts a `RANGE` frame.
 pub fn range(start: FrameBound) -> WindowFrame {
     WindowFrame::new(WindowFrameKind::Range, start)
 }
 
+/// Starts a `GROUPS` frame.
 pub fn groups(start: FrameBound) -> WindowFrame {
     WindowFrame::new(WindowFrameKind::Groups, start)
 }
 
+/// Returns `UNBOUNDED PRECEDING`.
 pub fn unbounded_preceding() -> FrameBound {
     FrameBound::UnboundedPreceding
 }
 
+/// Returns `expr PRECEDING`.
 pub fn preceding(expr: impl Into<ValueExpr>) -> FrameBound {
     FrameBound::Preceding(Box::new(expr.into()))
 }
 
+/// Returns `CURRENT ROW`.
 pub fn current_row() -> FrameBound {
     FrameBound::CurrentRow
 }
 
+/// Returns `expr FOLLOWING`.
 pub fn following(expr: impl Into<ValueExpr>) -> FrameBound {
     FrameBound::Following(Box::new(expr.into()))
 }
 
+/// Returns `UNBOUNDED FOLLOWING`.
 pub fn unbounded_following() -> FrameBound {
     FrameBound::UnboundedFollowing
 }

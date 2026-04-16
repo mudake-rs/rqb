@@ -45,6 +45,7 @@ impl Renderer {
 }
 
 impl Stmt {
+    /// Validates and renders this statement into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_stmt(self))
@@ -52,6 +53,7 @@ impl Stmt {
 }
 
 impl Select {
+    /// Validates and renders this select into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_select(self))
@@ -59,6 +61,7 @@ impl Select {
 }
 
 impl SetQuery {
+    /// Validates and renders this set query into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_set(self))
@@ -66,6 +69,7 @@ impl SetQuery {
 }
 
 impl Insert {
+    /// Validates and renders this insert into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_insert(self))
@@ -73,6 +77,7 @@ impl Insert {
 }
 
 impl crate::typed::Update {
+    /// Validates and renders this update into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_update(self))
@@ -80,6 +85,7 @@ impl crate::typed::Update {
 }
 
 impl Delete {
+    /// Validates and renders this delete into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_delete(self))
@@ -87,6 +93,7 @@ impl Delete {
 }
 
 impl Merge {
+    /// Validates and renders this merge into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_merge(self))
@@ -94,6 +101,7 @@ impl Merge {
 }
 
 impl RawStmt {
+    /// Validates and renders this raw statement into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_raw_stmt(self))

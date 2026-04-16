@@ -14,38 +14,47 @@ where
         + Type<Postgres>
         + PgHasArrayType,
 {
+    /// Builds an array overlap predicate (`&&`).
     pub fn contains_any(self, values: Vec<T>) -> BoolExpr {
         self.reference().contains_any(values)
     }
 
+    /// Builds an array contains-all predicate (`@>`).
     pub fn contains_all(self, values: Vec<T>) -> BoolExpr {
         self.reference().contains_all(values)
     }
 
+    /// Builds an array contained-by predicate (`<@`).
     pub fn contained_by(self, values: Vec<T>) -> BoolExpr {
         self.reference().contained_by(values)
     }
 
+    /// Builds `value = ANY(array)`.
     pub fn has(self, value: T) -> BoolExpr {
         self.reference().has(value)
     }
 
+    /// Builds the negated `ANY` membership predicate.
     pub fn not_has(self, value: T) -> BoolExpr {
         self.reference().not_has(value)
     }
 
+    /// Builds an empty-array predicate.
     pub fn is_empty(self) -> BoolExpr {
         self.reference().is_empty()
     }
 
+    /// Builds a non-empty-array predicate.
     pub fn is_not_empty(self) -> BoolExpr {
         self.reference().is_not_empty()
     }
 
+    /// Builds an array subscript expression.
     pub fn element(self, index: i32) -> ValueExpr {
         self.reference().element(index)
     }
 
+    /// Builds an array slice expression.
     pub fn slice(self, start: Option<i32>, end: Option<i32>) -> ValueExpr {
         self.reference().slice(start, end)
     }
@@ -61,26 +70,32 @@ where
         + Type<Postgres>
         + PgHasArrayType,
 {
+    /// Builds an array overlap predicate (`&&`).
     pub fn contains_any(self, values: Vec<T>) -> BoolExpr {
         self.array_infix("&&", values, false)
     }
 
+    /// Builds an array contains-all predicate (`@>`).
     pub fn contains_all(self, values: Vec<T>) -> BoolExpr {
         self.array_infix("@>", values, false)
     }
 
+    /// Builds an array contained-by predicate (`<@`).
     pub fn contained_by(self, values: Vec<T>) -> BoolExpr {
         self.array_infix("<@", values, false)
     }
 
+    /// Builds `value = ANY(array)`.
     pub fn has(self, value: T) -> BoolExpr {
         self.any_predicate(value, false)
     }
 
+    /// Builds the negated `ANY` membership predicate.
     pub fn not_has(self, value: T) -> BoolExpr {
         self.any_predicate(value, true)
     }
 
+    /// Builds an empty-array predicate.
     pub fn is_empty(self) -> BoolExpr {
         BoolExpr::ArrayIsEmpty {
             expr: self.expr(),
@@ -88,6 +103,7 @@ where
         }
     }
 
+    /// Builds a non-empty-array predicate.
     pub fn is_not_empty(self) -> BoolExpr {
         BoolExpr::ArrayIsEmpty {
             expr: self.expr(),
@@ -95,6 +111,7 @@ where
         }
     }
 
+    /// Builds an array subscript expression.
     pub fn element(self, index: i32) -> ValueExpr {
         ValueExpr::Subscript {
             expr: Box::new(self.expr()),
@@ -102,6 +119,7 @@ where
         }
     }
 
+    /// Builds an array slice expression.
     pub fn slice(self, start: Option<i32>, end: Option<i32>) -> ValueExpr {
         ValueExpr::Slice {
             expr: Box::new(self.expr()),
@@ -129,46 +147,57 @@ where
 }
 
 impl Field<serde_json::Value> {
+    /// Alias for [`Field::json_contains`].
     pub fn contains(self, value: serde_json::Value) -> BoolExpr {
         self.json_contains(value)
     }
 
+    /// Alias for [`Field::json_contained_by`].
     pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.json_contained_by(value)
     }
 
+    /// Builds a JSONB key-exists predicate (`?`).
     pub fn key_exists(self, key: impl Into<String>) -> BoolExpr {
         self.reference().key_exists(key)
     }
 
+    /// Builds a JSONB any-key-exists predicate (`?|`).
     pub fn keys_exist_any(self, keys: Vec<String>) -> BoolExpr {
         self.reference().keys_exist_any(keys)
     }
 
+    /// Builds a JSONB all-keys-exist predicate (`?&`).
     pub fn keys_exist_all(self, keys: Vec<String>) -> BoolExpr {
         self.reference().keys_exist_all(keys)
     }
 
+    /// Builds a JSONB containment predicate (`@>`).
     pub fn json_contains(self, value: serde_json::Value) -> BoolExpr {
         self.reference().json_contains(value)
     }
 
+    /// Builds a JSONB contained-by predicate (`<@`).
     pub fn json_contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.reference().json_contained_by(value)
     }
 
+    /// Builds a JSON value access expression (`->`).
     pub fn get(self, key: impl Into<String>) -> ValueExpr {
         self.reference().get(key)
     }
 
+    /// Builds a JSON text access expression (`->>`).
     pub fn get_text(self, key: impl Into<String>) -> ValueExpr {
         self.reference().get_text(key)
     }
 
+    /// Builds a JSON path access expression (`#>`).
     pub fn path(self, path: Vec<String>) -> ValueExpr {
         self.reference().path(path)
     }
 
+    /// Builds a JSON path text access expression (`#>>`).
     pub fn path_text(self, path: Vec<String>) -> ValueExpr {
         self.reference().path_text(path)
     }
@@ -180,42 +209,52 @@ where
     sqlx::postgres::types::PgRange<T>:
         Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
 {
+    /// Alias for [`Field::range_contains`].
     pub fn contains(self, value: T) -> BoolExpr {
         self.range_contains(value)
     }
 
+    /// Builds a range contains element predicate (`@>`).
     pub fn range_contains(self, value: T) -> BoolExpr {
         self.reference().range_contains(value)
     }
 
+    /// Builds a range contains range predicate (`@>`).
     pub fn contains_range(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().contains_range(value)
     }
 
+    /// Builds a range contained-by predicate (`<@`).
     pub fn contained_by(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().contained_by(value)
     }
 
+    /// Builds a range overlap predicate (`&&`).
     pub fn overlaps(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().overlaps(value)
     }
 
+    /// Builds a range adjacency predicate (`-|-`).
     pub fn adjacent_to(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().adjacent_to(value)
     }
 
+    /// Builds a strictly-left range predicate (`<<`).
     pub fn strictly_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().strictly_left_of(value)
     }
 
+    /// Builds a strictly-right range predicate (`>>`).
     pub fn strictly_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().strictly_right_of(value)
     }
 
+    /// Builds a does-not-extend-right range predicate (`&<`).
     pub fn does_not_extend_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().does_not_extend_right_of(value)
     }
 
+    /// Builds a does-not-extend-left range predicate (`&>`).
     pub fn does_not_extend_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.reference().does_not_extend_left_of(value)
     }
@@ -227,10 +266,12 @@ where
     sqlx::postgres::types::PgRange<T>:
         Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
 {
+    /// Alias for [`FieldRef::range_contains`].
     pub fn contains(self, value: T) -> BoolExpr {
         self.range_contains(value)
     }
 
+    /// Builds a range contains element predicate (`@>`).
     pub fn range_contains(self, value: T) -> BoolExpr {
         BoolExpr::Infix {
             left: self.expr(),
@@ -240,34 +281,42 @@ where
         }
     }
 
+    /// Builds a range contains range predicate (`@>`).
     pub fn contains_range(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("@>", value)
     }
 
+    /// Builds a range contained-by predicate (`<@`).
     pub fn contained_by(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("<@", value)
     }
 
+    /// Builds a range overlap predicate (`&&`).
     pub fn overlaps(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("&&", value)
     }
 
+    /// Builds a range adjacency predicate (`-|-`).
     pub fn adjacent_to(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("-|-", value)
     }
 
+    /// Builds a strictly-left range predicate (`<<`).
     pub fn strictly_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("<<", value)
     }
 
+    /// Builds a strictly-right range predicate (`>>`).
     pub fn strictly_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix(">>", value)
     }
 
+    /// Builds a does-not-extend-right range predicate (`&<`).
     pub fn does_not_extend_right_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("&<", value)
     }
 
+    /// Builds a does-not-extend-left range predicate (`&>`).
     pub fn does_not_extend_left_of(self, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
         self.range_infix("&>", value)
     }
@@ -283,46 +332,57 @@ where
 }
 
 impl FieldRef<serde_json::Value> {
+    /// Alias for [`FieldRef::json_contains`].
     pub fn contains(self, value: serde_json::Value) -> BoolExpr {
         self.json_contains(value)
     }
 
+    /// Alias for [`FieldRef::json_contained_by`].
     pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.json_contained_by(value)
     }
 
+    /// Builds a JSONB key-exists predicate (`?`).
     pub fn key_exists(self, key: impl Into<String>) -> BoolExpr {
         self.json_infix("?", Param::typed(key.into()))
     }
 
+    /// Builds a JSONB any-key-exists predicate (`?|`).
     pub fn keys_exist_any(self, keys: Vec<String>) -> BoolExpr {
         self.json_infix("?|", Param::typed(keys))
     }
 
+    /// Builds a JSONB all-keys-exist predicate (`?&`).
     pub fn keys_exist_all(self, keys: Vec<String>) -> BoolExpr {
         self.json_infix("?&", Param::typed(keys))
     }
 
+    /// Builds a JSONB containment predicate (`@>`).
     pub fn json_contains(self, value: serde_json::Value) -> BoolExpr {
         self.json_infix("@>", Param::typed(value))
     }
 
+    /// Builds a JSONB contained-by predicate (`<@`).
     pub fn json_contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.json_infix("<@", Param::typed(value))
     }
 
+    /// Builds a JSON value access expression (`->`).
     pub fn get(self, key: impl Into<String>) -> ValueExpr {
         self.json_value_infix("->", Param::typed(key.into()))
     }
 
+    /// Builds a JSON text access expression (`->>`).
     pub fn get_text(self, key: impl Into<String>) -> ValueExpr {
         self.json_value_infix("->>", Param::typed(key.into()))
     }
 
+    /// Builds a JSON path access expression (`#>`).
     pub fn path(self, path: Vec<String>) -> ValueExpr {
         self.json_value_infix("#>", Param::typed(path))
     }
 
+    /// Builds a JSON path text access expression (`#>>`).
     pub fn path_text(self, path: Vec<String>) -> ValueExpr {
         self.json_value_infix("#>>", Param::typed(path))
     }

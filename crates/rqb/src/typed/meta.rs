@@ -1,26 +1,43 @@
+/// JSON value kind accepted by a field in [`SearchRequest`](crate::SearchRequest).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JsonKind {
+    /// JSON string value.
     Text,
+    /// JSON boolean value.
     Bool,
+    /// JSON integer value that fits in `i32`.
     Integer,
+    /// JSON integer value that fits in `i64`.
     BigInt,
+    /// JSON floating-point value.
     Float,
+    /// Decimal value encoded as a JSON string.
     NumericString,
+    /// UUID string value.
     Uuid,
+    /// Date string value.
     Date,
+    /// Time string value.
     Time,
+    /// Timestamp without timezone string value.
     Timestamp,
+    /// Timestamp with timezone string value.
     Timestamptz,
+    /// Arbitrary JSONB value.
     Jsonb,
 }
 
+/// Operator capability flags for a field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OpSet {
+    /// Whether equality-style operators are valid.
     pub equality: bool,
+    /// Whether ordering-style operators are valid.
     pub ordering: bool,
 }
 
 impl OpSet {
+    /// No typed comparison or sorting operators are allowed.
     pub const fn none() -> Self {
         Self {
             equality: false,
@@ -28,6 +45,7 @@ impl OpSet {
         }
     }
 
+    /// Equality operators are allowed, ordering operators are not.
     pub const fn equality() -> Self {
         Self {
             equality: true,
@@ -35,6 +53,7 @@ impl OpSet {
         }
     }
 
+    /// Equality, ordering, and sorting operators are allowed.
     pub const fn ordered() -> Self {
         Self {
             equality: true,
@@ -43,16 +62,23 @@ impl OpSet {
     }
 }
 
+/// Field metadata used for validation, rendering, and JSON search exposure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Meta {
+    /// API-facing field name used by JSON search.
     pub api: &'static str,
+    /// Database column name rendered into SQL.
     pub db: &'static str,
+    /// Postgres type name used by generated schema and diagnostics.
     pub pg: &'static str,
+    /// Typed operator capability flags.
     pub ops: OpSet,
+    /// JSON search exposure, if the field is visible to `SearchRequest`.
     pub json: Option<JsonKind>,
 }
 
 impl Meta {
+    /// Creates field metadata with separate API and database names.
     pub const fn new(api: &'static str, db: &'static str, pg: &'static str) -> Self {
         Self {
             api,
@@ -63,15 +89,18 @@ impl Meta {
         }
     }
 
+    /// Creates field metadata where API and database names are the same.
     pub const fn col(name: &'static str, pg: &'static str) -> Self {
         Self::new(name, name, pg)
     }
 
+    /// Marks the field as visible to JSON search with the given JSON kind.
     pub const fn json(mut self, kind: JsonKind) -> Self {
         self.json = Some(kind);
         self
     }
 
+    /// Sets typed operator capability flags.
     pub const fn ops(mut self, ops: OpSet) -> Self {
         self.ops = ops;
         self

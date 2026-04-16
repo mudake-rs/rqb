@@ -4,6 +4,7 @@ use crate::{Error, Result};
 use super::{BoolExpr, BoolOp, ValueExpr};
 
 impl BoolExpr {
+    /// Validates this boolean expression before SQL rendering.
     pub fn validate(&self) -> Result<()> {
         match self {
             Self::Constant(_) => Ok(()),
@@ -89,6 +90,7 @@ impl BoolExpr {
 }
 
 impl ValueExpr {
+    /// Validates this value expression before SQL rendering.
     pub fn validate(&self) -> Result<()> {
         match self {
             Self::Aggregate {

@@ -1,54 +1,67 @@
 use super::*;
 
+/// Starts a typed `SELECT` statement.
 pub fn select(source: impl Into<Source>) -> Select {
     Select::from(source)
 }
 
+/// Starts a typed `INSERT` statement.
 pub fn insert(target: impl Into<Source>) -> Insert {
     Insert::into(target)
 }
 
+/// Starts a typed `UPDATE` statement.
 pub fn update(target: impl Into<Source>) -> Update {
     Update::table(target)
 }
 
+/// Starts a typed `DELETE FROM` statement.
 pub fn delete_from(target: impl Into<Source>) -> Delete {
     Delete::from(target)
 }
 
+/// Starts a typed PostgreSQL `MERGE` statement.
 pub fn merge_into(target: impl Into<Source>, using: impl Into<Source>, on: BoolExpr) -> Merge {
     Merge::into(target, using, on)
 }
 
+/// Starts a server-owned raw SQL statement.
 pub fn raw(sql: impl Into<String>) -> RawStmt {
     RawStmt::new(sql)
 }
 
+/// Builds a `UNION` set query.
 pub fn union(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::Union, left, right)
 }
 
+/// Builds a `UNION ALL` set query.
 pub fn union_all(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::UnionAll, left, right)
 }
 
+/// Builds an `INTERSECT` set query.
 pub fn intersect(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::Intersect, left, right)
 }
 
+/// Builds an `INTERSECT ALL` set query.
 pub fn intersect_all(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::IntersectAll, left, right)
 }
 
+/// Builds an `EXCEPT` set query.
 pub fn except(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::Except, left, right)
 }
 
+/// Builds an `EXCEPT ALL` set query.
 pub fn except_all(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::ExceptAll, left, right)
 }
 
 impl Stmt {
+    /// Creates a raw SQL statement variant.
     pub fn raw(sql: impl Into<String>) -> Self {
         Self::Raw(RawStmt::new(sql))
     }
@@ -67,6 +80,7 @@ impl From<SetQuery> for Stmt {
 }
 
 impl SetOperator {
+    /// Returns the SQL operator token.
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Union => "UNION",

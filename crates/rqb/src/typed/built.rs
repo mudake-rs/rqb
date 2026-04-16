@@ -3,15 +3,20 @@ use sqlx::postgres::PgArguments;
 use crate::Result;
 use crate::typed::Params;
 
+/// Rendered SQL plus its bind parameters.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct BuiltQuery {
+    /// Rendered Postgres SQL using `$N` placeholders.
     pub sql: String,
+    /// Bind parameters in placeholder order.
     pub params: Params,
+    /// Whether this query is safe to reuse as a stable prepared statement shape.
     pub cacheable: bool,
 }
 
 impl BuiltQuery {
+    /// Converts stored parameters into sqlx Postgres arguments.
     pub fn arguments(&self) -> Result<PgArguments> {
         self.params.arguments()
     }

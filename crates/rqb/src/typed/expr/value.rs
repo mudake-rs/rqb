@@ -2,9 +2,60 @@ use sqlx::{Encode, Postgres, Type};
 
 use crate::typed::{Meta, OrderItem, Param, SelectItem};
 
-use super::{BoolExpr, BoolOp, ValueExpr};
+use super::{BoolExpr, BoolOp, CaseBuilder, ValueExpr, ValueOp};
+
+impl CaseBuilder {
+    /// Creates an empty `CASE` expression builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a `WHEN condition THEN value` branch.
+    pub fn when(mut self, condition: BoolExpr, value: impl Into<ValueExpr>) -> Self {
+        self.branches.push((condition, value.into()));
+        self
+    }
+
+    /// Finishes the expression without an `ELSE` branch.
+    pub fn end(self) -> ValueExpr {
+        ValueExpr::Case {
+            branches: self.branches,
+            else_: None,
+        }
+    }
+
+    /// Finishes the expression with an `ELSE` branch.
+    pub fn else_(self, value: impl Into<ValueExpr>) -> ValueExpr {
+        ValueExpr::Case {
+            branches: self.branches,
+            else_: Some(Box::new(value.into())),
+        }
+    }
+}
+
+impl Meta {
+    /// Returns this metadata as an unqualified value expression.
+    ///
+    /// This is useful for raw-only extension columns that are known to the
+    /// schema generator but intentionally do not have a typed [`Field`](crate::Field).
+    pub fn expr(self) -> ValueExpr {
+        ValueExpr::Field {
+            meta: self,
+            qualifier: None,
+        }
+    }
+
+    /// Returns this metadata as a qualified value expression.
+    pub fn at(self, qualifier: impl Into<String>) -> ValueExpr {
+        ValueExpr::Field {
+            meta: self,
+            qualifier: Some(qualifier.into()),
+        }
+    }
+}
 
 impl ValueExpr {
+    /// Wraps a typed Rust value as a SQL bind parameter expression.
     pub fn param<T>(value: T) -> Self
     where
         T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
@@ -12,6 +63,7 @@ impl ValueExpr {
         Self::Param(Param::typed(value))
     }
 
+    /// Returns this expression as an aliased projection item.
     pub fn alias(self, alias: impl Into<String>) -> SelectItem {
         SelectItem {
             expr: self,
@@ -19,6 +71,47 @@ impl ValueExpr {
         }
     }
 
+    /// Casts this expression to a Postgres type.
+    pub fn cast(self, pg: &'static str) -> Self {
+        Self::Cast {
+            expr: Box::new(self),
+            pg,
+        }
+    }
+
+    /// Builds a custom value operator expression.
+    ///
+    /// Use this as the typed escape hatch for extension operators such as
+    /// pgvector distance operators.
+    pub fn op(self, op: &'static str, right: impl Into<ValueExpr>) -> Self {
+        Self::Binary {
+            left: Box::new(self),
+            op: ValueOp::Custom(op),
+            right: Box::new(right.into()),
+        }
+    }
+
+    /// Builds a custom boolean infix predicate.
+    pub fn predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
+        BoolExpr::Infix {
+            left: self,
+            op,
+            right: right.into(),
+            negated: false,
+        }
+    }
+
+    /// Builds a negated custom boolean infix predicate.
+    pub fn not_predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
+        BoolExpr::Infix {
+            left: self,
+            op,
+            right: right.into(),
+            negated: true,
+        }
+    }
+
+    /// Builds `expr IS NULL`.
     pub fn is_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self,
@@ -26,6 +119,7 @@ impl ValueExpr {
         }
     }
 
+    /// Builds `expr IS NOT NULL`.
     pub fn is_not_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self,
@@ -73,6 +167,7 @@ impl ValueExpr {
         self.compare(BoolOp::IsNotDistinctFrom, right)
     }
 
+    /// Adds aggregate-local `ORDER BY`.
     pub fn aggregate_order_by(mut self, item: OrderItem) -> Self {
         if let Self::Aggregate { order_by, .. } = &mut self {
             order_by.push(item);
@@ -80,26 +175,32 @@ impl ValueExpr {
         self
     }
 
+    /// Adds aggregate-local ascending order.
     pub fn aggregate_order_asc(self, expr: impl Into<ValueExpr>) -> Self {
         self.aggregate_order_by(OrderItem::asc(expr))
     }
 
+    /// Adds aggregate-local descending order.
     pub fn aggregate_order_desc(self, expr: impl Into<ValueExpr>) -> Self {
         self.aggregate_order_by(OrderItem::desc(expr))
     }
 
+    /// Alias for [`ValueExpr::aggregate_order_by`].
     pub fn order_by(self, item: OrderItem) -> Self {
         self.aggregate_order_by(item)
     }
 
+    /// Alias for [`ValueExpr::aggregate_order_asc`].
     pub fn order_asc(self, expr: impl Into<ValueExpr>) -> Self {
         self.aggregate_order_asc(expr)
     }
 
+    /// Alias for [`ValueExpr::aggregate_order_desc`].
     pub fn order_desc(self, expr: impl Into<ValueExpr>) -> Self {
         self.aggregate_order_desc(expr)
     }
 
+    /// Adds an aggregate `FILTER (WHERE ...)` predicate.
     pub fn aggregate_filter(mut self, filter: BoolExpr) -> Self {
         match &mut self {
             Self::Aggregate {
@@ -118,6 +219,7 @@ impl ValueExpr {
         self
     }
 
+    /// Alias for [`ValueExpr::aggregate_filter`].
     pub fn filter(self, filter: BoolExpr) -> Self {
         self.aggregate_filter(filter)
     }

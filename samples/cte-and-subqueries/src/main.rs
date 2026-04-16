@@ -5,15 +5,11 @@ use rqb_sample_schema::order_items as items;
 use rqb_sample_schema::orders;
 use uuid::Uuid;
 
-static ITEM_COUNT_META: Meta = Meta::new("item_count", "item_count", "int8").ops(OpSet::ordered());
-const ITEM_COUNT: Field<i64> = Field::new(&ITEM_COUNT_META);
-
-static N_META: Meta = Meta::new("n", "n", "int4").ops(OpSet::ordered());
-const N: Field<i32> = Field::new(&N_META);
-
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let u = users::alias("u");
     let o = orders::alias("o");
+    let item_count = rqb::field!("item_count": int8 => i64, ordered);
+    let n = rqb::field!("n": int4 => i32, ordered);
 
     // Subqueries are still server-owned query shapes. JSON requests cannot
     // introduce EXISTS, IN-subquery, joins, or raw SQL.
@@ -45,10 +41,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .bind(1_i32)
                 .bind(3_i32),
         ),
-        vec![N_META],
+        vec![*n.meta],
     )
     .recursive();
-    let recursive = select(nums.source()).with(nums).column(N).build()?;
+    let recursive = select(nums.source()).with(nums).column(n).build()?;
 
     assert_eq!(
         recursive.sql,
@@ -63,12 +59,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .agg(count_all().alias("item_count"))
             .filter(items::ORDER_ID.eq_field(o.id())),
         "item_counts",
-        vec![ITEM_COUNT_META],
+        vec![*item_count.meta],
     );
     let lateral = select(&o)
         .column(o.id())
         .left_join_lateral(item_counts, BoolExpr::Constant(true))
-        .column(ITEM_COUNT.at("item_counts"))
+        .column(item_count.at("item_counts"))
         .build()?;
 
     assert_eq!(

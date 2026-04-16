@@ -1,17 +1,14 @@
 use chrono::{DateTime, Utc};
-use rqb::dsl::{count_all, json_get_text, param, row_number, sum, window};
+use rqb::dsl::{case, count_all, json_get_text, param, row_number, sum, window};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::events;
 use rqb_sample_schema::orders;
 
-static LAST_EVENT_AT_META: Meta =
-    Meta::new("last_event_at", "last_event_at", "timestamptz").ops(OpSet::ordered());
-const LAST_EVENT_AT: Field<DateTime<Utc>> = Field::new(&LAST_EVENT_AT_META);
-
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let au = users::alias("au");
     let o = orders::alias("o");
+    let last_event_at = rqb::field!("last_event_at": timestamptz => DateTime<Utc>, ordered);
 
     // `try_into_cte` infers exposed fields from explicit field projections, so
     // common CTEs do not repeat `vec![*ID.meta, ...]`.
@@ -30,15 +27,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .order_desc(events::CREATED_AT)
             .limit(1),
         "latest_event",
-        vec![LAST_EVENT_AT_META],
+        vec![*last_event_at.meta],
     );
 
     // CASE is a value expression, so it can be selected, aliased, grouped, or
     // nested like any other expression.
-    let order_size = ValueExpr::Case {
-        branches: vec![(o.total_cents().gte(10_000), "large".into())],
-        else_: Some(Box::new("standard".into())),
-    };
+    let order_size = case()
+        .when(o.total_cents().gte(10_000), "large")
+        .else_("standard");
 
     let built = select(active_users_source)
         .with(active_users)
@@ -72,7 +68,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .alias("order_rank"),
         )
         .item(order_size.alias("order_size"))
-        .item(LAST_EVENT_AT.at("latest_event").alias("last_event_at"))
+        .item(last_event_at.at("latest_event").alias("last_event_at"))
         .filter(o.status().in_list(["paid", "refunded"]))
         .filter(o.metadata().key_exists("source"))
         .group_by(au.email())
@@ -81,9 +77,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .group_by(o.status())
         .group_by(o.total_cents())
         .group_by(o.created_at())
-        .group_by(LAST_EVENT_AT.at("latest_event"))
+        .group_by(last_event_at.at("latest_event"))
         .having(sum(o.total_cents()).gt(0_i64))
-        .order_desc_nulls_last(LAST_EVENT_AT.at("latest_event"))
+        .order_desc_nulls_last(last_event_at.at("latest_event"))
         .fetch_first_with_ties(param(25_i64))
         .build()?;
 

@@ -1,6 +1,7 @@
 use super::*;
 
 impl Insert {
+    /// Creates an insert statement for a table or view source.
     pub fn into(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
@@ -24,6 +25,7 @@ impl Insert {
         self
     }
 
+    /// Adds assignments produced by an [`Insertable`] DTO.
     pub fn values(mut self, values: impl Insertable) -> Self {
         extend_insert_assignments(
             &mut self.columns,
@@ -33,16 +35,19 @@ impl Insert {
         self
     }
 
+    /// Adds a target column for `INSERT ... SELECT`.
     pub fn column<T>(mut self, field: Field<T>) -> Self {
         push_column(&mut self.columns, *field.meta);
         self
     }
 
+    /// Uses a select statement as the insert source.
     pub fn from_select(mut self, select: Select) -> Self {
         self.source = Some(Box::new(select));
         self
     }
 
+    /// Starts an `ON CONFLICT (columns...)` clause.
     pub fn on_conflict(self, fields: impl ConflictFields) -> ColumnConflictBuilder {
         let mut target_fields = Vec::with_capacity(fields.conflict_field_count());
         fields.push_conflict_fields(&mut target_fields);
@@ -53,6 +58,7 @@ impl Insert {
         }
     }
 
+    /// Starts an `ON CONFLICT ON CONSTRAINT` clause.
     pub fn on_conflict_constraint(
         self,
         constraint: impl Into<String>,
@@ -63,17 +69,20 @@ impl Insert {
         }
     }
 
+    /// Adds one field to `RETURNING`.
     pub fn returning<T>(mut self, field: Field<T>) -> Self {
         self.returning.push(select_item_for_field(field));
         self
     }
 
+    /// Replaces `RETURNING` with every field exposed by the target source.
     pub fn returning_all(mut self) -> Self {
         self.returning.clear();
         push_all_source_fields(&self.target, &mut self.returning);
         self
     }
 
+    /// Adds an arbitrary item to `RETURNING`.
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self

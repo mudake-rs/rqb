@@ -30,6 +30,11 @@
 
 mod error;
 mod tx;
+/// Lower-level typed query building modules.
+///
+/// Most application code should import [`prelude`] and selected helpers from
+/// [`dsl`]. This module remains public for users who want explicit paths to the
+/// AST, source, metadata, parameter, and request types.
 pub mod typed;
 
 extern crate self as rqb;
@@ -42,21 +47,75 @@ pub use serde_json;
 pub use sqlx;
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use typed::{
-    Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, Changeset, ColumnConflictBuilder,
-    ConflictAction, ConflictClause, ConflictFields, ConflictTarget, ConstraintConflictBuilder, Cte,
-    CteMaterialization, Delete, FetchClause, Field, FieldRef, FrameBound, FrameExclude,
-    GroupByItem, Insert, Insertable, IntoFieldRef, Join, JoinKind, JsonKind, LockMode, LockWait,
-    MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta, NotMatchedBySourceMergeBuilder,
-    NotMatchedMergeBuilder, NullsPosition, OffsetWindowFunctionBuilder, OpSet, OrderDirection,
-    OrderItem, Param, Params, RawStmt, RowLock, SearchFilter, SearchOperator, SearchPredicate,
-    SearchRequest, SearchSort, Select, SelectItem, SetOperator, SetQuery, SortDirection, Source,
-    Stmt, Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind, WindowFunction,
-    WindowFunctionBuilder, WindowSpec, cte, cte_source, delete_from, except, except_all,
-    function_source, insert, intersect, intersect_all, merge_into, raw, raw_source, select,
-    subquery, table, union, union_all, update, view,
+    Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
+    ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
+    ConstraintConflictBuilder, Cte, CteMaterialization, Delete, FetchClause, Field, FieldRef,
+    FrameBound, FrameExclude, GroupByItem, Insert, Insertable, IntoFieldRef, Join, JoinKind,
+    JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta,
+    NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
+    OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, RowLock,
+    SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
+    SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame,
+    WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, case, cte, cte_source,
+    delete_from, except, except_all, function_source, insert, intersect, intersect_all, merge_into,
+    raw, raw_source, select, subquery, table, union, union_all, update, view,
 };
 pub use uuid;
 
+/// Creates a metadata-backed computed field for CTEs, subqueries, and projections.
+///
+/// Generated schema should stay the default for real table columns. This macro
+/// is for derived columns such as `count(*) AS item_count`, where rqb still
+/// needs field metadata for later joins or outer projections.
+///
+/// The metadata is initialized once per macro expansion site with `OnceLock`,
+/// so it can be used inside functions without leaking on repeated calls.
+///
+/// ```rust,ignore
+/// let item_count = rqb::field!("item_count": int8 => i64, ordered);
+/// let raw_score = rqb::field!("score": "numeric" => rust_decimal::Decimal, equality);
+/// ```
+#[macro_export]
+macro_rules! field {
+    ($name:literal : $pg:ident => $ty:ty) => {
+        $crate::field!(@build $name, stringify!($pg), $ty, none)
+    };
+    ($name:literal : $pg:literal => $ty:ty) => {
+        $crate::field!(@build $name, $pg, $ty, none)
+    };
+    ($name:literal : $pg:ident => $ty:ty, $ops:ident) => {
+        $crate::field!(@build $name, stringify!($pg), $ty, $ops)
+    };
+    ($name:literal : $pg:literal => $ty:ty, $ops:ident) => {
+        $crate::field!(@build $name, $pg, $ty, $ops)
+    };
+    (@build $name:literal, $pg:expr, $ty:ty, none) => {{
+        static __RQB_FIELD_META: ::std::sync::OnceLock<$crate::Meta> =
+            ::std::sync::OnceLock::new();
+        $crate::Field::<$ty>::new(__RQB_FIELD_META.get_or_init(|| {
+            $crate::Meta::col($name, $pg).ops($crate::OpSet::none())
+        }))
+    }};
+    (@build $name:literal, $pg:expr, $ty:ty, equality) => {{
+        static __RQB_FIELD_META: ::std::sync::OnceLock<$crate::Meta> =
+            ::std::sync::OnceLock::new();
+        $crate::Field::<$ty>::new(__RQB_FIELD_META.get_or_init(|| {
+            $crate::Meta::col($name, $pg).ops($crate::OpSet::equality())
+        }))
+    }};
+    (@build $name:literal, $pg:expr, $ty:ty, ordered) => {{
+        static __RQB_FIELD_META: ::std::sync::OnceLock<$crate::Meta> =
+            ::std::sync::OnceLock::new();
+        $crate::Field::<$ty>::new(__RQB_FIELD_META.get_or_init(|| {
+            $crate::Meta::col($name, $pg).ops($crate::OpSet::ordered())
+        }))
+    }};
+}
+
+/// Builds `jsonb_agg(jsonb_build_object(...))` from metadata-backed fields.
+///
+/// Field and field-ref arguments use their metadata database name as the JSON
+/// object key. Computed expressions can be passed as `("key", expr)` pairs.
 #[macro_export]
 macro_rules! jsonb_agg_object {
     ($($item:expr),+ $(,)?) => {{
@@ -66,18 +125,100 @@ macro_rules! jsonb_agg_object {
     }};
 }
 
+/// rqb result type.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// SQL expression helpers that are useful on demand but too broad for the prelude.
 pub mod dsl {
+    /// Aggregate helper functions.
+    pub mod agg {
+        pub use crate::typed::{
+            aggregate, array_agg, array_agg_distinct, avg, bool_and, bool_or, count, count_all,
+            count_distinct, every, json_agg, jsonb_agg_object, max, min, mode,
+            ordered_set_aggregate, percentile_cont, percentile_disc, stddev, stddev_pop,
+            stddev_samp, string_agg, sum, var_pop, var_samp, variance,
+        };
+    }
+
+    /// Array helper functions.
+    pub mod arrays {
+        pub use crate::typed::{
+            array, array_append, array_length, array_position, array_positions, array_prepend,
+            array_remove, array_replace, array_to_string, cardinality, string_to_array, unnest,
+        };
+    }
+
+    /// Date and time helper functions.
+    pub mod date {
+        pub use crate::typed::{
+            age, current_date, current_timestamp, date_trunc, extract, make_date, make_time,
+            make_timestamp, make_timestamptz, now, timezone,
+        };
+    }
+
+    /// Full-text search helper functions.
+    pub mod fts {
+        pub use crate::typed::{
+            plainto_tsquery, to_tsquery, to_tsvector, to_tsvector_config, ts_match, ts_rank,
+            ts_rank_cd, websearch_to_tsquery,
+        };
+    }
+
+    /// JSON and JSONB helper functions.
+    pub mod json {
+        pub use crate::typed::{
+            json, json_exists, json_get, json_get_text, json_path, json_path_text, json_query,
+            json_scalar, json_serialize, json_value, jsonb_agg_object, jsonb_array_elements,
+            jsonb_build_array, jsonb_build_object, jsonb_delete, jsonb_each, jsonb_insert,
+            jsonb_object, jsonb_path_exists, jsonb_path_query, jsonb_set, jsonb_strip_nulls,
+            jsonb_typeof, to_json, to_jsonb,
+        };
+    }
+
+    /// Math helper functions.
+    pub mod math {
+        pub use crate::typed::{
+            abs, ceil, exp, floor, ln, log, mod_, pow, power, random, random_between, round, sqrt,
+            trunc,
+        };
+    }
+
+    /// Scalar helper functions.
+    pub mod scalar {
+        pub use crate::typed::{case, coalesce, greatest, least, nullif};
+    }
+
+    /// Text helper functions.
+    pub mod text {
+        pub use crate::typed::{
+            btrim, char_length, concat, concat_op, concat_ws, left, length, lower, lpad, ltrim,
+            not_similar_to, regexp_matches, regexp_replace, regexp_split_to_array, replace, right,
+            rpad, rtrim, similar_to, split_part, substring, trim, upper,
+        };
+    }
+
+    /// UUID helper functions.
+    pub mod uuid {
+        pub use crate::typed::{uuid_extract_timestamp, uuid_extract_version, uuidv7};
+    }
+
+    /// Window helper functions and frame constructors.
+    pub mod window {
+        pub use crate::typed::{
+            cume_dist, current_row, dense_rank, first_value, following, groups, lag, last_value,
+            lead, nth_value, ntile, partition_by, percent_rank, preceding, range, rank, row_number,
+            rows, unbounded_following, unbounded_preceding, window,
+        };
+    }
+
     pub use crate::typed::{
         abs, age, aggregate, all, any, array, array_agg, array_agg_distinct, array_append,
         array_length, array_position, array_positions, array_prepend, array_remove, array_replace,
-        array_to_string, avg, bool_and, bool_or, btrim, cardinality, ceil, char_length, coalesce,
-        concat, concat_op, concat_ws, count, count_all, count_distinct, cume_dist, current_date,
-        current_row, current_timestamp, date_trunc, dense_rank, every, exists, exp, extract,
-        first_value, floor, following, function, greatest, groups, json, json_agg, json_exists,
-        json_get, json_get_text, json_path, json_path_text, json_query, json_scalar,
+        array_to_string, avg, bool_and, bool_or, btrim, cardinality, case, ceil, char_length,
+        coalesce, concat, concat_op, concat_ws, count, count_all, count_distinct, cume_dist,
+        current_date, current_row, current_timestamp, date_trunc, dense_rank, every, exists, exp,
+        extract, first_value, floor, following, function, greatest, groups, json, json_agg,
+        json_exists, json_get, json_get_text, json_path, json_path_text, json_query, json_scalar,
         json_serialize, json_value, jsonb_agg_object, jsonb_array_elements, jsonb_build_array,
         jsonb_build_object, jsonb_delete, jsonb_each, jsonb_insert, jsonb_object,
         jsonb_path_exists, jsonb_path_query, jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag,
@@ -95,22 +236,26 @@ pub mod dsl {
     };
 }
 
+/// Common imports for application query code.
+///
+/// The prelude intentionally excludes broad SQL function names such as `lower`
+/// or `replace`; import those from [`dsl`] only where needed.
 pub mod prelude {
     pub use crate::{
-        Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, Changeset, ColumnConflictBuilder,
-        ConflictAction, ConflictClause, ConflictFields, ConflictTarget, ConstraintConflictBuilder,
-        Cte, CteMaterialization, DbErrorInfo, DbErrorPosition, Delete, Error, FetchClause, Field,
-        FieldRef, FrameBound, FrameExclude, GroupByItem, Insert, Insertable, IntoFieldRef, Join,
-        JoinKind, JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen,
-        Meta, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
-        OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, PgConnection,
-        PgExecutor, PgPool, RawStmt, Result, RowLock, SearchFilter, SearchOperator,
-        SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SetOperator, SetQuery,
-        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind,
-        WindowFunction, WindowFunctionBuilder, WindowSpec, cte, cte_source, delete_from, except,
-        except_all, function_source, insert, intersect, intersect_all, jsonb_agg_object,
-        merge_into, raw, raw_source, schema, select, subquery, table, tx, union, union_all, update,
-        view,
+        Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
+        ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
+        ConstraintConflictBuilder, Cte, CteMaterialization, DbErrorInfo, DbErrorPosition, Delete,
+        Error, FetchClause, Field, FieldRef, FrameBound, FrameExclude, GroupByItem, Insert,
+        Insertable, IntoFieldRef, Join, JoinKind, JsonKind, LockMode, LockWait,
+        MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta, NotMatchedBySourceMergeBuilder,
+        NotMatchedMergeBuilder, NullsPosition, OffsetWindowFunctionBuilder, OpSet, OrderDirection,
+        OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, RowLock,
+        SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
+        SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
+        WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, cte,
+        cte_source, delete_from, except, except_all, field, function_source, insert, intersect,
+        intersect_all, jsonb_agg_object, merge_into, raw, raw_source, schema, select, subquery,
+        table, tx, union, union_all, update, view,
     };
 }
 
@@ -173,6 +318,31 @@ mod tests {
         assert_eq!(
             built.sql,
             "SELECT lower(\"email\") AS \"lower_email\" FROM \"public\".\"users\" WHERE (\"email\" ILIKE $1)"
+        );
+    }
+
+    #[test]
+    fn computed_field_macro_creates_static_metadata_once_per_site() {
+        let item_count = crate::field!("item_count": int8 => i64, ordered);
+
+        assert_eq!(item_count.meta.api, "item_count");
+        assert_eq!(item_count.meta.pg, "int8");
+        assert!(item_count.meta.ops.ordering);
+
+        let source = crate::raw_source(
+            "SELECT ?::int8 AS item_count",
+            "counts",
+            vec![crate::Param::typed(1_i64)],
+            vec![*item_count.meta],
+        );
+        let built = crate::select(source)
+            .column(item_count.at("counts"))
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            built.sql,
+            "SELECT \"counts\".\"item_count\" AS \"counts_item_count\" FROM (SELECT $1::int8 AS item_count) AS \"counts\" (\"item_count\")"
         );
     }
 

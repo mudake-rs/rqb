@@ -1,9 +1,9 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
-    Stmt, ValueExpr, all, array, array_agg, bool_and, coalesce, count_all, count_distinct, cte,
-    current_date, current_timestamp, extract, function_source, insert, json_agg, json_get_text,
-    lag, merge_into, param, percentile_cont, row, row_number, select, slice, subscript, table,
-    to_jsonb, update, window,
+    Stmt, ValueExpr, all, array, array_agg, bool_and, case, coalesce, count_all, count_distinct,
+    cte, current_date, current_timestamp, extract, function_source, insert, json_agg,
+    json_get_text, lag, merge_into, param, percentile_cont, row, row_number, select, slice,
+    subscript, table, to_jsonb, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -918,6 +918,13 @@ fn helper_functions_cover_common_postgres_builtins() {
         .item(bool_and(ACTIVE).alias("all_active"))
         .item(percentile_cont(param(0.95_f64), TOTAL).alias("p95"))
         .item(
+            case()
+                .when(TOTAL.gte(10_000), "large")
+                .else_("standard")
+                .alias("bucket"),
+        )
+        .item(TOTAL.op("%", 100_i64).alias("total_remainder"))
+        .item(
             coalesce([
                 json_get_text(PAYLOAD, param("source".to_owned())),
                 param("unknown".to_owned()),
@@ -938,9 +945,9 @@ fn helper_functions_cover_common_postgres_builtins() {
 
     assert_eq!(
         built.sql,
-        "SELECT bool_and(\"active\") AS \"all_active\", percentile_cont($1) WITHIN GROUP (ORDER BY \"total_cents\" ASC) AS \"p95\", coalesce((\"payload\" ->> $2), $3) AS \"source\", to_jsonb(ARRAY[\"user_id\", \"total_cents\"]) AS \"ids\" FROM \"public\".\"orders\" WHERE (\"active\" IS NOT FALSE AND \"email_address\" SIMILAR TO $4 AND to_tsvector(\"email_address\") @@ websearch_to_tsquery($5) AND (\"payload\" #>> $6) IS NOT NULL)"
+        "SELECT bool_and(\"active\") AS \"all_active\", percentile_cont($1) WITHIN GROUP (ORDER BY \"total_cents\" ASC) AS \"p95\", CASE WHEN \"total_cents\" >= $2 THEN $3 ELSE $4 END AS \"bucket\", (\"total_cents\" % $5) AS \"total_remainder\", coalesce((\"payload\" ->> $6), $7) AS \"source\", to_jsonb(ARRAY[\"user_id\", \"total_cents\"]) AS \"ids\" FROM \"public\".\"orders\" WHERE (\"active\" IS NOT FALSE AND \"email_address\" SIMILAR TO $8 AND to_tsvector(\"email_address\") @@ websearch_to_tsquery($9) AND (\"payload\" #>> $10) IS NOT NULL)"
     );
-    assert_eq!(built.params.len(), 6);
+    assert_eq!(built.params.len(), 10);
 }
 
 #[test]

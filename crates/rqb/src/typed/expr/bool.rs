@@ -1,9 +1,11 @@
 use super::{BoolExpr, BooleanTest, Field, FieldRef, ValueExpr};
 
+/// Builds a logical `AND` group.
 pub fn all(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
     BoolExpr::and(exprs)
 }
 
+/// Builds a logical `OR` group.
 pub fn any(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
     BoolExpr::or(exprs)
 }
@@ -19,14 +21,17 @@ pub fn not(expr: BoolExpr) -> BoolExpr {
 }
 
 impl BoolExpr {
+    /// Builds a logical `AND` group.
     pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
         Self::And(exprs.into_iter().collect())
     }
 
+    /// Builds a logical `OR` group.
     pub fn or(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
         Self::Or(exprs.into_iter().collect())
     }
 
+    /// Builds a logical `NOT`.
     pub fn negate(expr: BoolExpr) -> Self {
         Self::Not(Box::new(expr))
     }
@@ -58,26 +63,32 @@ impl BoolExpr {
 }
 
 impl ValueExpr {
+    /// Builds `expr IS TRUE`.
     pub fn is_true(self) -> BoolExpr {
         self.boolean_test(BooleanTest::True, false)
     }
 
+    /// Builds `expr IS NOT TRUE`.
     pub fn is_not_true(self) -> BoolExpr {
         self.boolean_test(BooleanTest::True, true)
     }
 
+    /// Builds `expr IS FALSE`.
     pub fn is_false(self) -> BoolExpr {
         self.boolean_test(BooleanTest::False, false)
     }
 
+    /// Builds `expr IS NOT FALSE`.
     pub fn is_not_false(self) -> BoolExpr {
         self.boolean_test(BooleanTest::False, true)
     }
 
+    /// Builds `expr IS UNKNOWN`.
     pub fn is_unknown(self) -> BoolExpr {
         self.boolean_test(BooleanTest::Unknown, false)
     }
 
+    /// Builds `expr IS NOT UNKNOWN`.
     pub fn is_not_unknown(self) -> BoolExpr {
         self.boolean_test(BooleanTest::Unknown, true)
     }
@@ -92,52 +103,64 @@ impl ValueExpr {
 }
 
 impl Field<bool> {
+    /// Builds `field IS TRUE`.
     pub fn is_true(self) -> BoolExpr {
         self.expr().is_true()
     }
 
+    /// Builds `field IS NOT TRUE`.
     pub fn is_not_true(self) -> BoolExpr {
         self.expr().is_not_true()
     }
 
+    /// Builds `field IS FALSE`.
     pub fn is_false(self) -> BoolExpr {
         self.expr().is_false()
     }
 
+    /// Builds `field IS NOT FALSE`.
     pub fn is_not_false(self) -> BoolExpr {
         self.expr().is_not_false()
     }
 
+    /// Builds `field IS UNKNOWN`.
     pub fn is_unknown(self) -> BoolExpr {
         self.expr().is_unknown()
     }
 
+    /// Builds `field IS NOT UNKNOWN`.
     pub fn is_not_unknown(self) -> BoolExpr {
         self.expr().is_not_unknown()
     }
 }
 
 impl FieldRef<bool> {
+    /// Builds `field IS TRUE`.
     pub fn is_true(self) -> BoolExpr {
         self.expr().is_true()
     }
 
+    /// Builds `field IS NOT TRUE`.
     pub fn is_not_true(self) -> BoolExpr {
         self.expr().is_not_true()
     }
 
+    /// Builds `field IS FALSE`.
     pub fn is_false(self) -> BoolExpr {
         self.expr().is_false()
     }
 
+    /// Builds `field IS NOT FALSE`.
     pub fn is_not_false(self) -> BoolExpr {
         self.expr().is_not_false()
     }
 
+    /// Builds `field IS UNKNOWN`.
     pub fn is_unknown(self) -> BoolExpr {
         self.expr().is_unknown()
     }
 
+    /// Builds `field IS NOT UNKNOWN`.
     pub fn is_not_unknown(self) -> BoolExpr {
         self.expr().is_not_unknown()
     }

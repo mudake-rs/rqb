@@ -3,6 +3,7 @@ use crate::typed::Param;
 use super::{BoolExpr, ValueExpr};
 
 impl BoolExpr {
+    /// Appends all bind parameters referenced by this boolean expression.
     pub fn collect_params(&self, params: &mut Vec<Param>) {
         match self {
             Self::Constant(_) => {}
@@ -65,6 +66,7 @@ impl BoolExpr {
 }
 
 impl ValueExpr {
+    /// Appends all bind parameters referenced by this value expression.
     pub fn collect_params(&self, params: &mut Vec<Param>) {
         match self {
             Self::Param(param) => params.push(param.clone()),

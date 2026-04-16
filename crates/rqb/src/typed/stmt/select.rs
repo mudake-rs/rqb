@@ -1,6 +1,7 @@
 use super::*;
 
 impl Select {
+    /// Creates a select statement from a root source.
     pub fn from(source: impl Into<Source>) -> Self {
         Self {
             ctes: Vec::new(),
@@ -20,6 +21,7 @@ impl Select {
         }
     }
 
+    /// Adds a CTE to the select.
     pub fn with(mut self, cte: Cte) -> Self {
         self.ctes.push(cte);
         self
@@ -83,20 +85,24 @@ impl Select {
         self.item(item)
     }
 
+    /// Adds a predicate to `WHERE`, composing with existing predicates using `AND`.
     pub fn filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
     }
 
+    /// Replaces the entire `WHERE` predicate.
     pub fn replace_filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(filter);
         self
     }
 
+    /// Adds a predicate only when `condition` is true.
     pub fn filter_if(self, condition: bool, filter: BoolExpr) -> Self {
         if condition { self.filter(filter) } else { self }
     }
 
+    /// Adds a predicate built from an optional value.
     pub fn filter_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> BoolExpr) -> Self {
         match value {
             Some(value) => self.filter(f(value)),
@@ -104,70 +110,84 @@ impl Select {
         }
     }
 
+    /// Applies an arbitrary builder transformation.
     pub fn apply(self, f: impl FnOnce(Self) -> Self) -> Self {
         f(self)
     }
 
+    /// Adds `DISTINCT`.
     pub fn distinct(mut self) -> Self {
         self.distinct = true;
         self
     }
 
+    /// Adds a `DISTINCT ON` expression.
     pub fn distinct_on(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.distinct_on.push(expr.into());
         self
     }
 
+    /// Adds an inner join.
     pub fn join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Inner, source, on));
         self
     }
 
+    /// Adds a left join.
     pub fn left_join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Left, source, on));
         self
     }
 
+    /// Adds a right join.
     pub fn right_join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Right, source, on));
         self
     }
 
+    /// Adds a full join.
     pub fn full_join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Full, source, on));
         self
     }
 
+    /// Adds an inner lateral join.
     pub fn join_lateral(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::lateral(JoinKind::Inner, source, on));
         self
     }
 
+    /// Adds a left lateral join.
     pub fn left_join_lateral(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::lateral(JoinKind::Left, source, on));
         self
     }
 
+    /// Adds a cross join.
     pub fn cross_join(mut self, source: impl Into<Source>) -> Self {
         self.joins.push(Join::cross(source));
         self
     }
 
+    /// Adds a lateral cross join.
     pub fn cross_join_lateral(mut self, source: impl Into<Source>) -> Self {
         self.joins.push(Join::cross_lateral(source));
         self
     }
 
+    /// Adds a fully specified `ORDER BY` item.
     pub fn order_by(mut self, item: OrderItem) -> Self {
         self.order.push(item);
         self
     }
 
+    /// Adds a `GROUP BY` expression.
     pub fn group_by(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.group_by.push(GroupByItem::expr(expr));
         self
     }
 
+    /// Adds a `ROLLUP` grouping item.
     pub fn rollup<I, E>(mut self, exprs: I) -> Self
     where
         I: IntoIterator<Item = E>,
@@ -179,6 +199,7 @@ impl Select {
         self
     }
 
+    /// Adds a `CUBE` grouping item.
     pub fn cube<I, E>(mut self, exprs: I) -> Self
     where
         I: IntoIterator<Item = E>,
@@ -190,6 +211,7 @@ impl Select {
         self
     }
 
+    /// Adds a `GROUPING SETS` item.
     pub fn grouping_sets<I, S, E>(mut self, sets: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -204,47 +226,56 @@ impl Select {
         self
     }
 
+    /// Adds a `HAVING` predicate, composing with existing predicates using `AND`.
     pub fn having(mut self, having: BoolExpr) -> Self {
         self.having = Some(BoolExpr::and_option(self.having, having));
         self
     }
 
+    /// Adds ascending order.
     pub fn order_asc(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order.push(OrderItem::asc(expr));
         self
     }
 
+    /// Adds descending order.
     pub fn order_desc(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order.push(OrderItem::desc(expr));
         self
     }
 
+    /// Adds ascending order with `NULLS FIRST`.
     pub fn order_asc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order.push(OrderItem::asc_nulls_first(expr));
         self
     }
 
+    /// Adds ascending order with `NULLS LAST`.
     pub fn order_asc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order.push(OrderItem::asc_nulls_last(expr));
         self
     }
 
+    /// Adds descending order with `NULLS FIRST`.
     pub fn order_desc_nulls_first(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order.push(OrderItem::desc_nulls_first(expr));
         self
     }
 
+    /// Adds descending order with `NULLS LAST`.
     pub fn order_desc_nulls_last(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.order.push(OrderItem::desc_nulls_last(expr));
         self
     }
 
+    /// Sets a `LIMIT` value and clears any `FETCH FIRST` clause.
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(Param::typed(i64::from(limit)));
         self.fetch = None;
         self
     }
 
+    /// Sets a `FETCH FIRST` clause and clears any `LIMIT`.
     pub fn fetch_first(mut self, count: impl Into<ValueExpr>) -> Self {
         self.fetch = Some(FetchClause {
             count: count.into(),
@@ -254,6 +285,7 @@ impl Select {
         self
     }
 
+    /// Sets `FETCH FIRST ... WITH TIES` and clears any `LIMIT`.
     pub fn fetch_first_with_ties(mut self, count: impl Into<ValueExpr>) -> Self {
         self.fetch = Some(FetchClause {
             count: count.into(),
@@ -263,63 +295,77 @@ impl Select {
         self
     }
 
+    /// Sets an `OFFSET` value.
     pub fn offset(mut self, offset: u32) -> Self {
         self.offset = Some(Param::typed(i64::from(offset)));
         self
     }
 
+    /// Adds a row lock with the given mode.
     pub fn lock(mut self, mode: LockMode) -> Self {
         self.lock = Some(RowLock::new(mode));
         self
     }
 
+    /// Adds a row lock scoped to a relation alias.
     pub fn lock_of(mut self, mode: LockMode, relation: impl Into<String>) -> Self {
         self.lock = Some(RowLock::new(mode).of(relation));
         self
     }
 
+    /// Adds `FOR UPDATE`.
     pub fn for_update(self) -> Self {
         self.lock(LockMode::Update)
     }
 
+    /// Adds `FOR UPDATE OF relation`.
     pub fn for_update_of(self, relation: impl Into<String>) -> Self {
         self.lock_of(LockMode::Update, relation)
     }
 
+    /// Adds `FOR NO KEY UPDATE`.
     pub fn for_no_key_update(self) -> Self {
         self.lock(LockMode::NoKeyUpdate)
     }
 
+    /// Adds `FOR NO KEY UPDATE OF relation`.
     pub fn for_no_key_update_of(self, relation: impl Into<String>) -> Self {
         self.lock_of(LockMode::NoKeyUpdate, relation)
     }
 
+    /// Adds `FOR SHARE`.
     pub fn for_share(self) -> Self {
         self.lock(LockMode::Share)
     }
 
+    /// Adds `FOR SHARE OF relation`.
     pub fn for_share_of(self, relation: impl Into<String>) -> Self {
         self.lock_of(LockMode::Share, relation)
     }
 
+    /// Adds `FOR KEY SHARE`.
     pub fn for_key_share(self) -> Self {
         self.lock(LockMode::KeyShare)
     }
 
+    /// Adds `FOR KEY SHARE OF relation`.
     pub fn for_key_share_of(self, relation: impl Into<String>) -> Self {
         self.lock_of(LockMode::KeyShare, relation)
     }
 
+    /// Adds a relation alias to the current row lock, creating `FOR UPDATE` if absent.
     pub fn lock_relation(mut self, relation: impl Into<String>) -> Self {
         self.lock = Some(self.lock.unwrap_or_default().of(relation));
         self
     }
 
+    /// Sets `NOWAIT` on the current row lock, creating `FOR UPDATE` if absent.
     pub fn nowait(mut self) -> Self {
         self.lock = Some(self.lock.unwrap_or_default().nowait());
         self
     }
 
+    /// Sets `SKIP LOCKED` on the current row lock, creating `FOR UPDATE` if absent.
     pub fn skip_locked(mut self) -> Self {
         self.lock = Some(self.lock.unwrap_or_default().skip_locked());
         self

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rqb::dsl::all;
+use rqb::dsl::{all, any};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
@@ -49,7 +49,32 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(composed.params.len(), 5);
 
+    // `all([...])` and `any([...])` can be nested to express grouped boolean
+    // logic without raw SQL: active users whose status is active, or invited
+    // users that already have a display name.
+    let nested = select(users::table())
+        .column(users::ID)
+        .column(users::EMAIL)
+        .filter(all([
+            users::ACTIVE.eq(true),
+            any([
+                users::STATUS.eq("active"),
+                all([
+                    users::STATUS.eq("invited"),
+                    users::DISPLAY_NAME.is_not_null(),
+                ]),
+            ]),
+        ]))
+        .build()?;
+
+    assert_eq!(
+        nested.sql,
+        "SELECT \"id\", \"email\" FROM \"sample\".\"app_users\" WHERE (\"active\" = $1 AND (\"status\" = $2 OR (\"status\" = $3 AND \"display_name\" IS NOT NULL)))"
+    );
+    assert_eq!(nested.params.len(), 3);
+
     println!("{}", simple.sql);
     println!("{}", composed.sql);
+    println!("{}", nested.sql);
     Ok(())
 }

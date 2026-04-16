@@ -5,6 +5,20 @@ use sqlx::{Arguments, Encode, Postgres, Type};
 
 use crate::{Error, Result};
 
+/// Rust value that can be stored as a Postgres bind parameter.
+///
+/// This hides sqlx's encode/type bounds behind the rqb concept used by field
+/// predicates, assignments, and raw parameters.
+pub trait BindValue:
+    Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>
+{
+}
+
+impl<T> BindValue for T where
+    T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>
+{
+}
+
 /// Cloneable, type-erased Postgres bind parameter.
 ///
 /// This is the existential boundary: `Param` stores some `T` that sqlx can
@@ -25,7 +39,7 @@ impl Param {
     /// Stores a typed value for later insertion into `PgArguments`.
     pub fn typed<T>(value: T) -> Self
     where
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+        T: BindValue,
     {
         Self {
             inner: Arc::new(TypedParam { value }),
@@ -74,7 +88,7 @@ impl Params {
     /// Appends a typed value as a Postgres bind parameter.
     pub fn push_typed<T>(&mut self, value: T)
     where
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+        T: BindValue,
     {
         self.push(Param::typed(value));
     }
@@ -115,7 +129,7 @@ struct TypedParam<T> {
 
 impl<T> ErasedParam for TypedParam<T>
 where
-    T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+    T: BindValue,
 {
     fn add_to(&self, args: &mut PgArguments) -> Result<()> {
         args.add(self.value.clone())

@@ -1,18 +1,12 @@
-use sqlx::{Encode, Postgres, Type, postgres::PgHasArrayType};
+use sqlx::postgres::PgHasArrayType;
 
-use crate::typed::Param;
+use crate::typed::{BindValue, Param};
 
 use super::{BoolExpr, Field, FieldRef, ValueExpr};
 
 impl<T> Field<Vec<T>>
 where
-    T: Clone
-        + Send
-        + Sync
-        + 'static
-        + for<'q> Encode<'q, Postgres>
-        + Type<Postgres>
-        + PgHasArrayType,
+    T: BindValue + PgHasArrayType,
 {
     /// Builds an array overlap predicate (`&&`).
     pub fn contains_any(self, values: Vec<T>) -> BoolExpr {
@@ -62,13 +56,7 @@ where
 
 impl<T> FieldRef<Vec<T>>
 where
-    T: Clone
-        + Send
-        + Sync
-        + 'static
-        + for<'q> Encode<'q, Postgres>
-        + Type<Postgres>
-        + PgHasArrayType,
+    T: BindValue + PgHasArrayType,
 {
     /// Builds an array overlap predicate (`&&`).
     pub fn contains_any(self, values: Vec<T>) -> BoolExpr {
@@ -205,9 +193,8 @@ impl Field<serde_json::Value> {
 
 impl<T> Field<sqlx::postgres::types::PgRange<T>>
 where
-    T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    sqlx::postgres::types::PgRange<T>:
-        Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+    T: BindValue,
+    sqlx::postgres::types::PgRange<T>: BindValue,
 {
     /// Alias for [`Field::range_contains`].
     pub fn contains(self, value: T) -> BoolExpr {
@@ -262,9 +249,8 @@ where
 
 impl<T> FieldRef<sqlx::postgres::types::PgRange<T>>
 where
-    T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    sqlx::postgres::types::PgRange<T>:
-        Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+    T: BindValue,
+    sqlx::postgres::types::PgRange<T>: BindValue,
 {
     /// Alias for [`FieldRef::range_contains`].
     pub fn contains(self, value: T) -> BoolExpr {

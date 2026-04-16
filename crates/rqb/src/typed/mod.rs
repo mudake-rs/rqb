@@ -11,6 +11,7 @@ mod source;
 mod stmt;
 
 pub use built::BuiltQuery;
+pub use execute::ScalarValue;
 pub use expr::{
     __jsonb_agg_object_from_pairs, __jsonb_object_pair, BoolExpr, BoolOp, BooleanTest, CaseBuilder,
     Field, FieldRef, FrameBound, FrameExclude, IntoFieldRef, JsonbObjectItem,
@@ -37,7 +38,7 @@ pub use expr::{
     uuid_extract_version, uuidv7, var_pop, var_samp, variance, websearch_to_tsquery, window,
 };
 pub use meta::{JsonKind, Meta, OpSet};
-pub use param::{Param, Params};
+pub use param::{BindValue, Param, Params};
 pub use request::{
     SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, SortDirection,
 };

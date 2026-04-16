@@ -29,55 +29,46 @@ pub fn ordered_set_aggregate(
     }
 }
 
-/// Builds `count(expr)`.
-pub fn count(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("count", [expr], false)
+macro_rules! aggregate_fn {
+    ($(#[$meta:meta])* $fn:ident => $name:literal) => {
+        $(#[$meta])*
+        pub fn $fn(expr: impl Into<ValueExpr>) -> ValueExpr {
+            aggregate($name, [expr], false)
+        }
+    };
+
+    ($(#[$meta:meta])* $fn:ident => distinct $name:literal) => {
+        $(#[$meta])*
+        pub fn $fn(expr: impl Into<ValueExpr>) -> ValueExpr {
+            aggregate($name, [expr], true)
+        }
+    };
 }
+
+aggregate_fn!(/// Builds `count(expr)`.
+    count => "count");
 
 /// Builds `count(*)`.
 pub fn count_all() -> ValueExpr {
     aggregate("count", Vec::<ValueExpr>::new(), false)
 }
 
-/// Builds `count(DISTINCT expr)`.
-pub fn count_distinct(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("count", [expr], true)
-}
-
-/// Builds `sum(expr)`.
-pub fn sum(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("sum", [expr], false)
-}
-
-/// Builds `avg(expr)`.
-pub fn avg(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("avg", [expr], false)
-}
-
-/// Builds `min(expr)`.
-pub fn min(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("min", [expr], false)
-}
-
-/// Builds `max(expr)`.
-pub fn max(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("max", [expr], false)
-}
-
-/// Builds `array_agg(expr)`.
-pub fn array_agg(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("array_agg", [expr], false)
-}
-
-/// Builds `array_agg(DISTINCT expr)`.
-pub fn array_agg_distinct(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("array_agg", [expr], true)
-}
-
-/// Builds `json_agg(expr)`.
-pub fn json_agg(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("json_agg", [expr], false)
-}
+aggregate_fn!(/// Builds `count(DISTINCT expr)`.
+    count_distinct => distinct "count");
+aggregate_fn!(/// Builds `sum(expr)`.
+    sum => "sum");
+aggregate_fn!(/// Builds `avg(expr)`.
+    avg => "avg");
+aggregate_fn!(/// Builds `min(expr)`.
+    min => "min");
+aggregate_fn!(/// Builds `max(expr)`.
+    max => "max");
+aggregate_fn!(/// Builds `array_agg(expr)`.
+    array_agg => "array_agg");
+aggregate_fn!(/// Builds `array_agg(DISTINCT expr)`.
+    array_agg_distinct => distinct "array_agg");
+aggregate_fn!(/// Builds `json_agg(expr)`.
+    json_agg => "json_agg");
 
 /// Builds `jsonb_agg(jsonb_build_object(...))` from selected fields or aliased expressions.
 pub fn jsonb_agg_object(items: impl IntoIterator<Item = impl Into<SelectItem>>) -> ValueExpr {
@@ -161,50 +152,24 @@ pub fn string_agg(expr: impl Into<ValueExpr>, delimiter: impl Into<ValueExpr>) -
     aggregate("string_agg", [expr.into(), delimiter.into()], false)
 }
 
-/// Builds `bool_and(expr)`.
-pub fn bool_and(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("bool_and", [expr], false)
-}
-
-/// Builds `bool_or(expr)`.
-pub fn bool_or(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("bool_or", [expr], false)
-}
-
-/// Builds `every(expr)`.
-pub fn every(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("every", [expr], false)
-}
-
-/// Builds `stddev(expr)`.
-pub fn stddev(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("stddev", [expr], false)
-}
-
-/// Builds `stddev_pop(expr)`.
-pub fn stddev_pop(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("stddev_pop", [expr], false)
-}
-
-/// Builds `stddev_samp(expr)`.
-pub fn stddev_samp(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("stddev_samp", [expr], false)
-}
-
-/// Builds `variance(expr)`.
-pub fn variance(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("variance", [expr], false)
-}
-
-/// Builds `var_pop(expr)`.
-pub fn var_pop(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("var_pop", [expr], false)
-}
-
-/// Builds `var_samp(expr)`.
-pub fn var_samp(expr: impl Into<ValueExpr>) -> ValueExpr {
-    aggregate("var_samp", [expr], false)
-}
+aggregate_fn!(/// Builds `bool_and(expr)`.
+    bool_and => "bool_and");
+aggregate_fn!(/// Builds `bool_or(expr)`.
+    bool_or => "bool_or");
+aggregate_fn!(/// Builds `every(expr)`.
+    every => "every");
+aggregate_fn!(/// Builds `stddev(expr)`.
+    stddev => "stddev");
+aggregate_fn!(/// Builds `stddev_pop(expr)`.
+    stddev_pop => "stddev_pop");
+aggregate_fn!(/// Builds `stddev_samp(expr)`.
+    stddev_samp => "stddev_samp");
+aggregate_fn!(/// Builds `variance(expr)`.
+    variance => "variance");
+aggregate_fn!(/// Builds `var_pop(expr)`.
+    var_pop => "var_pop");
+aggregate_fn!(/// Builds `var_samp(expr)`.
+    var_samp => "var_samp");
 
 /// Builds `percentile_cont(fraction) WITHIN GROUP (ORDER BY order_by ASC)`.
 pub fn percentile_cont(

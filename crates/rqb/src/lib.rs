@@ -47,18 +47,18 @@ pub use serde_json;
 pub use sqlx;
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use typed::{
-    Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
+    Assignment, BindValue, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
     ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
     ConstraintConflictBuilder, Cte, CteMaterialization, Delete, FetchClause, Field, FieldRef,
     FrameBound, FrameExclude, GroupByItem, Insert, Insertable, IntoFieldRef, Join, JoinKind,
     JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta,
     NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
     OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, RowLock,
-    SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select, SelectItem,
-    SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame,
-    WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, case, cte, cte_ref,
-    delete_from, except, except_all, function_source, insert, intersect, intersect_all, merge_into,
-    raw, raw_source, select, subquery, table, union, union_all, update, view,
+    ScalarValue, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
+    SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
+    WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, case, cte,
+    cte_ref, delete_from, except, except_all, function_source, insert, intersect, intersect_all,
+    merge_into, raw, raw_source, select, subquery, table, union, union_all, update, view,
 };
 pub use uuid;
 
@@ -242,7 +242,7 @@ pub mod dsl {
 /// or `replace`; import those from [`dsl`] only where needed.
 pub mod prelude {
     pub use crate::{
-        Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
+        Assignment, BindValue, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
         ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
         ConstraintConflictBuilder, Cte, CteMaterialization, DbErrorInfo, DbErrorPosition, Delete,
         Error, FetchClause, Field, FieldRef, FrameBound, FrameExclude, GroupByItem, Insert,
@@ -250,10 +250,10 @@ pub mod prelude {
         MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta, NotMatchedBySourceMergeBuilder,
         NotMatchedMergeBuilder, NullsPosition, OffsetWindowFunctionBuilder, OpSet, OrderDirection,
         OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, RowLock,
-        SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
-        SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
-        WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, cte,
-        cte_ref, delete_from, except, except_all, field, function_source, insert, intersect,
+        ScalarValue, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort,
+        Select, SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr,
+        ValueOp, WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec,
+        cte, cte_ref, delete_from, except, except_all, field, function_source, insert, intersect,
         intersect_all, jsonb_agg_object, merge_into, raw, raw_source, schema, select, subquery,
         table, tx, union, union_all, update, view,
     };

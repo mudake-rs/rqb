@@ -7,6 +7,14 @@ use crate::typed::{
     subquery,
 };
 
+/// Rust value that can be decoded from a single Postgres result column.
+///
+/// This is the read-side pair to [`crate::BindValue`]: it keeps sqlx scalar
+/// decode bounds out of user-facing method signatures.
+pub trait ScalarValue: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin {}
+
+impl<T> ScalarValue for T where T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin {}
+
 impl BuiltQuery {
     /// Executes the query and returns affected row count.
     pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
@@ -83,7 +91,7 @@ impl BuiltQuery {
     /// Fetches all rows as a single decoded scalar column.
     pub async fn fetch_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
     where
-        T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+        T: ScalarValue,
     {
         sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
             .persistent(self.cacheable)
@@ -95,7 +103,7 @@ impl BuiltQuery {
     /// Fetches exactly one decoded scalar value.
     pub async fn fetch_one_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<T>
     where
-        T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+        T: ScalarValue,
     {
         sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
             .persistent(self.cacheable)
@@ -110,7 +118,7 @@ impl BuiltQuery {
         executor: impl PgExecutor<'e>,
     ) -> Result<Option<T>>
     where
-        T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+        T: ScalarValue,
     {
         sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
             .persistent(self.cacheable)
@@ -168,7 +176,7 @@ impl Stmt {
     /// Builds the statement and fetches all rows as a single scalar column.
     pub async fn fetch_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
     where
-        T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+        T: ScalarValue,
     {
         self.build()?.fetch_scalar(executor).await
     }
@@ -176,7 +184,7 @@ impl Stmt {
     /// Builds the statement and fetches one scalar value.
     pub async fn fetch_one_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<T>
     where
-        T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+        T: ScalarValue,
     {
         self.build()?.fetch_one_scalar(executor).await
     }
@@ -187,7 +195,7 @@ impl Stmt {
         executor: impl PgExecutor<'e>,
     ) -> Result<Option<T>>
     where
-        T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+        T: ScalarValue,
     {
         self.build()?.fetch_optional_scalar(executor).await
     }
@@ -268,7 +276,7 @@ macro_rules! impl_statement_execute {
             /// Builds the statement and fetches all rows as a single scalar column.
             pub async fn fetch_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
             where
-                T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+                T: ScalarValue,
             {
                 self.build()?.fetch_scalar(executor).await
             }
@@ -276,7 +284,7 @@ macro_rules! impl_statement_execute {
             /// Builds the statement and fetches one scalar value.
             pub async fn fetch_one_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<T>
             where
-                T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+                T: ScalarValue,
             {
                 self.build()?.fetch_one_scalar(executor).await
             }
@@ -287,7 +295,7 @@ macro_rules! impl_statement_execute {
                 executor: impl PgExecutor<'e>,
             ) -> Result<Option<T>>
             where
-                T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
+                T: ScalarValue,
             {
                 self.build()?.fetch_optional_scalar(executor).await
             }

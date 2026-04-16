@@ -1,8 +1,6 @@
 use std::marker::PhantomData;
 
-use sqlx::{Encode, Postgres, Type};
-
-use crate::typed::{Meta, Param, SelectItem};
+use crate::typed::{BindValue, Meta, Param, SelectItem};
 
 use super::{BoolExpr, BoolOp, ValueExpr};
 
@@ -99,27 +97,6 @@ impl<T> Field<T> {
         self.expr().alias(alias)
     }
 
-    /// Creates an assignment for writes.
-    pub fn set<V>(self, value: V) -> crate::typed::Assignment
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        crate::typed::Assignment {
-            field: *self.meta,
-            value: ValueExpr::Param(Param::typed(value.into())),
-        }
-    }
-
-    /// Creates an assignment from a borrowed value by cloning it.
-    pub fn set_ref<V>(self, value: &V) -> crate::typed::Assignment
-    where
-        V: Clone + Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.set(value.clone())
-    }
-
     /// Returns `EXCLUDED.field` for `ON CONFLICT DO UPDATE`.
     pub fn excluded(self) -> ValueExpr {
         ValueExpr::Excluded(*self.meta)
@@ -131,78 +108,6 @@ impl<T> Field<T> {
             field: *self.meta,
             value: self.excluded(),
         }
-    }
-
-    /// Builds an equality predicate against a bind value.
-    pub fn eq<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::Eq, value)
-    }
-
-    /// Builds an inequality predicate against a bind value.
-    pub fn ne<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::Ne, value)
-    }
-
-    /// Builds a greater-than predicate against a bind value.
-    pub fn gt<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::Gt, value)
-    }
-
-    /// Builds a greater-than-or-equal predicate against a bind value.
-    pub fn gte<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::Gte, value)
-    }
-
-    /// Builds a less-than predicate against a bind value.
-    pub fn lt<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::Lt, value)
-    }
-
-    /// Builds a less-than-or-equal predicate against a bind value.
-    pub fn lte<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::Lte, value)
-    }
-
-    /// Builds an `IS DISTINCT FROM` predicate against a bind value.
-    pub fn is_distinct_from<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::IsDistinctFrom, value)
-    }
-
-    /// Builds an `IS NOT DISTINCT FROM` predicate against a bind value.
-    pub fn is_not_distinct_from<V>(self, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.compare(BoolOp::IsNotDistinctFrom, value)
     }
 
     /// Builds `field IS NULL`.
@@ -221,26 +126,6 @@ impl<T> Field<T> {
         }
     }
 
-    /// Builds `field IN (...)`.
-    pub fn in_list<I, V>(self, values: I) -> BoolExpr
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.list_predicate(values, false)
-    }
-
-    /// Builds `field NOT IN (...)`.
-    pub fn not_in<I, V>(self, values: I) -> BoolExpr
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.list_predicate(values, true)
-    }
-
     /// Builds `field IN (subquery)`.
     pub fn in_subquery(self, query: impl Into<crate::typed::Stmt>) -> BoolExpr {
         BoolExpr::InSubquery {
@@ -257,24 +142,6 @@ impl<T> Field<T> {
             query: Box::new(query.into()),
             negated: true,
         }
-    }
-
-    /// Builds `field BETWEEN low AND high`.
-    pub fn between<V>(self, low: V, high: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.between_predicate(low, high, false)
-    }
-
-    /// Builds `field NOT BETWEEN low AND high`.
-    pub fn not_between<V>(self, low: V, high: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        self.between_predicate(low, high, true)
     }
 
     /// Builds an equality predicate against another field of the same Rust type.
@@ -341,18 +208,6 @@ impl<T> Field<T> {
         self.compare_field(BoolOp::IsNotDistinctFrom, right)
     }
 
-    fn compare<V>(self, op: BoolOp, value: V) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
-        BoolExpr::Compare {
-            left: self.expr(),
-            op,
-            right: ValueExpr::Param(Param::typed(value.into())),
-        }
-    }
-
     fn compare_field<R>(self, op: BoolOp, right: R) -> BoolExpr
     where
         R: IntoFieldRef<T>,
@@ -363,13 +218,98 @@ impl<T> Field<T> {
             right: right.into_field_ref().expr(),
         }
     }
+}
 
-    fn list_predicate<I, V>(self, values: I, negated: bool) -> BoolExpr
+impl<T: BindValue> Field<T> {
+    /// Creates an assignment for writes.
+    pub fn set(self, value: impl Into<T>) -> crate::typed::Assignment {
+        crate::typed::Assignment {
+            field: *self.meta,
+            value: ValueExpr::Param(Param::typed(value.into())),
+        }
+    }
+
+    /// Creates an assignment from a borrowed value by cloning it.
+    pub fn set_ref<V>(self, value: &V) -> crate::typed::Assignment
     where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+        V: Clone + Into<T>,
     {
+        self.set(value.clone())
+    }
+
+    /// Builds an equality predicate against a bind value.
+    pub fn eq(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::Eq, value)
+    }
+
+    /// Builds an inequality predicate against a bind value.
+    pub fn ne(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::Ne, value)
+    }
+
+    /// Builds a greater-than predicate against a bind value.
+    pub fn gt(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::Gt, value)
+    }
+
+    /// Builds a greater-than-or-equal predicate against a bind value.
+    pub fn gte(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::Gte, value)
+    }
+
+    /// Builds a less-than predicate against a bind value.
+    pub fn lt(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::Lt, value)
+    }
+
+    /// Builds a less-than-or-equal predicate against a bind value.
+    pub fn lte(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::Lte, value)
+    }
+
+    /// Builds an `IS DISTINCT FROM` predicate against a bind value.
+    pub fn is_distinct_from(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::IsDistinctFrom, value)
+    }
+
+    /// Builds an `IS NOT DISTINCT FROM` predicate against a bind value.
+    pub fn is_not_distinct_from(self, value: impl Into<T>) -> BoolExpr {
+        self.compare(BoolOp::IsNotDistinctFrom, value)
+    }
+
+    /// Builds `field IN (...)`.
+    pub fn in_list(self, values: impl IntoIterator<Item = impl Into<T>>) -> BoolExpr {
+        self.list_predicate(values, false)
+    }
+
+    /// Builds `field NOT IN (...)`.
+    pub fn not_in(self, values: impl IntoIterator<Item = impl Into<T>>) -> BoolExpr {
+        self.list_predicate(values, true)
+    }
+
+    /// Builds `field BETWEEN low AND high`.
+    pub fn between(self, low: impl Into<T>, high: impl Into<T>) -> BoolExpr {
+        self.between_predicate(low, high, false)
+    }
+
+    /// Builds `field NOT BETWEEN low AND high`.
+    pub fn not_between(self, low: impl Into<T>, high: impl Into<T>) -> BoolExpr {
+        self.between_predicate(low, high, true)
+    }
+
+    fn compare(self, op: BoolOp, value: impl Into<T>) -> BoolExpr {
+        BoolExpr::Compare {
+            left: self.expr(),
+            op,
+            right: ValueExpr::Param(Param::typed(value.into())),
+        }
+    }
+
+    fn list_predicate(
+        self,
+        values: impl IntoIterator<Item = impl Into<T>>,
+        negated: bool,
+    ) -> BoolExpr {
         let values = values
             .into_iter()
             .map(|value| ValueExpr::Param(Param::typed(value.into())))
@@ -384,11 +324,7 @@ impl<T> Field<T> {
         }
     }
 
-    fn between_predicate<V>(self, low: V, high: V, negated: bool) -> BoolExpr
-    where
-        V: Into<T>,
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
-    {
+    fn between_predicate(self, low: impl Into<T>, high: impl Into<T>, negated: bool) -> BoolExpr {
         BoolExpr::Between {
             expr: self.expr(),
             low: ValueExpr::Param(Param::typed(low.into())),

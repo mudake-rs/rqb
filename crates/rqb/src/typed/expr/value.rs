@@ -1,6 +1,4 @@
-use sqlx::{Encode, Postgres, Type};
-
-use crate::typed::{Meta, OrderItem, Param, SelectItem};
+use crate::typed::{BindValue, Meta, OrderItem, Param, SelectItem};
 
 use super::{BoolExpr, BoolOp, CaseBuilder, ValueExpr, ValueOp};
 
@@ -58,7 +56,7 @@ impl ValueExpr {
     /// Wraps a typed Rust value as a SQL bind parameter expression.
     pub fn param<T>(value: T) -> Self
     where
-        T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+        T: BindValue,
     {
         Self::Param(Param::typed(value))
     }

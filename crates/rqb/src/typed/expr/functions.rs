@@ -1,6 +1,4 @@
-use sqlx::{Encode, Postgres, Type};
-
-use crate::typed::{BoolExpr, CaseBuilder, Param};
+use crate::typed::{BindValue, BoolExpr, CaseBuilder, Param};
 
 use super::{ValueExpr, ValueOp};
 
@@ -54,7 +52,7 @@ pub use uuid::{uuid_extract_timestamp, uuid_extract_version, uuidv7};
 /// Wraps an owned Rust value as a typed bind parameter expression.
 pub fn param<T>(value: T) -> ValueExpr
 where
-    T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>,
+    T: BindValue,
 {
     ValueExpr::Param(Param::typed(value))
 }

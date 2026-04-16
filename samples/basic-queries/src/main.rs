@@ -28,6 +28,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(simple.params.len(), 2);
 
     let email_fragment = Some("@example.com");
+    // Multiple filters compose with AND. `all([...])` is the explicit helper
+    // when a nested predicate group reads better than a chain of `.filter(...)`.
     let composed = select(users::table())
         .column(users::ID)
         .column(users::EMAIL)

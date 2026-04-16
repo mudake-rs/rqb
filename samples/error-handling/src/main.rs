@@ -3,6 +3,8 @@ use rqb_sample_schema::orders;
 use serde_json::json;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Database errors are normalized into structured variants so API code can
+    // match by meaning instead of parsing message text.
     let unique = rqb::Error::UniqueViolation {
         constraint: Some("app_users_email_key".to_owned()),
         detail: Some("Key (email) already exists.".to_owned()),
@@ -29,6 +31,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let not_found = rqb::Error::from(sqlx::Error::RowNotFound);
     assert!(matches!(not_found, rqb::Error::NotFound));
 
+    // Builder validation errors are raised before SQL is rendered.
     assert!(matches!(
         delete_from(orders::table()).build(),
         Err(rqb::Error::TypedDeleteWithoutFilter)

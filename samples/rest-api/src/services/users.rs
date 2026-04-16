@@ -24,6 +24,8 @@ pub async fn search<'e>(
 }
 
 pub async fn create<'e>(db: impl PgExecutor<'e>, input: CreateUser) -> rqb::Result<UserRow> {
+    // DTO-derived values and explicit server-owned assignments compose in one
+    // insert. Later assignments for the same field intentionally win.
     insert(users::table())
         .set(users::ID.set(Uuid::new_v4()))
         .values(&input)
@@ -34,6 +36,8 @@ pub async fn create<'e>(db: impl PgExecutor<'e>, input: CreateUser) -> rqb::Resu
 }
 
 pub async fn deactivate(pool: &PgPool, id: Uuid) -> rqb::Result<()> {
+    // `tx!` gives the closure a transaction connection; the same service
+    // functions accept it through `PgExecutor`.
     tx!(pool, |conn| {
         update(users::table())
             .set(users::ACTIVE.set(false))

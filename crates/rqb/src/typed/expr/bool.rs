@@ -8,6 +8,16 @@ pub fn any(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
     BoolExpr::or(exprs)
 }
 
+/// Builds an `EXISTS (...)` predicate from a server-owned subquery.
+pub fn exists(stmt: impl Into<crate::typed::Stmt>) -> BoolExpr {
+    BoolExpr::Exists(Box::new(stmt.into()))
+}
+
+/// Negates a predicate.
+pub fn not(expr: BoolExpr) -> BoolExpr {
+    BoolExpr::negate(expr)
+}
+
 impl BoolExpr {
     pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
         Self::And(exprs.into_iter().collect())

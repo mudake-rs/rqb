@@ -1,4 +1,4 @@
-use rqb::dsl::count_all;
+use rqb::dsl::{count_all, exists};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::order_items as items;
@@ -15,18 +15,19 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let u = users::alias("u");
     let o = orders::alias("o");
 
+    // Subqueries are still server-owned query shapes. JSON requests cannot
+    // introduce EXISTS, IN-subquery, joins, or raw SQL.
     let paid_orders = select(orders::table())
         .column(orders::USER_ID)
         .filter(orders::STATUS.eq("paid"));
     let paid_users = select(&u)
         .column(u.id())
         .filter(u.id().in_subquery(paid_orders.clone()))
-        .filter(BoolExpr::Exists(Box::new(
+        .filter(exists(
             select(&o)
                 .column(o.id())
-                .filter(o.user_id().eq_field(u.id()))
-                .into(),
-        )))
+                .filter(o.user_id().eq_field(u.id())),
+        ))
         .build()?;
 
     assert_eq!(
@@ -35,6 +36,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(paid_users.params.len(), 1);
 
+    // Recursive CTEs often use raw SQL for the recursive term. Bind counts are
+    // still validated and CTE field metadata defines what the outer query sees.
     let nums = cte(
         "nums",
         Stmt::Raw(
@@ -53,6 +56,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(recursive.params.len(), 2);
 
+    // Computed subquery projections need explicit metadata because there is no
+    // generated table field for `count(*) AS item_count`.
     let item_counts = subquery(
         select(items::table())
             .agg(count_all().alias("item_count"))
@@ -68,9 +73,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(
         lateral.sql,
-        "SELECT \"o\".\"id\" AS \"o_id\", \"item_counts\".\"item_count\" AS \"item_counts_item_count\" FROM \"sample\".\"orders\" AS \"o\" LEFT JOIN LATERAL (SELECT count(*) AS \"item_count\" FROM \"sample\".\"order_items\" WHERE \"order_id\" = \"o\".\"id\") AS \"item_counts\" ON TRUE"
+        "SELECT \"o\".\"id\" AS \"o_id\", \"item_counts\".\"item_count\" AS \"item_counts_item_count\" FROM \"sample\".\"orders\" AS \"o\" LEFT JOIN LATERAL (SELECT count(*) AS \"item_count\" FROM \"sample\".\"order_items\" WHERE \"order_id\" = \"o\".\"id\") AS \"item_counts\" (\"item_count\") ON TRUE"
     );
 
+    // Raw sources use the same exposed-field rule as subqueries.
     let raw_ids = raw_source(
         "SELECT ?::uuid AS id",
         "seeded",
@@ -80,7 +86,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let raw_source_query = select(raw_ids).column(users::ID.at("seeded")).build()?;
     assert_eq!(
         raw_source_query.sql,
-        "SELECT \"seeded\".\"id\" AS \"seeded_id\" FROM (SELECT $1::uuid AS id) AS \"seeded\""
+        "SELECT \"seeded\".\"id\" AS \"seeded_id\" FROM (SELECT $1::uuid AS id) AS \"seeded\" (\"id\")"
     );
 
     let set_query = union(

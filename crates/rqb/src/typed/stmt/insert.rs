@@ -43,10 +43,12 @@ impl Insert {
         self
     }
 
-    pub fn on_conflict<T>(self, field: Field<T>) -> ColumnConflictBuilder {
+    pub fn on_conflict(self, fields: impl ConflictFields) -> ColumnConflictBuilder {
+        let mut target_fields = Vec::with_capacity(fields.conflict_field_count());
+        fields.push_conflict_fields(&mut target_fields);
         ColumnConflictBuilder {
             insert: self,
-            fields: vec![*field.meta],
+            fields: target_fields,
             predicate: None,
         }
     }

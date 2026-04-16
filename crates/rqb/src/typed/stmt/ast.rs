@@ -92,6 +92,27 @@ pub struct ConflictClause {
     pub action: ConflictAction,
 }
 
+/// Builder returned by `Merge::when_matched()`.
+#[derive(Clone, Debug)]
+pub struct MatchedMergeBuilder {
+    pub(super) merge: Merge,
+    pub(super) condition: Option<Box<BoolExpr>>,
+}
+
+/// Builder returned by `Merge::when_not_matched()`.
+#[derive(Clone, Debug)]
+pub struct NotMatchedMergeBuilder {
+    pub(super) merge: Merge,
+    pub(super) condition: Option<Box<BoolExpr>>,
+}
+
+/// Builder returned by `Merge::when_not_matched_by_source()`.
+#[derive(Clone, Debug)]
+pub struct NotMatchedBySourceMergeBuilder {
+    pub(super) merge: Merge,
+    pub(super) condition: Option<Box<BoolExpr>>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ColumnConflictBuilder {
     pub(super) insert: Insert,
@@ -128,6 +149,119 @@ where
 {
     fn changeset_assignments(&self) -> Vec<Assignment> {
         (**self).changeset_assignments()
+    }
+}
+
+/// Column set accepted by `Insert::on_conflict(...)`.
+///
+/// Use a single field, a tuple of fields, or explicit metadata for dynamic
+/// schema code.
+pub trait ConflictFields {
+    fn conflict_field_count(&self) -> usize;
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>);
+}
+
+impl<T> ConflictFields for Field<T> {
+    fn conflict_field_count(&self) -> usize {
+        1
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        push_column(fields, *self.meta);
+    }
+}
+
+impl ConflictFields for Meta {
+    fn conflict_field_count(&self) -> usize {
+        1
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        push_column(fields, self);
+    }
+}
+
+impl ConflictFields for Vec<Meta> {
+    fn conflict_field_count(&self) -> usize {
+        self.len()
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        for field in self {
+            push_column(fields, field);
+        }
+    }
+}
+
+impl<const N: usize> ConflictFields for [Meta; N] {
+    fn conflict_field_count(&self) -> usize {
+        N
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        for field in self {
+            push_column(fields, field);
+        }
+    }
+}
+
+impl<A, B> ConflictFields for (A, B)
+where
+    A: ConflictFields,
+    B: ConflictFields,
+{
+    fn conflict_field_count(&self) -> usize {
+        self.0.conflict_field_count() + self.1.conflict_field_count()
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        let (a, b) = self;
+        a.push_conflict_fields(fields);
+        b.push_conflict_fields(fields);
+    }
+}
+
+impl<A, B, C> ConflictFields for (A, B, C)
+where
+    A: ConflictFields,
+    B: ConflictFields,
+    C: ConflictFields,
+{
+    fn conflict_field_count(&self) -> usize {
+        self.0.conflict_field_count()
+            + self.1.conflict_field_count()
+            + self.2.conflict_field_count()
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        let (a, b, c) = self;
+        a.push_conflict_fields(fields);
+        b.push_conflict_fields(fields);
+        c.push_conflict_fields(fields);
+    }
+}
+
+impl<A, B, C, D> ConflictFields for (A, B, C, D)
+where
+    A: ConflictFields,
+    B: ConflictFields,
+    C: ConflictFields,
+    D: ConflictFields,
+{
+    fn conflict_field_count(&self) -> usize {
+        self.0.conflict_field_count()
+            + self.1.conflict_field_count()
+            + self.2.conflict_field_count()
+            + self.3.conflict_field_count()
+    }
+
+    fn push_conflict_fields(self, fields: &mut Vec<Meta>) {
+        let (a, b, c, d) = self;
+        a.push_conflict_fields(fields);
+        b.push_conflict_fields(fields);
+        c.push_conflict_fields(fields);
+        d.push_conflict_fields(fields);
     }
 }
 

@@ -5,6 +5,8 @@ use uuid::Uuid;
 rqb::schema! {
     table sample.vector_documents {
         id: uuid = Uuid,
+        // Unknown or extension types can stay raw-only metadata. They are still
+        // projected by default but do not get a typed Field<T> constant.
         status: document_state,
         embedding: vector,
         metadata: jsonb = Value,
@@ -21,6 +23,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(vector_documents::STATUS_META.db, "status");
     assert_eq!(vector_documents::EMBEDDING_META.pg, "vector");
 
+    // Server-owned raw predicates are the escape hatch for extension operators.
     let vector_search = select(vector_documents::table())
         .filter(BoolExpr::Raw {
             sql: "embedding <-> ?::vector < ?".to_owned(),

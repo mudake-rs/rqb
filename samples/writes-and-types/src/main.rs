@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 use sqlx::types::BigDecimal;
 use uuid::Uuid;
 
+// Derives use the generated schema module directly; there is no serde_json
+// bridge between the DTO and sqlx bind values.
 #[derive(Insertable)]
 #[rqb(table = invoices)]
 struct NewInvoice {
@@ -65,6 +67,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .bind(BigDecimal::from_str("5.00")?)
         .build()?;
 
+    // Conflict targets accept one field, a tuple of fields, or a named
+    // constraint. Predicates are allowed only for column targets.
     let upsert_user_sql = insert(users::table())
         .set(users::ID.set(Uuid::nil()))
         .set(users::EMAIL.set("ada@example.com"))
@@ -91,6 +95,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(users::ID)
         .build()?;
 
+    // INSERT ... SELECT validates target column count against the select
+    // projection before rendering SQL.
     let seed_open_orders_sql = insert(orders::table())
         .column(orders::ID)
         .column(orders::USER_ID)

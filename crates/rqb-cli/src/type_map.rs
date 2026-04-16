@@ -78,4 +78,66 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn maps_temporal_network_range_and_json_types() {
+        assert_eq!(
+            map_column_type("timestamp with time zone", "timestamptz"),
+            ColumnType::Known(KnownType::Timestamptz)
+        );
+        assert_eq!(
+            map_column_type("time with time zone", "timetz"),
+            ColumnType::Known(KnownType::Timetz)
+        );
+        assert_eq!(
+            map_column_type("USER-DEFINED", "inet"),
+            ColumnType::Known(KnownType::Inet)
+        );
+        assert_eq!(
+            map_column_type("USER-DEFINED", "tstzrange"),
+            ColumnType::Known(KnownType::Range(Box::new(KnownType::Timestamptz)))
+        );
+        assert_eq!(
+            map_column_type("jsonb", "jsonb"),
+            ColumnType::Known(KnownType::Json)
+        );
+    }
+
+    #[test]
+    fn nested_arrays_fall_back_to_raw_only_pg_type() {
+        assert_eq!(
+            map_column_type("ARRAY", "__int4"),
+            ColumnType::RawOnly {
+                pg: "__int4".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn maps_arrays_of_temporal_range_and_network_types() {
+        assert_eq!(
+            map_column_type("ARRAY", "_timestamptz"),
+            ColumnType::Known(KnownType::Array(Box::new(KnownType::Timestamptz)))
+        );
+        assert_eq!(
+            map_column_type("ARRAY", "_int4range"),
+            ColumnType::Known(KnownType::Array(Box::new(KnownType::Range(Box::new(
+                KnownType::Int4
+            )))))
+        );
+        assert_eq!(
+            map_column_type("ARRAY", "_inet"),
+            ColumnType::Known(KnownType::Array(Box::new(KnownType::Inet)))
+        );
+    }
+
+    #[test]
+    fn unknown_arrays_remain_raw_only() {
+        assert_eq!(
+            map_column_type("ARRAY", "_vector"),
+            ColumnType::RawOnly {
+                pg: "_vector".to_owned()
+            }
+        );
+    }
 }

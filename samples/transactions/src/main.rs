@@ -9,6 +9,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let pool = PgPoolOptions::new().connect_lazy("postgres://rqb:rqb@localhost/rqb")?;
     let user_id = Uuid::nil();
 
+    // The future is dropped because this sample is compile-checked without a
+    // database. In an application, `.await?` would run both statements in one tx.
     let tx_pool = pool.clone();
     let closure_future = tx!(&tx_pool, |conn| {
         deactivate_user(&mut *conn, user_id).await?;
@@ -36,6 +38,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// `PgExecutor` keeps service functions reusable: callers can pass a pool, a
+// connection, or the connection borrowed from a transaction.
 async fn deactivate_user<'e>(db: impl PgExecutor<'e>, user_id: Uuid) -> rqb::Result<u64> {
     update(users::table())
         .set(users::ACTIVE.set(false))

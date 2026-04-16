@@ -1,8 +1,9 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
     Stmt, ValueExpr, all, array, array_agg, bool_and, coalesce, count_all, count_distinct, cte,
-    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont,
-    row_number, select, table, to_jsonb, update, window,
+    current_date, current_timestamp, extract, function_source, insert, json_agg, json_get_text,
+    lag, merge_into, param, percentile_cont, row, row_number, select, slice, subscript, table,
+    to_jsonb, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -116,7 +117,7 @@ fn raw_fragments_are_numbered_in_render_order() {
 
     assert_eq!(
         built.sql,
-        "SELECT $1::text AS \"label\" FROM (select $2::int4 as id) AS \"generated\" WHERE id > $3"
+        "SELECT $1::text AS \"label\" FROM (select $2::int4 as id) AS \"generated\" (\"id\") WHERE id > $3"
     );
     assert_eq!(built.params.len(), 3);
     assert!(!built.cacheable);
@@ -245,6 +246,36 @@ fn joins_render_qualified_fields_and_keep_param_order() {
 }
 
 #[test]
+fn right_full_cross_and_lateral_joins_render_in_clause_order() {
+    let recent = select(orders())
+        .column(ORDER_USER_ID)
+        .filter(TOTAL.gt(100))
+        .try_into_source("recent")
+        .unwrap();
+
+    let built = select(users().alias("u"))
+        .right_join(
+            orders().alias("ro"),
+            ID.at("u").eq_field(ORDER_USER_ID.at("ro")),
+        )
+        .full_join(
+            orders().alias("fo"),
+            ID.at("u").eq_field(ORDER_USER_ID.at("fo")),
+        )
+        .cross_join(orders().alias("co"))
+        .left_join_lateral(recent, BoolExpr::Constant(true))
+        .column(ID.at("u"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"u\".\"id\" AS \"u_id\" FROM \"public\".\"app_users\" AS \"u\" RIGHT JOIN \"public\".\"orders\" AS \"ro\" ON \"u\".\"id\" = \"ro\".\"user_id\" FULL JOIN \"public\".\"orders\" AS \"fo\" ON \"u\".\"id\" = \"fo\".\"user_id\" CROSS JOIN \"public\".\"orders\" AS \"co\" LEFT JOIN LATERAL (SELECT \"user_id\" FROM \"public\".\"orders\" WHERE \"total_cents\" > $1) AS \"recent\" (\"user_id\") ON TRUE"
+    );
+    assert_eq!(built.params.len(), 1);
+}
+
+#[test]
 fn aliased_root_default_projection_is_qualified() {
     let built = select(users().alias("u")).build().unwrap();
 
@@ -278,6 +309,30 @@ fn everyday_predicates_render_without_raw_sql() {
 }
 
 #[test]
+fn negated_field_predicates_render_without_raw_sql() {
+    let built = select(users())
+        .filter(BoolExpr::and([
+            ID.not_in([1, 2]),
+            EMAIL.not_like("%@spam.test"),
+            EMAIL.not_ilike("%@spam.test"),
+            EMAIL.not_contains("spam"),
+            EMAIL.not_starts_with("tmp"),
+            EMAIL.not_ends_with(".bak"),
+            EMAIL.not_regex("^tmp"),
+            EMAIL.not_iregex("^tmp"),
+            ID.not_between(10, 20),
+        ]))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" WHERE (\"id\" NOT IN ($1, $2) AND \"email_address\" NOT LIKE $3 AND \"email_address\" NOT ILIKE $4 AND \"email_address\" NOT ILIKE $5 ESCAPE '\\' AND \"email_address\" NOT ILIKE $6 ESCAPE '\\' AND \"email_address\" NOT ILIKE $7 ESCAPE '\\' AND \"email_address\" !~ $8 AND \"email_address\" !~* $9 AND \"id\" NOT BETWEEN $10 AND $11)"
+    );
+    assert_eq!(built.params.len(), 11);
+}
+
+#[test]
 fn distinct_group_having_and_locks_render_as_select_clauses() {
     fn count_id() -> ValueExpr {
         crate::typed::count(ID)
@@ -288,11 +343,7 @@ fn distinct_group_having_and_locks_render_as_select_clauses() {
         .column(EMAIL)
         .item(count_id().alias("user_count"))
         .group_by(EMAIL)
-        .having(BoolExpr::Compare {
-            left: count_id(),
-            op: crate::typed::BoolOp::Gt,
-            right: ValueExpr::Param(Param::typed(1_i64)),
-        })
+        .having(count_id().gt(1_i64))
         .order_asc(EMAIL)
         .for_update()
         .skip_locked()
@@ -483,7 +534,7 @@ fn select_into_source_infers_field_metadata_from_projection() {
 
     assert_eq!(
         built.sql,
-        "SELECT \"r\".\"user_id\" AS \"r_user_id\", \"r\".\"total_cents\" AS \"r_total_cents\" FROM (SELECT \"user_id\", \"total_cents\" FROM \"public\".\"orders\" WHERE \"total_cents\" > $1) AS \"r\""
+        "SELECT \"r\".\"user_id\" AS \"r_user_id\", \"r\".\"total_cents\" AS \"r_total_cents\" FROM (SELECT \"user_id\", \"total_cents\" FROM \"public\".\"orders\" WHERE \"total_cents\" > $1) AS \"r\" (\"user_id\", \"total_cents\")"
     );
     assert_eq!(built.params.len(), 1);
 }
@@ -522,6 +573,28 @@ fn recursive_cte_source_renders_columns_and_body_params() {
         "WITH RECURSIVE \"active_users\" (\"id\") AS ((SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"id\" = $1) UNION ALL (SELECT \"id\" FROM \"active_users\" WHERE \"id\" < $2)) SELECT \"id\" FROM \"active_users\""
     );
     assert_eq!(built.params.len(), 2);
+}
+
+#[test]
+fn not_materialized_cte_renders_hint_and_auto_columns() {
+    let active = select(users())
+        .column(ID)
+        .filter(ACTIVE.eq(true))
+        .try_into_cte("active_users")
+        .unwrap()
+        .not_materialized();
+
+    let built = select(active.source())
+        .with(active)
+        .column(ID)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "WITH \"active_users\" (\"id\") AS NOT MATERIALIZED (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"active\" = $1) SELECT \"id\" FROM \"active_users\""
+    );
+    assert_eq!(built.params.len(), 1);
 }
 
 #[test]
@@ -643,6 +716,26 @@ fn jsonb_agg_object_renders_keyed_objects_with_filter_and_order() {
 }
 
 #[test]
+fn jsonb_agg_object_accepts_explicit_keys_for_computed_values() {
+    let built = select(orders())
+        .item(
+            crate::jsonb_agg_object![
+                ORDER_USER_ID,
+                ("source", json_get_text(PAYLOAD, param("source".to_owned()))),
+            ]
+            .alias("orders"),
+        )
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT jsonb_agg(jsonb_build_object($1, \"user_id\", $2, (\"payload\" ->> $3))) AS \"orders\" FROM \"public\".\"orders\""
+    );
+    assert_eq!(built.params.len(), 3);
+}
+
+#[test]
 fn count_query_renders_through_normal_ast_path() {
     let query = select(users())
         .column(ID)
@@ -659,6 +752,54 @@ fn count_query_renders_through_normal_ast_path() {
     );
     assert_eq!(count.params.len(), 1);
     assert!(count.cacheable);
+}
+
+#[test]
+fn keyword_helpers_render_without_function_parentheses_or_params() {
+    let built = select(users())
+        .item(current_timestamp().alias("ts"))
+        .item(current_date().alias("today"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT CURRENT_TIMESTAMP AS \"ts\", CURRENT_DATE AS \"today\" FROM \"public\".\"app_users\""
+    );
+    assert_eq!(built.params.len(), 0);
+    assert!(built.cacheable);
+}
+
+#[test]
+fn row_array_subscript_slice_extract_and_cast_render_value_expressions() {
+    let built = select(orders())
+        .item(row([ORDER_USER_ID.expr(), TOTAL.expr()]).alias("row_value"))
+        .item(array([ORDER_USER_ID.expr(), ValueExpr::from(2_i32)]).alias("ids"))
+        .item(subscript(TAGS, ValueExpr::from(1_i32)).alias("first_tag"))
+        .item(
+            slice(
+                TAGS,
+                Some(ValueExpr::from(1_i32)),
+                Some(ValueExpr::from(3_i32)),
+            )
+            .alias("tag_slice"),
+        )
+        .item(extract("year", current_timestamp()).alias("year"))
+        .item(
+            ValueExpr::Cast {
+                expr: Box::new(ValueExpr::from("42")),
+                pg: "int4",
+            }
+            .alias("answer"),
+        )
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT ROW(\"user_id\", \"total_cents\") AS \"row_value\", ARRAY[\"user_id\", $1] AS \"ids\", \"tags\"[$2] AS \"first_tag\", \"tags\"[$3:$4] AS \"tag_slice\", extract(year FROM CURRENT_TIMESTAMP) AS \"year\", CAST($5 AS int4) AS \"answer\" FROM \"public\".\"orders\""
+    );
+    assert_eq!(built.params.len(), 5);
 }
 
 #[test]
@@ -803,6 +944,41 @@ fn helper_functions_cover_common_postgres_builtins() {
 }
 
 #[test]
+fn boolean_tests_render_all_truth_variants() {
+    let built = select(users())
+        .filter(BoolExpr::and([
+            ACTIVE.is_true(),
+            ACTIVE.is_not_false(),
+            ACTIVE.is_unknown(),
+            ACTIVE.is_not_unknown(),
+        ]))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" WHERE (\"active\" IS TRUE AND \"active\" IS NOT FALSE AND \"active\" IS UNKNOWN AND \"active\" IS NOT UNKNOWN)"
+    );
+}
+
+#[test]
+fn set_query_fetch_with_ties_renders_after_order_by() {
+    let built = select(users())
+        .column(ID)
+        .union(select(users()).column(ID).filter(ID.gt(100)))
+        .order_asc(ID)
+        .fetch_first_with_ties(param(5_i64))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "(SELECT \"id\" FROM \"public\".\"app_users\") UNION (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"id\" > $1) ORDER BY \"id\" ASC FETCH FIRST $2 ROWS WITH TIES"
+    );
+    assert_eq!(built.params.len(), 2);
+}
+
+#[test]
 fn cte_hints_function_sources_and_merge_render() {
     static SERIES_META: Meta = Meta::new("value", "value", "int4").ops(OpSet::ordered());
     let series = function_source(
@@ -833,11 +1009,10 @@ fn cte_hints_function_sources_and_merge_render() {
         orders().alias("incoming"),
         ID.at("u").eq_field(ORDER_USER_ID.at("incoming")),
     )
-    .when_matched_update_if(
-        TOTAL.at("incoming").gt(1000),
-        [EMAIL.set("merged@example.com".to_owned())],
-    )
-    .when_not_matched_insert([ID.set(1), EMAIL.set("new@example.com".to_owned())])
+    .when_matched_if(TOTAL.at("incoming").gt(1000))
+    .update([EMAIL.set("merged@example.com".to_owned())])
+    .when_not_matched()
+    .insert([ID.set(1), EMAIL.set("new@example.com".to_owned())])
     .returning_item(SelectItem::new(ID.at("u").expr()));
 
     let built = merge.build().unwrap();

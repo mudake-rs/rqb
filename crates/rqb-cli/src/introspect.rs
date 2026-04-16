@@ -121,3 +121,64 @@ fn assign_unique_names(relations: &mut BTreeMap<String, Relation>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use crate::model::{Column, ColumnType, KnownType, Relation, RelationKind};
+
+    use super::assign_unique_names;
+
+    fn column(name: &str, const_name: &str, meta_name: &str) -> Column {
+        Column {
+            name: name.to_owned(),
+            const_name: const_name.to_owned(),
+            meta_name: meta_name.to_owned(),
+            ty: ColumnType::Known(KnownType::Text),
+        }
+    }
+
+    #[test]
+    fn assign_unique_names_disambiguates_columns_after_sanitizing() {
+        let mut relations = BTreeMap::from([(
+            "events".to_owned(),
+            Relation {
+                schema: "public".to_owned(),
+                name: "events".to_owned(),
+                kind: RelationKind::Table,
+                columns: vec![
+                    column("source", "SOURCE", "SOURCE_META"),
+                    column("source_", "SOURCE", "SOURCE_META"),
+                ],
+            },
+        )]);
+
+        assign_unique_names(&mut relations);
+
+        let relation = relations.get("events").unwrap();
+        assert_eq!(relation.columns[0].const_name, "SOURCE");
+        assert_eq!(relation.columns[1].const_name, "SOURCE_1");
+        assert_eq!(relation.columns[0].meta_name, "SOURCE_META");
+        assert_eq!(relation.columns[1].meta_name, "SOURCE_META_1");
+    }
+
+    #[test]
+    fn assign_unique_names_reserves_fields_array_name() {
+        let mut relations = BTreeMap::from([(
+            "events".to_owned(),
+            Relation {
+                schema: "public".to_owned(),
+                name: "events".to_owned(),
+                kind: RelationKind::Table,
+                columns: vec![column("fields", "FIELDS", "FIELDS_META")],
+            },
+        )]);
+
+        assign_unique_names(&mut relations);
+
+        let relation = relations.get("events").unwrap();
+        assert_eq!(relation.columns[0].const_name, "FIELDS_1");
+        assert_eq!(relation.columns[0].meta_name, "FIELDS_META");
+    }
+}

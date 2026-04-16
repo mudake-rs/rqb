@@ -67,6 +67,8 @@ async fn search_orders(
     State(state): State<AppState>,
     Json(request): Json<SearchRequest>,
 ) -> ApiResult<Json<Page<OrderSearchRow>>> {
+    // The route accepts only the JSON search envelope. The service adds server
+    // filters and owns pagination/count semantics.
     let orders = orders::search(&state.pool, request).await?;
     Ok(Json(orders))
 }
@@ -82,6 +84,8 @@ async fn checkout(
     State(state): State<AppState>,
     Json(input): Json<CreateOrder>,
 ) -> ApiResult<(StatusCode, Json<CheckoutResponse>)> {
+    // Request validation stays at the HTTP boundary; the DB service receives a
+    // clean command DTO.
     if input.total_cents <= 0 {
         return Err(ApiError::BadRequest("total_cents must be positive".to_owned()));
     }

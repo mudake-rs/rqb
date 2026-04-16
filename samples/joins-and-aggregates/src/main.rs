@@ -1,10 +1,13 @@
-use rqb::dsl::{count_distinct, param, sum};
+use rqb::dsl::{count_distinct, sum};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::order_items as items;
 use rqb_sample_schema::orders;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Generated alias handles keep the table alias in one place. `u.email()`
+    // returns a qualified FieldRef, so join-heavy queries do not repeat
+    // `users::EMAIL.at("u")` everywhere.
     let u = users::alias("u");
     let o = orders::alias("o");
     let i = items::alias("i");
@@ -17,17 +20,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .agg(sum(i.quantity()).alias("units_sold"))
         .agg(sum(o.total_cents()).alias("gross_cents"))
         .agg(
+            // Field arguments use their metadata names as JSON object keys.
+            // Computed values can be passed as ("key", expr) pairs.
             jsonb_agg_object![o.id(), o.status()]
                 .order_desc(o.created_at())
                 .filter(o.status().eq("paid"))
                 .alias("paid_orders"),
         )
         .group_by(u.email())
-        .having(BoolExpr::Compare {
-            left: count_distinct(o.id()),
-            op: BoolOp::Gt,
-            right: param(0_i64),
-        })
+        .having(count_distinct(o.id()).gt(0_i64))
         .order_asc(u.email())
         .build()?;
 

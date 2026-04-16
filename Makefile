@@ -10,17 +10,17 @@ check-fmt:
 	cargo fmt --all --check
 
 clippy:
-	cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 lint: check-fmt clippy
 
 test:
-	cargo test --workspace --no-default-features
+	cargo test --workspace --all-features
 
 check: lint test
 
 doc:
-	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-default-features --no-deps
+	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 verify: check doc
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/schema/Cargo.toml

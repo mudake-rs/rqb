@@ -25,20 +25,45 @@ impl Select {
         self
     }
 
+    /// Turns this select into a subquery source by inferring exposed fields.
+    ///
+    /// Inference succeeds for default projection or plain field projections.
+    /// Use `into_source(alias, fields)` when projecting computed expressions or
+    /// renaming exposed columns.
     pub fn try_into_source(self, alias: impl Into<String>) -> crate::Result<Source> {
         let fields = self.inferred_source_fields()?;
         Ok(subquery(self, alias, fields))
     }
 
+    /// Turns this select into a subquery source with explicit exposed fields.
     pub fn into_source(self, alias: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
         subquery(self, alias, fields)
     }
 
+    /// Turns this select into a CTE by inferring exposed fields.
+    ///
+    /// Inference has the same rules as `try_into_source`.
+    pub fn try_into_cte(self, name: impl Into<String>) -> crate::Result<Cte> {
+        let fields = self.inferred_source_fields()?;
+        Ok(cte(name, self, fields))
+    }
+
+    /// Turns this select into a CTE with explicit exposed fields.
+    pub fn into_cte(self, name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Cte {
+        cte(name, self, fields)
+    }
+
+    /// Adds a schema field or aliased field reference to the projection.
+    ///
+    /// Plain fields keep their database/API alias rules. Qualified fields get
+    /// stable aliases such as `u_email`, which makes `sqlx::FromRow` mapping
+    /// deterministic for joins.
     pub fn column(mut self, field: impl Into<SelectItem>) -> Self {
         self.projection.push(field.into());
         self
     }
 
+    /// Adds an expression without an output alias.
     pub fn expr(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.projection.push(SelectItem {
             expr: expr.into(),
@@ -47,11 +72,13 @@ impl Select {
         self
     }
 
+    /// Adds a fully specified projection item, usually an aliased expression.
     pub fn item(mut self, item: SelectItem) -> Self {
         self.projection.push(item);
         self
     }
 
+    /// Alias for `item(...)` in aggregate-heavy selects.
     pub fn agg(self, item: SelectItem) -> Self {
         self.item(item)
     }

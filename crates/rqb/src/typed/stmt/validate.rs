@@ -345,13 +345,27 @@ fn validate_insert_select_columns(columns: &[Meta], source: &Select) -> Result<(
 }
 
 impl Select {
-    fn projection_count(&self) -> Option<usize> {
+    pub(crate) fn projection_count(&self) -> Option<usize> {
         if !self.projection.is_empty() {
             return Some(self.projection.len());
         }
         let mut count = 0usize;
         self.source.for_each_field(|_| count += 1);
         (count > 0).then_some(count)
+    }
+}
+
+impl Stmt {
+    pub(crate) fn projection_count(&self) -> Option<usize> {
+        match self {
+            Self::Select(select) => select.projection_count(),
+            Self::Set(_)
+            | Self::Insert(_)
+            | Self::Update(_)
+            | Self::Delete(_)
+            | Self::Merge(_)
+            | Self::Raw(_) => None,
+        }
     }
 }
 

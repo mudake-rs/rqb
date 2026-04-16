@@ -13,15 +13,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let au = users::alias("au");
     let o = orders::alias("o");
 
-    let active_users = cte(
-        "active_users",
-        select(users::table())
-            .column(users::ID)
-            .column(users::EMAIL)
-            .filter(users::ACTIVE.eq(true)),
-        vec![*users::ID.meta, *users::EMAIL.meta],
-    )
-    .not_materialized();
+    // `try_into_cte` infers exposed fields from explicit field projections, so
+    // common CTEs do not repeat `vec![*ID.meta, ...]`.
+    let active_users = select(users::table())
+        .column(users::ID)
+        .column(users::EMAIL)
+        .filter(users::ACTIVE.eq(true))
+        .try_into_cte("active_users")?
+        .not_materialized();
     let active_users_source = active_users.source().alias("au");
 
     let latest_event = subquery(
@@ -34,6 +33,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         vec![LAST_EVENT_AT_META],
     );
 
+    // CASE is a value expression, so it can be selected, aliased, grouped, or
+    // nested like any other expression.
     let order_size = ValueExpr::Case {
         branches: vec![(o.total_cents().gte(10_000), "large".into())],
         else_: Some(Box::new("standard".into())),
@@ -51,6 +52,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .alias("paid_count"),
         )
         .agg(
+            // Metadata-backed fields become JSON keys automatically; computed
+            // values keep an explicit key.
             jsonb_agg_object![
                 o.id(),
                 o.status(),
@@ -79,11 +82,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .group_by(o.total_cents())
         .group_by(o.created_at())
         .group_by(LAST_EVENT_AT.at("latest_event"))
-        .having(BoolExpr::Compare {
-            left: sum(o.total_cents()),
-            op: BoolOp::Gt,
-            right: param(0_i64),
-        })
+        .having(sum(o.total_cents()).gt(0_i64))
         .order_desc_nulls_last(LAST_EVENT_AT.at("latest_event"))
         .fetch_first_with_ties(param(25_i64))
         .build()?;

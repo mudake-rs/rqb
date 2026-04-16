@@ -112,3 +112,65 @@ where
         std::any::type_name::<T>()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Param, Params};
+
+    #[test]
+    fn typed_param_reports_the_stored_rust_type_name() {
+        let param = Param::typed(42_i32);
+
+        assert_eq!(param.debug_name(), std::any::type_name::<i32>());
+    }
+
+    #[test]
+    fn cloned_param_preserves_the_erased_type() {
+        let param = Param::typed("paid".to_owned());
+        let cloned = param.clone();
+
+        assert_eq!(param.debug_name(), cloned.debug_name());
+    }
+
+    #[test]
+    fn params_preserve_insertion_order_for_debug_names() {
+        let mut params = Params::new();
+        assert!(params.is_empty());
+
+        params.push_typed(1_i32);
+        params.push_typed("two".to_owned());
+        params.push_typed(true);
+
+        assert!(!params.is_empty());
+        assert_eq!(params.as_slice().len(), 3);
+        assert_eq!(
+            params.debug_names(),
+            vec![
+                std::any::type_name::<i32>(),
+                std::any::type_name::<String>(),
+                std::any::type_name::<bool>(),
+            ]
+        );
+    }
+
+    #[test]
+    fn params_arguments_accept_all_stored_values() {
+        let params = Params::from_vec(vec![
+            Param::typed(1_i32),
+            Param::typed("two".to_owned()),
+            Param::typed(false),
+        ]);
+
+        params.arguments().unwrap();
+    }
+
+    #[test]
+    fn param_debug_prints_the_erased_rust_type_name() {
+        let param = Param::typed(1_i64);
+
+        assert_eq!(
+            format!("{param:?}"),
+            format!("Param({:?})", std::any::type_name::<i64>())
+        );
+    }
+}

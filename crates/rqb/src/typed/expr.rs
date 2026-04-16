@@ -15,7 +15,7 @@ pub use ast::{
     ValueExpr, ValueOp, WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder,
     WindowSpec,
 };
-pub use bool::{all, any};
+pub use bool::{all, any, exists, not};
 pub use field::{Field, FieldRef, IntoFieldRef};
 pub use functions::{
     __jsonb_agg_object_from_pairs, __jsonb_object_pair, JsonbObjectItem, abs, age, aggregate,

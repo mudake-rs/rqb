@@ -354,4 +354,123 @@ mod tests {
         assert!(code.contains("table admin.users {"));
         assert!(code.contains("table public.users as users_1 {"));
     }
+
+    #[test]
+    fn renders_imports_for_temporal_numeric_json_and_range_types() {
+        let code = render(&[Relation {
+            schema: "public".to_owned(),
+            name: "invoices".to_owned(),
+            kind: RelationKind::Table,
+            columns: vec![
+                Column {
+                    name: "id".to_owned(),
+                    const_name: "ID".to_owned(),
+                    meta_name: "ID_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Uuid),
+                },
+                Column {
+                    name: "amount".to_owned(),
+                    const_name: "AMOUNT".to_owned(),
+                    meta_name: "AMOUNT_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Numeric),
+                },
+                Column {
+                    name: "created_at".to_owned(),
+                    const_name: "CREATED_AT".to_owned(),
+                    meta_name: "CREATED_AT_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Timestamptz),
+                },
+                Column {
+                    name: "billing_window".to_owned(),
+                    const_name: "BILLING_WINDOW".to_owned(),
+                    meta_name: "BILLING_WINDOW_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Range(Box::new(KnownType::Date))),
+                },
+                Column {
+                    name: "metadata".to_owned(),
+                    const_name: "METADATA".to_owned(),
+                    meta_name: "METADATA_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Json),
+                },
+            ],
+        }])
+        .unwrap();
+
+        assert!(code.contains("use chrono::{DateTime, NaiveDate, Utc};"));
+        assert!(code.contains("use serde_json::Value;"));
+        assert!(code.contains("use sqlx::postgres::types::{PgRange};"));
+        assert!(code.contains("use sqlx::types::BigDecimal;"));
+        assert!(code.contains("use uuid::Uuid;"));
+        assert!(code.contains("amount: numeric = BigDecimal"));
+        assert!(code.contains("created_at: timestamptz = DateTime<Utc>"));
+        assert!(code.contains("billing_window: daterange = PgRange<NaiveDate>"));
+        assert!(code.contains("metadata: jsonb = Value"));
+    }
+
+    #[test]
+    fn quotes_non_plain_relation_column_and_pg_type_names() {
+        let code = render(&[Relation {
+            schema: "audit-log".to_owned(),
+            name: "Event Stream".to_owned(),
+            kind: RelationKind::View,
+            columns: vec![Column {
+                name: "event-type".to_owned(),
+                const_name: "EVENT_TYPE".to_owned(),
+                meta_name: "EVENT_TYPE_META".to_owned(),
+                ty: ColumnType::RawOnly {
+                    pg: "custom-type[]".to_owned(),
+                },
+            }],
+        }])
+        .unwrap();
+
+        assert!(code.contains("view \"audit-log.Event Stream\" {"));
+        assert!(code.contains("\"event-type\": \"custom-type[]\""));
+    }
+
+    #[test]
+    fn disambiguates_relation_modules_against_facade_reserved_names() {
+        let id = Column {
+            name: "id".to_owned(),
+            const_name: "ID".to_owned(),
+            meta_name: "ID_META".to_owned(),
+            ty: ColumnType::Known(KnownType::Uuid),
+        };
+        let code = render(&[Relation {
+            schema: "public".to_owned(),
+            name: "rqb".to_owned(),
+            kind: RelationKind::Table,
+            columns: vec![id],
+        }])
+        .unwrap();
+
+        assert!(code.contains("table public.rqb as rqb_1 {"));
+    }
+
+    #[test]
+    fn renders_column_const_aliases_when_introspection_disambiguates_names() {
+        let code = render(&[Relation {
+            schema: "public".to_owned(),
+            name: "events".to_owned(),
+            kind: RelationKind::Table,
+            columns: vec![
+                Column {
+                    name: "source".to_owned(),
+                    const_name: "SOURCE".to_owned(),
+                    meta_name: "SOURCE_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Text),
+                },
+                Column {
+                    name: "source_".to_owned(),
+                    const_name: "SOURCE_1".to_owned(),
+                    meta_name: "SOURCE_1_META".to_owned(),
+                    ty: ColumnType::Known(KnownType::Text),
+                },
+            ],
+        }])
+        .unwrap();
+
+        assert!(code.contains("source: text = String"));
+        assert!(code.contains("source_ as SOURCE_1: text = String"));
+    }
 }

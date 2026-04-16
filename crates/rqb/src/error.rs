@@ -449,3 +449,93 @@ impl Error {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{DbErrorInfo, DbErrorPosition, Error};
+
+    #[test]
+    fn structured_error_helpers_expose_constraint_table_column_and_code() {
+        let error = Error::Database {
+            code: "23505".to_owned(),
+            message: "duplicate key value violates unique constraint".to_owned(),
+            detail: Some("Key (email)=(ada@example.com) already exists.".to_owned()),
+            hint: Some("Use another email.".to_owned()),
+            constraint: Some("users_email_key".to_owned()),
+            table: Some("users".to_owned()),
+            column: Some("email".to_owned()),
+            info: DbErrorInfo {
+                schema: Some("public".to_owned()),
+                datatype: Some("text".to_owned()),
+                where_: Some("SQL statement".to_owned()),
+                position: Some(DbErrorPosition::Original(42)),
+                ..DbErrorInfo::default()
+            },
+        };
+
+        assert_eq!(error.code(), Some("23505"));
+        assert_eq!(error.constraint_name(), Some("users_email_key"));
+        assert_eq!(error.table_name(), Some("users"));
+        assert_eq!(error.column_name(), Some("email"));
+        assert_eq!(
+            error.detail(),
+            Some("Key (email)=(ada@example.com) already exists.")
+        );
+        assert_eq!(error.hint(), Some("Use another email."));
+        assert_eq!(error.schema_name(), Some("public"));
+        assert_eq!(error.datatype_name(), Some("text"));
+        assert_eq!(error.where_context(), Some("SQL statement"));
+        assert_eq!(error.position(), Some(&DbErrorPosition::Original(42)));
+    }
+
+    #[test]
+    fn specialized_error_helpers_fall_back_to_db_error_info() {
+        let error = Error::UniqueViolation {
+            constraint: None,
+            detail: None,
+            info: DbErrorInfo {
+                constraint: Some("users_email_key".to_owned()),
+                table: Some("users".to_owned()),
+                column: Some("email".to_owned()),
+                ..DbErrorInfo::default()
+            },
+        };
+
+        assert_eq!(error.code(), Some("23505"));
+        assert_eq!(error.constraint_name(), Some("users_email_key"));
+        assert_eq!(error.table_name(), Some("users"));
+        assert_eq!(error.column_name(), Some("email"));
+    }
+
+    #[test]
+    fn retryable_errors_are_serialization_deadlock_or_connection_only() {
+        assert!(
+            Error::SerializationFailure {
+                message: "could not serialize access".to_owned(),
+                detail: None,
+                hint: None,
+                info: DbErrorInfo::default(),
+            }
+            .is_retryable()
+        );
+        assert!(
+            Error::DeadlockDetected {
+                message: "deadlock detected".to_owned(),
+                detail: None,
+                hint: None,
+                info: DbErrorInfo::default(),
+            }
+            .is_retryable()
+        );
+        assert!(Error::Connection("connection closed".to_owned()).is_retryable());
+        assert!(
+            !Error::QueryCanceled {
+                message: "canceling statement due to user request".to_owned(),
+                detail: None,
+                hint: None,
+                info: DbErrorInfo::default(),
+            }
+            .is_retryable()
+        );
+    }
+}

@@ -27,151 +27,49 @@ impl Merge {
         self
     }
 
-    pub fn when_matched_update(mut self, assignments: impl Into<Vec<Assignment>>) -> Self {
-        self.actions.push(MergeAction::Update {
-            when: MergeWhen::Matched,
+    pub fn when_matched(self) -> MatchedMergeBuilder {
+        MatchedMergeBuilder {
+            merge: self,
             condition: None,
-            assignments: assignments.into(),
-        });
-        self
+        }
     }
 
-    pub fn when_matched_update_if(
-        mut self,
+    pub fn when_matched_if(self, condition: BoolExpr) -> MatchedMergeBuilder {
+        MatchedMergeBuilder {
+            merge: self,
+            condition: Some(Box::new(condition)),
+        }
+    }
+
+    pub fn when_not_matched(self) -> NotMatchedMergeBuilder {
+        NotMatchedMergeBuilder {
+            merge: self,
+            condition: None,
+        }
+    }
+
+    pub fn when_not_matched_if(self, condition: BoolExpr) -> NotMatchedMergeBuilder {
+        NotMatchedMergeBuilder {
+            merge: self,
+            condition: Some(Box::new(condition)),
+        }
+    }
+
+    pub fn when_not_matched_by_source(self) -> NotMatchedBySourceMergeBuilder {
+        NotMatchedBySourceMergeBuilder {
+            merge: self,
+            condition: None,
+        }
+    }
+
+    pub fn when_not_matched_by_source_if(
+        self,
         condition: BoolExpr,
-        assignments: impl Into<Vec<Assignment>>,
-    ) -> Self {
-        self.actions.push(MergeAction::Update {
-            when: MergeWhen::Matched,
+    ) -> NotMatchedBySourceMergeBuilder {
+        NotMatchedBySourceMergeBuilder {
+            merge: self,
             condition: Some(Box::new(condition)),
-            assignments: assignments.into(),
-        });
-        self
-    }
-
-    pub fn when_matched_delete(mut self) -> Self {
-        self.actions.push(MergeAction::Delete {
-            when: MergeWhen::Matched,
-            condition: None,
-        });
-        self
-    }
-
-    pub fn when_matched_delete_if(mut self, condition: BoolExpr) -> Self {
-        self.actions.push(MergeAction::Delete {
-            when: MergeWhen::Matched,
-            condition: Some(Box::new(condition)),
-        });
-        self
-    }
-
-    pub fn when_matched_do_nothing(mut self) -> Self {
-        self.actions.push(MergeAction::DoNothing {
-            when: MergeWhen::Matched,
-            condition: None,
-        });
-        self
-    }
-
-    pub fn when_matched_do_nothing_if(mut self, condition: BoolExpr) -> Self {
-        self.actions.push(MergeAction::DoNothing {
-            when: MergeWhen::Matched,
-            condition: Some(Box::new(condition)),
-        });
-        self
-    }
-
-    pub fn when_not_matched_insert(mut self, assignments: impl Into<Vec<Assignment>>) -> Self {
-        self.actions.push(MergeAction::Insert {
-            condition: None,
-            assignments: assignments.into(),
-        });
-        self
-    }
-
-    pub fn when_not_matched_insert_if(
-        mut self,
-        condition: BoolExpr,
-        assignments: impl Into<Vec<Assignment>>,
-    ) -> Self {
-        self.actions.push(MergeAction::Insert {
-            condition: Some(Box::new(condition)),
-            assignments: assignments.into(),
-        });
-        self
-    }
-
-    pub fn when_not_matched_do_nothing(mut self) -> Self {
-        self.actions.push(MergeAction::DoNothing {
-            when: MergeWhen::NotMatched,
-            condition: None,
-        });
-        self
-    }
-
-    pub fn when_not_matched_do_nothing_if(mut self, condition: BoolExpr) -> Self {
-        self.actions.push(MergeAction::DoNothing {
-            when: MergeWhen::NotMatched,
-            condition: Some(Box::new(condition)),
-        });
-        self
-    }
-
-    pub fn when_not_matched_by_source_update(
-        mut self,
-        assignments: impl Into<Vec<Assignment>>,
-    ) -> Self {
-        self.actions.push(MergeAction::Update {
-            when: MergeWhen::NotMatchedBySource,
-            condition: None,
-            assignments: assignments.into(),
-        });
-        self
-    }
-
-    pub fn when_not_matched_by_source_update_if(
-        mut self,
-        condition: BoolExpr,
-        assignments: impl Into<Vec<Assignment>>,
-    ) -> Self {
-        self.actions.push(MergeAction::Update {
-            when: MergeWhen::NotMatchedBySource,
-            condition: Some(Box::new(condition)),
-            assignments: assignments.into(),
-        });
-        self
-    }
-
-    pub fn when_not_matched_by_source_delete(mut self) -> Self {
-        self.actions.push(MergeAction::Delete {
-            when: MergeWhen::NotMatchedBySource,
-            condition: None,
-        });
-        self
-    }
-
-    pub fn when_not_matched_by_source_delete_if(mut self, condition: BoolExpr) -> Self {
-        self.actions.push(MergeAction::Delete {
-            when: MergeWhen::NotMatchedBySource,
-            condition: Some(Box::new(condition)),
-        });
-        self
-    }
-
-    pub fn when_not_matched_by_source_do_nothing(mut self) -> Self {
-        self.actions.push(MergeAction::DoNothing {
-            when: MergeWhen::NotMatchedBySource,
-            condition: None,
-        });
-        self
-    }
-
-    pub fn when_not_matched_by_source_do_nothing_if(mut self, condition: BoolExpr) -> Self {
-        self.actions.push(MergeAction::DoNothing {
-            when: MergeWhen::NotMatchedBySource,
-            condition: Some(Box::new(condition)),
-        });
-        self
+        }
     }
 
     pub fn returning(mut self, field: impl Into<SelectItem>) -> Self {
@@ -199,6 +97,99 @@ impl Merge {
         self.returning = returning;
         self
     }
+}
+
+impl MatchedMergeBuilder {
+    pub fn update(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::Update {
+                when: MergeWhen::Matched,
+                condition: self.condition,
+                assignments: assignments.into(),
+            },
+        )
+    }
+
+    pub fn delete(self) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::Delete {
+                when: MergeWhen::Matched,
+                condition: self.condition,
+            },
+        )
+    }
+
+    pub fn do_nothing(self) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::DoNothing {
+                when: MergeWhen::Matched,
+                condition: self.condition,
+            },
+        )
+    }
+}
+
+impl NotMatchedMergeBuilder {
+    pub fn insert(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::Insert {
+                condition: self.condition,
+                assignments: assignments.into(),
+            },
+        )
+    }
+
+    pub fn do_nothing(self) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::DoNothing {
+                when: MergeWhen::NotMatched,
+                condition: self.condition,
+            },
+        )
+    }
+}
+
+impl NotMatchedBySourceMergeBuilder {
+    pub fn update(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::Update {
+                when: MergeWhen::NotMatchedBySource,
+                condition: self.condition,
+                assignments: assignments.into(),
+            },
+        )
+    }
+
+    pub fn delete(self) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::Delete {
+                when: MergeWhen::NotMatchedBySource,
+                condition: self.condition,
+            },
+        )
+    }
+
+    pub fn do_nothing(self) -> Merge {
+        finish_merge_action(
+            self.merge,
+            MergeAction::DoNothing {
+                when: MergeWhen::NotMatchedBySource,
+                condition: self.condition,
+            },
+        )
+    }
+}
+
+fn finish_merge_action(mut merge: Merge, action: MergeAction) -> Merge {
+    merge.actions.push(action);
+    merge
 }
 
 impl From<Merge> for Stmt {

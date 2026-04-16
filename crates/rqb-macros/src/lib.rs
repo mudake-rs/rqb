@@ -52,6 +52,19 @@ pub fn schema(input: TokenStream) -> TokenStream {
     parse_macro_input!(input as SchemaInput).expand().into()
 }
 
+/// Derives `rqb::Insertable` for a DTO.
+///
+/// Required container attribute:
+///
+/// ```text
+/// #[rqb(table = crate::schema::users)]
+/// ```
+///
+/// Field attributes:
+/// - `#[rqb(field = TABLE::FIELD)]` maps a Rust field to a differently named
+///   generated schema field.
+/// - `#[rqb(skip)]` omits the field.
+/// - `#[rqb(skip_none)]` omits `None` for `Option<T>` fields.
 #[proc_macro_derive(Insertable, attributes(rqb))]
 pub fn derive_insertable(input: TokenStream) -> TokenStream {
     expand_write_record(
@@ -62,6 +75,10 @@ pub fn derive_insertable(input: TokenStream) -> TokenStream {
     .into()
 }
 
+/// Derives `rqb::Changeset` for patch DTOs.
+///
+/// `Option<T>` fields naturally model PATCH semantics: `Some(value)` sets the
+/// column and `None` leaves it unchanged.
 #[proc_macro_derive(Changeset, attributes(rqb))]
 pub fn derive_changeset(input: TokenStream) -> TokenStream {
     expand_write_record(
@@ -671,7 +688,10 @@ fn sanitize_ident(value: &str) -> String {
 
 fn sanitize_alias_method_ident(value: &str) -> String {
     let ident = sanitize_ident(value);
-    if matches!(ident.as_str(), "clone" | "source") {
+    if matches!(
+        ident.as_str(),
+        "as_ref" | "clone" | "eq" | "from" | "hash" | "into" | "ne" | "source"
+    ) {
         format!("{ident}_")
     } else {
         ident

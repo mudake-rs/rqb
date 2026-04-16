@@ -80,6 +80,9 @@ pub struct Join {
     pub lateral: bool,
 }
 
+/// Creates a table source from static metadata.
+///
+/// Generated schema modules usually expose this as `users::table()`.
 pub fn table(name: &'static str, fields: &'static [&'static Meta]) -> Source {
     Source::Table {
         name,
@@ -88,6 +91,9 @@ pub fn table(name: &'static str, fields: &'static [&'static Meta]) -> Source {
     }
 }
 
+/// Creates a view source from static metadata.
+///
+/// Generated schema modules usually expose this as `search_view::view()`.
 pub fn view(name: &'static str, fields: &'static [&'static Meta]) -> Source {
     Source::View {
         name,
@@ -96,10 +102,18 @@ pub fn view(name: &'static str, fields: &'static [&'static Meta]) -> Source {
     }
 }
 
+/// Creates a CTE with explicit exposed field metadata.
+///
+/// Prefer `Select::try_into_cte(name)` when the CTE projects plain fields and
+/// rqb can infer the exposed metadata from the select list.
 pub fn cte(name: impl Into<String>, stmt: impl Into<Stmt>, fields: impl Into<Vec<Meta>>) -> Cte {
     Cte::new(name, stmt, fields)
 }
 
+/// Creates a source reference to a CTE defined elsewhere in the same query.
+///
+/// `Cte::source()` is usually clearer because it snapshots the CTE name and
+/// field list from the CTE value.
 pub fn cte_source(name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
     Source::Cte {
         name: name.into(),
@@ -108,6 +122,10 @@ pub fn cte_source(name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Sour
     }
 }
 
+/// Creates a subquery source with explicit exposed field metadata.
+///
+/// Prefer `Select::try_into_source(alias)` when the subquery projects plain
+/// fields and rqb can infer metadata from the select list.
 pub fn subquery(
     stmt: impl Into<Stmt>,
     alias: impl Into<String>,
@@ -120,6 +138,10 @@ pub fn subquery(
     }
 }
 
+/// Creates a raw SQL source with explicit exposed field metadata.
+///
+/// Raw source SQL is server-owned. rqb validates bind counts and renders the
+/// exposed field list as the derived-table column list.
 pub fn raw_source(
     sql: impl Into<String>,
     alias: impl Into<String>,
@@ -134,6 +156,10 @@ pub fn raw_source(
     }
 }
 
+/// Creates a table-valued function source with explicit exposed fields.
+///
+/// Use `Source::with_ordinality()` when the function should expose PostgreSQL
+/// `WITH ORDINALITY`.
 pub fn function_source(
     name: &'static str,
     args: impl Into<Vec<crate::typed::ValueExpr>>,
@@ -270,6 +296,21 @@ impl Cte {
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
+        if self.name.is_empty() {
+            return Err(crate::Error::InvalidCteShape {
+                name: self.name.clone(),
+                message: "CTE name cannot be empty",
+            });
+        }
+        if let Some(count) = self.stmt.projection_count()
+            && !self.fields.is_empty()
+            && count != self.fields.len()
+        {
+            return Err(crate::Error::InvalidCteShape {
+                name: self.name.clone(),
+                message: "field count must match SELECT projection count",
+            });
+        }
         if !self.columns.is_empty() && self.columns.len() != self.fields.len() {
             return Err(crate::Error::InvalidCteShape {
                 name: self.name.clone(),
@@ -347,15 +388,49 @@ impl Source {
 
     pub fn validate(&self) -> Result<()> {
         match self {
-            Self::Subquery { stmt, .. } => stmt.validate(),
-            Self::Raw { sql, params, .. } => raw::validate_bind_count(sql, params.len()),
-            Self::Function { args, .. } => {
+            Self::Subquery {
+                stmt,
+                alias,
+                fields,
+            } => {
+                stmt.validate()?;
+                if let Some(count) = stmt.projection_count()
+                    && !fields.is_empty()
+                    && count != fields.len()
+                {
+                    return Err(crate::Error::InvalidSelectShape {
+                        message: "subquery field count must match SELECT projection count",
+                    });
+                }
+                if alias.is_empty() {
+                    return Err(crate::Error::InvalidSelectShape {
+                        message: "subquery alias cannot be empty",
+                    });
+                }
+                Ok(())
+            }
+            Self::Raw {
+                sql, alias, params, ..
+            } => {
+                validate_source_alias(alias, "raw source alias cannot be empty")?;
+                raw::validate_bind_count(sql, params.len())
+            }
+            Self::Function { args, alias, .. } => {
+                validate_source_alias(alias, "function source alias cannot be empty")?;
                 for arg in args {
                     arg.validate()?;
                 }
                 Ok(())
             }
-            Self::Table { .. } | Self::View { .. } | Self::Cte { .. } => Ok(()),
+            Self::Cte { name, .. } => {
+                if name.is_empty() {
+                    return Err(crate::Error::InvalidSelectShape {
+                        message: "CTE source name cannot be empty",
+                    });
+                }
+                Ok(())
+            }
+            Self::Table { .. } | Self::View { .. } => Ok(()),
         }
     }
 
@@ -372,5 +447,164 @@ impl Source {
             }
             Self::Table { .. } | Self::View { .. } | Self::Cte { .. } => {}
         }
+    }
+}
+
+fn validate_source_alias(alias: &str, message: &'static str) -> Result<()> {
+    if alias.is_empty() {
+        return Err(crate::Error::InvalidSelectShape { message });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CteMaterialization, Source, cte, cte_source, function_source, raw_source, table};
+    use crate::typed::{Field, Meta, OpSet, Param, select};
+
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    static FIELDS: [&Meta; 1] = [&ID_META];
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    #[test]
+    fn table_and_view_aliases_are_optional_but_raw_sources_are_always_aliased() {
+        let table = table("public.users", &FIELDS);
+        assert_eq!(table.explicit_alias(), None);
+        assert!(
+            matches!(table.alias("u"), Source::Table { alias: Some(alias), .. } if alias == "u")
+        );
+
+        let raw = raw_source(
+            "select ? as id",
+            "generated",
+            [Param::typed(1_i32)],
+            vec![ID_META],
+        );
+        assert_eq!(raw.explicit_alias(), Some("generated"));
+    }
+
+    #[test]
+    fn cte_source_snapshots_name_and_fields() {
+        let cte = cte(
+            "ids",
+            select(table("public.users", &FIELDS)).column(ID),
+            vec![ID_META],
+        );
+        let source = cte.source().alias("i");
+
+        assert!(matches!(
+            source,
+            Source::Cte {
+                name,
+                alias: Some(alias),
+                fields,
+            } if name == "ids" && alias == "i" && fields == vec![ID_META]
+        ));
+    }
+
+    #[test]
+    fn cte_validates_field_count_against_select_projection() {
+        let cte = cte(
+            "bad_ids",
+            select(table("public.users", &FIELDS)).column(ID),
+            vec![ID_META, ID_META],
+        );
+
+        assert!(matches!(
+            cte.validate().unwrap_err(),
+            crate::Error::InvalidCteShape { name, message }
+                if name == "bad_ids" && message == "field count must match SELECT projection count"
+        ));
+    }
+
+    #[test]
+    fn subquery_validates_field_count_against_select_projection() {
+        let source = super::subquery(
+            select(table("public.users", &FIELDS)).column(ID),
+            "ids",
+            vec![ID_META, ID_META],
+        );
+
+        assert!(matches!(
+            source.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "subquery field count must match SELECT projection count"
+        ));
+    }
+
+    #[test]
+    fn raw_source_validates_bind_count() {
+        let source = raw_source(
+            "select ? as id",
+            "generated",
+            Vec::<Param>::new(),
+            vec![ID_META],
+        );
+
+        assert!(matches!(
+            source.validate().unwrap_err(),
+            crate::Error::RawBindMismatch {
+                placeholders: 1,
+                binds: 0
+            }
+        ));
+    }
+
+    #[test]
+    fn raw_and_function_sources_require_aliases() {
+        let raw = raw_source("select 1 as id", "", Vec::<Param>::new(), vec![ID_META]);
+        assert!(matches!(
+            raw.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "raw source alias cannot be empty"
+        ));
+
+        let function = function_source("generate_series", Vec::new(), "", vec![ID_META]);
+        assert!(matches!(
+            function.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "function source alias cannot be empty"
+        ));
+    }
+
+    #[test]
+    fn function_source_validates_arguments_and_ordinality_is_opt_in() {
+        let source = function_source(
+            "generate_series",
+            vec![
+                crate::typed::ValueExpr::from(1_i32),
+                crate::typed::ValueExpr::from(3_i32),
+            ],
+            "g",
+            vec![ID_META],
+        );
+        assert!(matches!(
+            &source,
+            Source::Function {
+                ordinality: false,
+                ..
+            }
+        ));
+
+        let with_ordinality = source.with_ordinality();
+        assert!(matches!(
+            with_ordinality,
+            Source::Function {
+                ordinality: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn cte_materialization_renders_known_postgres_tokens() {
+        assert_eq!(CteMaterialization::Materialized.as_sql(), "MATERIALIZED");
+        assert_eq!(
+            CteMaterialization::NotMaterialized.as_sql(),
+            "NOT MATERIALIZED"
+        );
+
+        let source = cte_source("ids", vec![ID_META]);
+        assert_eq!(source.kind(), "cte");
     }
 }

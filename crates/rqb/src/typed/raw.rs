@@ -36,4 +36,12 @@ mod tests {
         assert_eq!(count_placeholders("a = ? and b = ?"), 2);
         assert_eq!(count_placeholders("jsonb_col ?? 'key' and x = ?"), 1);
     }
+
+    #[test]
+    fn escaped_question_marks_do_not_change_following_placeholder_numbers() {
+        assert_eq!(
+            count_placeholders("jsonb_col ?? 'key' and value ??| array[?] and id = ?"),
+            2
+        );
+    }
 }

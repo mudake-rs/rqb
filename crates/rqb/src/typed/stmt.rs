@@ -1,5 +1,5 @@
 pub(super) use crate::typed::{
-    BoolExpr, Cte, Field, FieldRef, Join, JoinKind, Meta, Param, Params, Source, ValueExpr,
+    BoolExpr, Cte, Field, FieldRef, Join, JoinKind, Meta, Param, Params, Source, ValueExpr, cte,
     raw as raw_sql, subquery,
 };
 pub(super) use crate::{Error, Result};
@@ -20,10 +20,11 @@ mod update;
 mod validate;
 
 pub use ast::{
-    Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictTarget,
-    ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert, Insertable, LockMode,
-    LockWait, Merge, MergeAction, MergeWhen, NullsPosition, OrderDirection, OrderItem, RawStmt,
-    RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt, Update,
+    Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields,
+    ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert,
+    Insertable, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen,
+    NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition, OrderDirection,
+    OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt, Update,
 };
 pub use constructors::{
     delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw, select,

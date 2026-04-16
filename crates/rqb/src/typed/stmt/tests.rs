@@ -1,6 +1,7 @@
 use crate::typed::{
-    BoolExpr, BoolOp, FetchClause, Field, Insert, Meta, OpSet, OrderItem, Select, SelectItem,
-    Source, ValueExpr,
+    BoolExpr, BoolOp, FetchClause, Field, Insert, Join, JoinKind, MergeAction, MergeWhen, Meta,
+    OpSet, OrderItem, Param, RawStmt, Select, SelectItem, SetOperator, SetQuery, Source, ValueExpr,
+    cte, cte_source, delete_from, insert, merge_into, raw, select, subquery, update,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -138,6 +139,42 @@ fn fetch_with_ties_requires_order_and_excludes_limit() {
 }
 
 #[test]
+fn set_query_fetch_with_ties_requires_order_and_excludes_limit() {
+    let without_order = select(users()).column(ID).union(select(users()).column(ID));
+    let err = without_order
+        .clone()
+        .fetch_first_with_ties(ValueExpr::from(10_i32))
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "fetch with ties requires order_by"
+    ));
+
+    let with_limit = SetQuery {
+        left: without_order.left,
+        operator: SetOperator::Union,
+        right: without_order.right,
+        order: vec![OrderItem::asc(ID)],
+        limit: Some(Param::typed(10_i64)),
+        offset: None,
+        fetch: Some(FetchClause {
+            count: ValueExpr::from(10_i32),
+            with_ties: false,
+        }),
+    };
+    let err = with_limit.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "limit and fetch cannot both be set"
+    ));
+}
+
+#[test]
 fn delete_requires_filter() {
     let stmt = crate::typed::Stmt::Delete(Box::new(crate::typed::Delete {
         target: users(),
@@ -192,4 +229,381 @@ fn returning_all_replaces_existing_returning_fields() {
         built.sql,
         "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"id\", \"display_name\" AS \"displayName\""
     );
+}
+
+#[test]
+fn select_filter_and_having_chain_with_and_semantics() {
+    let built = select(users())
+        .column(ID)
+        .filter(ID.gt(10))
+        .filter(ID.lt(20))
+        .group_by(ID)
+        .having(ID.gt(0))
+        .having(ID.lt(100))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\" FROM \"app_users\" WHERE (\"id\" > $1 AND \"id\" < $2) GROUP BY \"id\" HAVING (\"id\" > $3 AND \"id\" < $4)"
+    );
+}
+
+#[test]
+fn insert_from_select_rejects_projection_count_mismatch() {
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    const EMAIL: Field<String> = Field::new(&EMAIL_META);
+    let insert = insert(users())
+        .column(ID)
+        .column(EMAIL)
+        .from_select(select(users()).column(ID));
+
+    let err = insert.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidInsertShape { message }
+            if message == "insert-select column count must match SELECT projection count"
+    ));
+}
+
+#[test]
+fn insert_from_select_requires_target_columns() {
+    let insert = insert(users()).from_select(select(users()).column(ID));
+
+    let err = insert.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::EmptyTypedColumns { statement } if statement == "insert-select"
+    ));
+}
+
+#[test]
+fn insert_from_select_rejects_values_assignments() {
+    let insert = insert(users())
+        .column(ID)
+        .set(ID.set(1))
+        .from_select(select(users()).column(ID));
+
+    let err = insert.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidInsertShape { message }
+            if message == "insert-select cannot also contain VALUES assignments"
+    ));
+}
+
+#[test]
+fn empty_conflict_constraint_name_is_rejected() {
+    let insert = insert(users())
+        .set(ID.set(1))
+        .on_conflict_constraint("")
+        .do_nothing();
+
+    let err = insert.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidInsertShape { message }
+            if message == "conflict constraint name cannot be empty"
+    ));
+}
+
+#[test]
+fn column_conflict_target_supports_multiple_fields_and_predicate() {
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    const EMAIL: Field<String> = Field::new(&EMAIL_META);
+
+    let built = insert(users())
+        .set(ID.set(1))
+        .on_conflict((ID, EMAIL))
+        .target_where(ID.gt(0))
+        .do_nothing()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"app_users\" (\"id\") VALUES ($1) ON CONFLICT (\"id\", \"email\") WHERE \"id\" > $2 DO NOTHING"
+    );
+}
+
+#[test]
+fn conflict_update_requires_assignments() {
+    let insert = insert(users())
+        .set(ID.set(1))
+        .on_conflict(ID)
+        .do_update_set([]);
+
+    let err = insert.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::EmptyTypedAssignments { statement } if statement == "conflict update"
+    ));
+}
+
+#[test]
+fn conflict_update_filter_is_validated() {
+    let insert = insert(users())
+        .set(ID.set(1))
+        .on_conflict(ID)
+        .do_update_set_where(
+            [ID.set(2)],
+            BoolExpr::Raw {
+                sql: "? = ?".to_owned(),
+                params: vec![Param::typed(1_i32)],
+            },
+        );
+
+    assert!(matches!(
+        insert.validate().unwrap_err(),
+        crate::Error::RawBindMismatch {
+            placeholders: 2,
+            binds: 1
+        }
+    ));
+}
+
+#[test]
+fn update_requires_assignments() {
+    let update = update(users()).filter(ID.eq(1));
+
+    let err = update.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::EmptyTypedAssignments { statement } if statement == "update"
+    ));
+}
+
+#[test]
+fn write_targets_reject_subquery_sources() {
+    let target = subquery(select(users()).column(ID), "u", vec![ID_META]);
+
+    let err = insert(target).set(ID.set(1)).validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedWriteTarget {
+            statement: "insert",
+            source_kind: "subquery",
+        }
+    ));
+}
+
+#[test]
+fn update_from_sources_are_validated() {
+    let update = update(users()).set(ID.set(1)).from(Source::Raw {
+        sql: "select ? as id".to_owned(),
+        alias: "incoming".to_owned(),
+        params: Vec::new(),
+        fields: vec![ID_META],
+    });
+
+    assert!(matches!(
+        update.validate().unwrap_err(),
+        crate::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        }
+    ));
+}
+
+#[test]
+fn returning_expressions_are_validated_for_writes() {
+    let insert = insert(users()).set(ID.set(1)).returning_item(SelectItem {
+        expr: ValueExpr::Raw {
+            sql: "?".to_owned(),
+            params: Vec::new(),
+        },
+        alias: Some("broken".to_owned()),
+    });
+
+    assert!(matches!(
+        insert.validate().unwrap_err(),
+        crate::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        }
+    ));
+}
+
+#[test]
+fn duplicate_cte_names_are_rejected_before_rendering() {
+    let first = cte("dupe", select(users()).column(ID), vec![ID_META]);
+    let second = cte("dupe", select(users()).column(ID), vec![ID_META]);
+
+    let err = select(users())
+        .with(first)
+        .with(second)
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidCteShape { name, message }
+            if name == "dupe" && message == "duplicate CTE name"
+    ));
+}
+
+#[test]
+fn non_cross_join_requires_condition_but_cross_join_does_not() {
+    let missing_inner = Join {
+        kind: JoinKind::Inner,
+        source: users(),
+        on: None,
+        lateral: false,
+    };
+
+    assert!(matches!(
+        missing_inner.validate().unwrap_err(),
+        crate::Error::MissingJoinCondition { join } if join == "JOIN"
+    ));
+
+    let cross = Join::cross(users());
+    cross.validate().unwrap();
+}
+
+#[test]
+fn merge_requires_at_least_one_action() {
+    let merge = merge_into(
+        users(),
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    );
+
+    let err = merge.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidMergeShape { message }
+            if message == "merge requires at least one action"
+    ));
+}
+
+#[test]
+fn merge_update_is_not_valid_for_when_not_matched() {
+    let mut merge = merge_into(
+        users(),
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    );
+    merge.actions.push(MergeAction::Update {
+        when: MergeWhen::NotMatched,
+        condition: None,
+        assignments: vec![ID.set(1)],
+    });
+
+    let err = merge.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidMergeShape { message }
+            if message == "merge update is not valid for WHEN NOT MATCHED"
+    ));
+}
+
+#[test]
+fn merge_insert_requires_assignments() {
+    let merge = merge_into(
+        users(),
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    )
+    .when_not_matched()
+    .insert([]);
+
+    let err = merge.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::EmptyTypedAssignments { statement } if statement == "merge-insert"
+    ));
+}
+
+#[test]
+fn merge_rejects_non_table_target() {
+    let target = cte_source("target_cte", vec![ID_META]);
+    let merge = merge_into(
+        target,
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    )
+    .when_matched()
+    .do_nothing();
+
+    assert!(matches!(
+        merge.validate().unwrap_err(),
+        crate::Error::InvalidTypedWriteTarget {
+            statement: "merge",
+            source_kind: "cte",
+        }
+    ));
+}
+
+#[test]
+fn merge_validates_using_source_and_on_condition() {
+    let using = Source::Raw {
+        sql: "select ? as id".to_owned(),
+        alias: "source".to_owned(),
+        params: Vec::new(),
+        fields: vec![ID_META],
+    };
+    let merge = merge_into(users(), using, ID.eq_field(ID.at("source")))
+        .when_matched()
+        .do_nothing();
+
+    assert!(matches!(
+        merge.validate().unwrap_err(),
+        crate::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        }
+    ));
+}
+
+#[test]
+fn delete_using_preserves_required_filter() {
+    let built = delete_from(users())
+        .using(users().alias("old"))
+        .filter(ID.eq_field(ID.at("old")))
+        .returning(ID)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "DELETE FROM \"app_users\" USING \"app_users\" AS \"old\" WHERE \"id\" = \"old\".\"id\" RETURNING \"id\""
+    );
+}
+
+#[test]
+fn raw_statement_validates_bind_count() {
+    let err = raw("select ? + ?").bind(1_i32).validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::RawBindMismatch {
+            placeholders: 2,
+            binds: 1
+        }
+    ));
+
+    let err = RawStmt {
+        sql: "select ?".to_owned(),
+        params: Vec::new(),
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::RawBindMismatch {
+            placeholders: 1,
+            binds: 0
+        }
+    ));
 }

@@ -2,7 +2,7 @@ use sqlx::{Encode, Postgres, Type};
 
 use crate::typed::{Meta, OrderItem, Param, SelectItem};
 
-use super::{BoolExpr, ValueExpr};
+use super::{BoolExpr, BoolOp, ValueExpr};
 
 impl ValueExpr {
     pub fn param<T>(value: T) -> Self
@@ -31,6 +31,46 @@ impl ValueExpr {
             expr: self,
             negated: true,
         }
+    }
+
+    /// Compares this expression with another expression or bind value.
+    pub fn eq(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::Eq, right)
+    }
+
+    /// Compares this expression with another expression or bind value.
+    pub fn ne(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::Ne, right)
+    }
+
+    /// Compares this expression with another expression or bind value.
+    pub fn gt(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::Gt, right)
+    }
+
+    /// Compares this expression with another expression or bind value.
+    pub fn gte(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::Gte, right)
+    }
+
+    /// Compares this expression with another expression or bind value.
+    pub fn lt(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::Lt, right)
+    }
+
+    /// Compares this expression with another expression or bind value.
+    pub fn lte(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::Lte, right)
+    }
+
+    /// Builds `IS DISTINCT FROM` for null-safe comparison.
+    pub fn is_distinct_from(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::IsDistinctFrom, right)
+    }
+
+    /// Builds `IS NOT DISTINCT FROM` for null-safe comparison.
+    pub fn is_not_distinct_from(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare(BoolOp::IsNotDistinctFrom, right)
     }
 
     pub fn aggregate_order_by(mut self, item: OrderItem) -> Self {
@@ -86,6 +126,14 @@ impl ValueExpr {
         match self {
             Self::Field { meta, .. } => Some(meta),
             _ => None,
+        }
+    }
+
+    fn compare(self, op: BoolOp, right: impl Into<ValueExpr>) -> BoolExpr {
+        BoolExpr::Compare {
+            left: self,
+            op,
+            right: right.into(),
         }
     }
 }

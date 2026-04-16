@@ -77,6 +77,7 @@ impl Renderer {
                 self.render_stmt(stmt)?;
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
+                self.render_source_column_list(source);
             }
             Source::Raw {
                 sql, alias, params, ..
@@ -86,6 +87,7 @@ impl Renderer {
                 self.render_raw(sql, params)?;
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
+                self.render_source_column_list(source);
             }
             Source::Function {
                 name,
@@ -135,6 +137,15 @@ impl Renderer {
         if let Some(alias) = alias {
             self.sql.push_str(" AS ");
             write_quoted_ident(&mut self.sql, alias);
+        }
+    }
+
+    fn render_source_column_list(&mut self, source: &Source) {
+        match source {
+            Source::Subquery { fields, .. } | Source::Raw { fields, .. } if !fields.is_empty() => {
+                self.render_cte_columns(fields.iter().map(|field| field.db));
+            }
+            _ => {}
         }
     }
 

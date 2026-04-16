@@ -20,6 +20,10 @@ Start here when reading the API.
 The small samples build queries and assert rendered SQL. `rest-api` uses
 `connect_lazy`, so it is compile-checked without a running database.
 
+Sample comments call out the non-obvious pieces: default projections are
+metadata-driven, alias handles remove repeated `.at("alias")` calls, raw sources
+need exposed fields, and REST pagination stays in application code.
+
 `samples/schema/src/lib.rs` is generated from `samples/schema.sql` by `rqb-cli`
 and imported by the runnable samples:
 

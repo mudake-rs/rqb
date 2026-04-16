@@ -19,6 +19,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "offset": 0
     }))?;
 
+    // JSON search is only the client-controlled part. The Rust query still owns
+    // the source, projection, and organization filter.
     let merged = select(orders::view())
         .column(orders::ID)
         .column(orders::STATUS)
@@ -37,6 +39,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "filter": { "field": "status", "operator": "equals", "value": "open" },
         "limit": 5
     }))?;
+    // `replace_request` is for endpoints where the JSON request is the complete
+    // search clause. Use `request` when server filters must be preserved.
     let replaced = select(orders::view())
         .filter(orders::ORGANIZATION_ID.eq(current_org))
         .replace_request(replacement_request)?
@@ -51,6 +55,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let invalid_request: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "unknown", "operator": "equals", "value": "x" }
     }))?;
+    // Unknown or non-json-exposed fields fail before SQL is rendered.
     assert!(matches!(
         select(orders::view()).request(invalid_request),
         Err(rqb::Error::InvalidSearchField { field }) if field == "unknown"

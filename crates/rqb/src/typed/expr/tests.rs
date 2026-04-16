@@ -1,6 +1,10 @@
 use uuid::Uuid;
 
-use crate::typed::{BoolExpr, BoolOp, Field, JsonKind, Meta, OpSet, Param, Params, ValueExpr};
+use super::escaped_like_pattern;
+use crate::typed::{
+    BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, Params,
+    ValueExpr,
+};
 
 #[test]
 fn field_t_erases_to_bool_expr_with_sqlx_param() {
@@ -86,6 +90,52 @@ fn and_pair_flattens_nonempty_groups_without_hiding_empty_groups() {
 }
 
 #[test]
+fn all_and_any_free_functions_build_logical_groups() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let all = crate::typed::all([ID.gt(1), ID.lt(10)]);
+    let any = crate::typed::any([ID.eq(1), ID.eq(2)]);
+
+    assert!(matches!(all, BoolExpr::And(ref exprs) if exprs.len() == 2));
+    assert!(matches!(any, BoolExpr::Or(ref exprs) if exprs.len() == 2));
+}
+
+#[test]
+fn exists_not_and_value_comparison_helpers_avoid_manual_ast_construction() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    static FIELDS: [&Meta; 1] = [&ID_META];
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let subquery = crate::typed::select(crate::typed::table("public.users", &FIELDS))
+        .column(ID)
+        .filter(ID.gt(10));
+    let exists = crate::typed::exists(subquery);
+    let not_exists = crate::typed::not(exists.clone());
+    let aggregate_filter = crate::typed::count(ID).gt(0_i64);
+
+    assert!(matches!(exists, BoolExpr::Exists(_)));
+    assert!(matches!(not_exists, BoolExpr::Not(_)));
+    assert!(matches!(
+        aggregate_filter,
+        BoolExpr::Compare {
+            op: crate::typed::BoolOp::Gt,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn empty_or_group_is_invalid_like_empty_and_group() {
+    let err = BoolExpr::or([]).validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::EmptyTypedLogical { logical } if logical == "or"
+    ));
+}
+
+#[test]
 fn meta_defaults_to_no_typed_operators() {
     static SCORE_META: Meta = Meta::new("score", "score", "int4");
     const SCORE: Field<i32> = Field::new(&SCORE_META);
@@ -115,4 +165,269 @@ fn raw_predicate_validates_bind_count() {
             binds: 1
         }
     ));
+}
+
+#[test]
+fn field_at_produces_qualified_value_expr() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let expr = ID.at("u").expr();
+
+    assert!(matches!(
+        expr,
+        ValueExpr::Field {
+            meta,
+            qualifier: Some(ref qualifier),
+        } if meta == ID_META && qualifier == "u"
+    ));
+}
+
+#[test]
+fn into_field_ref_accepts_fields_and_existing_refs() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let from_field = ID.into_field_ref();
+    let from_ref = ID.at("orders").into_field_ref();
+
+    assert_eq!(from_field.qualifier, None);
+    assert_eq!(from_ref.qualifier.as_deref(), Some("orders"));
+}
+
+#[test]
+fn empty_in_list_is_false_and_empty_not_in_is_true() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    assert!(matches!(
+        ID.in_list(Vec::<i32>::new()),
+        BoolExpr::Constant(false)
+    ));
+    assert!(matches!(
+        ID.not_in(Vec::<i32>::new()),
+        BoolExpr::Constant(true)
+    ));
+}
+
+#[test]
+fn ordered_predicates_reject_equality_only_fields() {
+    static STATUS_META: Meta = Meta::new("status", "status", "text").ops(OpSet::equality());
+    const STATUS: Field<String> = Field::new(&STATUS_META);
+
+    let err = STATUS.gt("paid".to_owned()).validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "status" && operator == "gt"
+    ));
+}
+
+#[test]
+fn text_predicates_reject_non_text_fields() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let err = BoolExpr::Like {
+        expr: ID.expr(),
+        pattern: ValueExpr::from("42"),
+        case_insensitive: true,
+        negated: false,
+        escape: false,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "id" && operator == "like"
+    ));
+}
+
+#[test]
+fn jsonb_infix_predicates_reject_non_jsonb_fields() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let err = BoolExpr::Infix {
+        left: ID.expr(),
+        op: "?",
+        right: ValueExpr::from("id"),
+        negated: false,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "id" && operator == "?"
+    ));
+}
+
+#[test]
+fn array_predicates_reject_non_array_fields() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let err = BoolExpr::ArrayIsEmpty {
+        expr: ID.expr(),
+        negated: false,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "id" && operator == "array_empty"
+    ));
+}
+
+#[test]
+fn any_predicate_rejects_non_array_operands() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let err = BoolExpr::Any {
+        value: ValueExpr::from(1_i32),
+        array: ID.expr(),
+        negated: false,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "id" && operator == "any"
+    ));
+}
+
+#[test]
+fn range_infix_predicates_reject_plain_scalar_fields() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let err = BoolExpr::Infix {
+        left: ID.expr(),
+        op: "&&",
+        right: ValueExpr::from(10_i32),
+        negated: false,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "id" && operator == "&&"
+    ));
+}
+
+#[test]
+fn escaped_like_pattern_escapes_wildcards_and_backslashes() {
+    assert_eq!(
+        escaped_like_pattern("50%_\\done", "%", "%"),
+        "%50\\%\\_\\\\done%"
+    );
+}
+
+#[test]
+fn raw_value_expr_validates_bind_count() {
+    let err = ValueExpr::Raw {
+        sql: "lower(?) || ?".to_owned(),
+        params: vec![Param::typed("email".to_owned())],
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::RawBindMismatch {
+            placeholders: 2,
+            binds: 1
+        }
+    ));
+}
+
+#[test]
+fn case_expr_validates_nested_conditions_before_rendering() {
+    let expr = ValueExpr::Case {
+        branches: vec![(
+            BoolExpr::Raw {
+                sql: "? = ?".to_owned(),
+                params: vec![Param::typed(1_i32)],
+            },
+            ValueExpr::from("one"),
+        )],
+        else_: Some(Box::new(ValueExpr::from("other"))),
+    };
+
+    assert!(matches!(
+        expr.validate().unwrap_err(),
+        crate::Error::RawBindMismatch {
+            placeholders: 2,
+            binds: 1
+        }
+    ));
+}
+
+#[test]
+fn value_expr_array_row_subscript_slice_validate_nested_values() {
+    static TAGS_META: Meta = Meta::new("tags", "tags", "text[]").ops(OpSet::equality());
+    const TAGS: Field<Vec<String>> = Field::new(&TAGS_META);
+
+    ValueExpr::Array(vec![ValueExpr::from(1_i32), ValueExpr::from(2_i32)])
+        .validate()
+        .unwrap();
+    ValueExpr::Row(vec![ValueExpr::from("id"), TAGS.element(1)])
+        .validate()
+        .unwrap();
+    TAGS.slice(Some(1), Some(3)).validate().unwrap();
+}
+
+#[test]
+fn boolean_tests_validate_on_boolean_fields() {
+    static ACTIVE_META: Meta = Meta::new("active", "active", "bool").ops(OpSet::equality());
+    const ACTIVE: Field<bool> = Field::new(&ACTIVE_META);
+
+    ACTIVE.is_true().validate().unwrap();
+    ACTIVE.is_not_false().validate().unwrap();
+    ACTIVE.is_unknown().validate().unwrap();
+}
+
+#[test]
+fn ordered_set_aggregate_requires_within_group_ordering() {
+    let err = ValueExpr::OrderedSetAggregate {
+        name: "percentile_cont",
+        args: vec![ValueExpr::from(0.5_f64)],
+        within_group: Vec::new(),
+        filter: None,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidTypedOperator { field, operator }
+            if field == "ordered_set_aggregate" && operator == "within_group"
+    ));
+}
+
+#[test]
+fn ordered_set_aggregate_validates_within_group_ordering() {
+    static TOTAL_META: Meta = Meta::new("total", "total_cents", "int8").ops(OpSet::ordered());
+    const TOTAL: Field<i64> = Field::new(&TOTAL_META);
+
+    let expr = ValueExpr::OrderedSetAggregate {
+        name: "percentile_cont",
+        args: vec![ValueExpr::from(0.5_f64)],
+        within_group: vec![OrderItem::asc(TOTAL)],
+        filter: Some(Box::new(TOTAL.gt(0))),
+    };
+
+    expr.validate().unwrap();
 }

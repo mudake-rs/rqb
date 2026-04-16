@@ -76,6 +76,29 @@ fn insertable_derive_maps_struct_fields_to_assignments() {
 }
 
 #[test]
+fn insertable_derive_includes_skip_none_fields_when_present() {
+    let new_user = NewUser {
+        email: "ada@example.com".to_owned(),
+        state: "active".to_owned(),
+        r#type: "admin".to_owned(),
+        nickname: Some("Ada".to_owned()),
+        _local_note: "not persisted".to_owned(),
+    };
+
+    let built = insert(users::table())
+        .values(&new_user)
+        .returning(users::NICKNAME)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"public\".\"users\" (\"email\", \"status\", \"type\", \"nickname\") VALUES ($1, $2, $3, $4) RETURNING \"nickname\""
+    );
+    assert_eq!(built.params.len(), 4);
+}
+
+#[test]
 fn changeset_derive_skips_none_option_fields() {
     let changes = UserChanges {
         email: Some("ada@example.com".to_owned()),

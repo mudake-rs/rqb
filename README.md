@@ -40,38 +40,33 @@ accepted when the Rust type implements sqlx `Encode` and `Type` for Postgres.
 
 ## Basic Query
 
+Generated schema modules are normal Rust modules. `table()` / `view()` provide
+the source metadata, uppercase constants are typed fields, and `alias("u")`
+returns an alias-bound handle for join-heavy queries.
+
 ```rust
 use rqb::prelude::*;
 use uuid::Uuid;
 
-static ID_META: Meta = Meta::new("id", "id", "uuid")
-    .ops(OpSet::ordered())
-    .json(JsonKind::Uuid);
-static EMAIL_META: Meta = Meta::new("email", "email", "text")
-    .ops(OpSet::ordered())
-    .json(JsonKind::Text);
-static STATUS_META: Meta = Meta::new("status", "status", "text")
-    .ops(OpSet::ordered())
-    .json(JsonKind::Text);
-
-const ID: Field<Uuid> = Field::new(&ID_META);
-const EMAIL: Field<String> = Field::new(&EMAIL_META);
-const STATUS: Field<String> = Field::new(&STATUS_META);
-
-static USER_FIELDS: [&Meta; 3] = [&ID_META, &EMAIL_META, &STATUS_META];
-
-fn users() -> Source {
-    rqb::table("public.app_users", &USER_FIELDS)
+rqb::schema! {
+    table public.app_users {
+        id: uuid = Uuid,
+        email: text = String,
+        status: text = String,
+    }
 }
 
-let query = select(users())
-    .column(ID)
-    .column(EMAIL)
-    .filter(STATUS.eq("active"))
-    .order_asc(EMAIL)
+let query = select(app_users::table())
+    .column(app_users::ID)
+    .column(app_users::EMAIL)
+    .filter(app_users::STATUS.eq("active"))
+    .order_asc(app_users::EMAIL)
     .limit(20)
     .build()?;
 ```
+
+`select(table())` does not render `SELECT *`. It renders the known root fields
+from metadata, so SQL output stays explicit and stable.
 
 `query.sql` contains `$N` placeholders and `query.arguments()?` creates
 `sqlx::postgres::PgArguments` at execution time.
@@ -95,6 +90,9 @@ let rows = select(users())
     .await?;
 ```
 
+Service functions usually accept `impl PgExecutor<'e>` so the same query can run
+against `&PgPool`, `&mut PgConnection`, or a transaction connection.
+
 Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
 with `?` placeholders. `??` renders a literal question mark.
 
@@ -104,25 +102,28 @@ Rust code owns joins, CTEs, subqueries, set queries, aggregates, windows, locks,
 and write conflict handling. Client JSON never defines these shapes.
 
 ```rust
-let paid_orders = cte(
-    "paid_orders",
-    select(schema::orders::table())
-        .column(schema::orders::USER_ID)
-        .filter(schema::orders::STATUS.eq("paid")),
-    vec![*schema::orders::USER_ID.meta],
-);
-let paid_orders_source = paid_orders.source().alias("po");
+use rqb::dsl::{exists, sum};
+use rqb::prelude::*;
+
+let paid_orders = select(schema::orders::table())
+    .column(schema::orders::USER_ID)
+    .column(schema::orders::TOTAL_CENTS)
+    .filter(schema::orders::STATUS.eq("paid"))
+    .try_into_cte("paid_orders")?;
+
+let po = paid_orders.source().alias("po");
 let u = schema::users::alias("u");
 
 let rows = select(&u)
     .with(paid_orders)
-    .join(
-        paid_orders_source,
-        u.id().eq_field(schema::orders::USER_ID.at("po")),
-    )
-    .column(u.email())
-    .filter(u.email().contains("@example.com"))
-    .order_desc(u.id())
+    .join(po, u.id().eq_field(schema::orders::USER_ID.at("po")))
+    .filter(exists(
+        select(schema::orders::table())
+            .column(schema::orders::ID)
+            .filter(schema::orders::USER_ID.eq_field(u.id())),
+    ))
+    .agg(sum(schema::orders::TOTAL_CENTS.at("po")).alias("paid_total"))
+    .group_by(u.id())
     .fetch_all_as::<UserRow>(&pool)
     .await?;
 ```
@@ -130,9 +131,15 @@ let rows = select(&u)
 Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
 `FILTER`, window functions, array/jsonb/range predicates, `insert(...).from_select(...)`,
-and `on_conflict(...).do_update_set(...)`. REST-style pagination stays in
-application code; the REST sample shows `limit` / `offset` plus `Select::count()`
-for a matching count query.
+`on_conflict((col_a, col_b)).do_update_set(...)`, and
+`merge_into(...).when_matched_if(...).update(...)`. REST-style pagination stays
+in application code; the REST sample shows `limit` / `offset` plus
+`Select::count()` for a matching count query.
+
+For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
+and `Select::try_into_source` infer it from explicit field projections. Raw SQL,
+computed columns, and renamed projections use the explicit `cte(...)`,
+`subquery(...)`, or `raw_source(...)` constructors.
 
 SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
 like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
@@ -214,6 +221,10 @@ let created = insert(schema::users::table())
     .await?;
 ```
 
+The derive maps Rust fields to generated schema fields. It does not serialize
+the whole DTO through `serde_json`, so database types stay on the sqlx encode
+path.
+
 `#[derive(rqb::Changeset)]` maps `Option<T>` fields as patch fields: `Some`
 sets the column, `None` leaves it unchanged.
 
@@ -266,8 +277,10 @@ application DTOs, not in generated schema metadata.
 
 ```bash
 cargo fmt --all --check
-cargo test --workspace --no-default-features
-cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+cargo test --workspace --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+make verify
 ```
 
 ## License

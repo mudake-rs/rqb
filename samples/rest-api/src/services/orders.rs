@@ -47,6 +47,8 @@ pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Page<Ord
     let offset = request.offset.unwrap_or(0);
     let has_limit = request.limit.is_some();
 
+    // Pagination is application policy, not a hidden rqb executor behavior. The
+    // same trusted query shape is used for the page items and the count.
     let mut query = select(order_search_view::view())
         .filter(order_search_view::STATUS.ne("canceled"))
         .request(request)?;
@@ -74,15 +76,13 @@ pub async fn summary<'e>(db: impl PgExecutor<'e>) -> rqb::Result<Vec<UserOrderSu
         .filter(o.id().is_not_null())
         .alias("orders");
 
-    // CTE sources expose only the metadata listed here.
-    let active_users = cte(
-        "active_users",
-        select(user_fields::table())
-            .column(user_fields::ID)
-            .column(user_fields::EMAIL)
-            .filter(user_fields::ACTIVE.eq(true)),
-        vec![*user_fields::ID.meta, *user_fields::EMAIL.meta],
-    );
+    // The CTE exposes exactly the projected fields. `source().alias("u")`
+    // then gives the outer query a normal relation source.
+    let active_users = select(user_fields::table())
+        .column(user_fields::ID)
+        .column(user_fields::EMAIL)
+        .filter(user_fields::ACTIVE.eq(true))
+        .try_into_cte("active_users")?;
 
     select(active_users.source().alias("u"))
         .with(active_users)

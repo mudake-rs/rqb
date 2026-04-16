@@ -3,6 +3,8 @@ use rqb_sample_schema::orders;
 use uuid::Uuid;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Raw SQL uses `?` as a bind placeholder. Escape it as `??` when the SQL
+    // text itself needs a literal question mark.
     let raw_stmt = raw("SELECT ?? AS marker, ?::uuid AS id")
         .bind(Uuid::nil())
         .build()?;
@@ -11,6 +13,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(raw_stmt.params.len(), 1);
     assert!(!raw_stmt.cacheable);
 
+    // A raw source can join typed queries, but rqb still needs the columns it
+    // exposes so later `.column(...)` calls can render qualified fields.
     let raw_orders = raw_source(
         "SELECT ?::uuid AS id, ?::bigint AS total_cents",
         "recent",
@@ -28,7 +32,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(
         mixed.sql,
-        "SELECT \"recent\".\"id\" AS \"recent_id\", \"recent\".\"total_cents\" AS \"recent_total_cents\" FROM (SELECT $1::uuid AS id, $2::bigint AS total_cents) AS \"recent\" WHERE total_cents > $3"
+        "SELECT \"recent\".\"id\" AS \"recent_id\", \"recent\".\"total_cents\" AS \"recent_total_cents\" FROM (SELECT $1::uuid AS id, $2::bigint AS total_cents) AS \"recent\" (\"id\", \"total_cents\") WHERE total_cents > $3"
     );
     assert_eq!(mixed.params.len(), 3);
     assert!(!mixed.cacheable);

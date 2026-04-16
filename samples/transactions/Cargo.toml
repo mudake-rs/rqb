@@ -1,0 +1,14 @@
+[package]
+name = "rqb-sample-transactions"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+rqb = { path = "../../crates/rqb" }
+rqb-sample-schema = { path = "../schema" }
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "uuid", "runtime-tokio-rustls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = "1"

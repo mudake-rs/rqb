@@ -24,10 +24,17 @@ doc:
 
 verify: check doc
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/schema/Cargo.toml
-	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/basic-queries/Cargo.toml
-	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/json-search/Cargo.toml
-	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/rest-api/Cargo.toml
-	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/writes-and-types/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/basic-queries/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/json-search/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/writes-and-types/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/transactions/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/error-handling/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/raw-query/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/joins-and-aggregates/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/cte-and-subqueries/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/advanced-queries/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/custom-types/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/rest-api/Cargo.toml
 
 generate-schema: docker-infra-up
 	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema public --out "$(GENERATED_SCHEMA)"

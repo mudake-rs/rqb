@@ -1,22 +1,22 @@
 use super::*;
 
-pub fn select(source: Source) -> Select {
+pub fn select(source: impl Into<Source>) -> Select {
     Select::from(source)
 }
 
-pub fn insert(target: Source) -> Insert {
+pub fn insert(target: impl Into<Source>) -> Insert {
     Insert::into(target)
 }
 
-pub fn update(target: Source) -> Update {
+pub fn update(target: impl Into<Source>) -> Update {
     Update::table(target)
 }
 
-pub fn delete_from(target: Source) -> Delete {
+pub fn delete_from(target: impl Into<Source>) -> Delete {
     Delete::from(target)
 }
 
-pub fn merge_into(target: Source, using: Source, on: BoolExpr) -> Merge {
+pub fn merge_into(target: impl Into<Source>, using: impl Into<Source>, on: BoolExpr) -> Merge {
     Merge::into(target, using, on)
 }
 

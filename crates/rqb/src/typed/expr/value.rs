@@ -48,6 +48,18 @@ impl ValueExpr {
         self.aggregate_order_by(OrderItem::desc(expr))
     }
 
+    pub fn order_by(self, item: OrderItem) -> Self {
+        self.aggregate_order_by(item)
+    }
+
+    pub fn order_asc(self, expr: impl Into<ValueExpr>) -> Self {
+        self.aggregate_order_asc(expr)
+    }
+
+    pub fn order_desc(self, expr: impl Into<ValueExpr>) -> Self {
+        self.aggregate_order_desc(expr)
+    }
+
     pub fn aggregate_filter(mut self, filter: BoolExpr) -> Self {
         match &mut self {
             Self::Aggregate {
@@ -64,6 +76,10 @@ impl ValueExpr {
             _ => {}
         }
         self
+    }
+
+    pub fn filter(self, filter: BoolExpr) -> Self {
+        self.aggregate_filter(filter)
     }
 
     pub(crate) fn field_meta(&self) -> Option<&Meta> {

@@ -11,11 +11,11 @@ impl MergeWhen {
 }
 
 impl Merge {
-    pub fn into(target: Source, using: Source, on: BoolExpr) -> Self {
+    pub fn into(target: impl Into<Source>, using: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             ctes: Vec::new(),
-            target,
-            using,
+            target: target.into(),
+            using: using.into(),
             on,
             actions: Vec::new(),
             returning: Vec::new(),

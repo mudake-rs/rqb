@@ -16,9 +16,10 @@ mod text;
 mod uuid;
 
 pub use aggregate::{
-    aggregate, array_agg, array_agg_distinct, avg, bool_and, bool_or, count, count_all,
-    count_distinct, every, json_agg, max, min, mode, ordered_set_aggregate, percentile_cont,
-    percentile_disc, stddev, stddev_pop, stddev_samp, string_agg, sum, var_pop, var_samp, variance,
+    __jsonb_agg_object_from_pairs, __jsonb_object_pair, JsonbObjectItem, aggregate, array_agg,
+    array_agg_distinct, avg, bool_and, bool_or, count, count_all, count_distinct, every, json_agg,
+    jsonb_agg_object, max, min, mode, ordered_set_aggregate, percentile_cont, percentile_disc,
+    stddev, stddev_pop, stddev_samp, string_agg, sum, var_pop, var_samp, variance,
 };
 pub use array_fn::{
     array_append, array_length, array_position, array_positions, array_prepend, array_remove,

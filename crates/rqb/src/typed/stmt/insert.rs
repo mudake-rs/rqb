@@ -1,9 +1,9 @@
 use super::*;
 
 impl Insert {
-    pub fn into(target: Source) -> Self {
+    pub fn into(target: impl Into<Source>) -> Self {
         Self {
-            target,
+            target: target.into(),
             columns: Vec::new(),
             assignments: Vec::new(),
             source: None,
@@ -43,20 +43,21 @@ impl Insert {
         self
     }
 
-    pub fn on_conflict<T>(self, field: Field<T>) -> InsertConflictBuilder {
-        InsertConflictBuilder {
+    pub fn on_conflict<T>(self, field: Field<T>) -> ColumnConflictBuilder {
+        ColumnConflictBuilder {
             insert: self,
-            target: ConflictTarget::Columns {
-                fields: vec![*field.meta],
-                predicate: None,
-            },
+            fields: vec![*field.meta],
+            predicate: None,
         }
     }
 
-    pub fn on_conflict_constraint(self, constraint: impl Into<String>) -> InsertConflictBuilder {
-        InsertConflictBuilder {
+    pub fn on_conflict_constraint(
+        self,
+        constraint: impl Into<String>,
+    ) -> ConstraintConflictBuilder {
+        ConstraintConflictBuilder {
             insert: self,
-            target: ConflictTarget::Constraint(constraint.into()),
+            constraint: constraint.into(),
         }
     }
 

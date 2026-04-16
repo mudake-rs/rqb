@@ -39,6 +39,14 @@ use syn::{
 ///     }
 /// }
 /// ```
+///
+/// Each generated relation also exposes `alias("u")`, which returns an
+/// alias-bound handle for join-heavy code:
+///
+/// ```rust,ignore
+/// let u = users::alias("u");
+/// select(&u).column(u.email());
+/// ```
 #[proc_macro]
 pub fn schema(input: TokenStream) -> TokenStream {
     parse_macro_input!(input as SchemaInput).expand().into()
@@ -196,6 +204,9 @@ impl RelationInput {
             .collect::<Vec<_>>();
         let metas = columns.iter().map(|column| &column.meta);
         let fields = columns.iter().filter_map(|column| column.field.as_ref());
+        let alias_methods = columns
+            .iter()
+            .filter_map(|column| column.alias_method.as_ref());
         let meta_idents = columns.iter().map(|column| &column.meta_ident);
         let field_count = Literal::usize_unsuffixed(columns.len());
 
@@ -211,6 +222,37 @@ impl RelationInput {
                 pub static FIELDS: [&'static ::rqb::Meta; #field_count] = [#(&#meta_idents),*];
 
                 #constructor_fn
+
+                pub fn alias(alias: impl Into<String>) -> Alias {
+                    Alias {
+                        alias: alias.into(),
+                    }
+                }
+
+                #[derive(Clone, Debug)]
+                pub struct Alias {
+                    alias: String,
+                }
+
+                impl Alias {
+                    pub fn source(&self) -> ::rqb::Source {
+                        (#constructor).alias(self.alias.clone())
+                    }
+
+                    #(#alias_methods)*
+                }
+
+                impl From<&Alias> for ::rqb::Source {
+                    fn from(alias: &Alias) -> Self {
+                        alias.source()
+                    }
+                }
+
+                impl From<Alias> for ::rqb::Source {
+                    fn from(alias: Alias) -> Self {
+                        (#constructor).alias(alias.alias)
+                    }
+                }
             }
         }
     }
@@ -220,6 +262,7 @@ struct ExpandedColumn {
     meta_ident: Ident,
     meta: proc_macro2::TokenStream,
     field: Option<proc_macro2::TokenStream>,
+    alias_method: Option<proc_macro2::TokenStream>,
 }
 
 impl Parse for ColumnInput {
@@ -264,6 +307,10 @@ impl ColumnInput {
         let ops = ops_tokens(&pg, self.rust_ty.is_some());
         let json = json_kind_tokens(&pg, self.rust_ty.is_some());
         let const_ident = self.const_ident;
+        let method_ident = Ident::new(
+            &sanitize_alias_method_ident(&const_ident.to_string().to_snake_case()),
+            const_ident.span(),
+        );
 
         let mut meta_expr = quote! { ::rqb::Meta::col(#db, #pg).ops(#ops) };
         if let Some(json) = json {
@@ -273,16 +320,26 @@ impl ColumnInput {
             pub static #meta_ident: ::rqb::Meta = #meta_expr;
         };
 
-        let field = self.rust_ty.map(|rust_ty| {
-            quote! {
-                pub const #const_ident: ::rqb::Field<#rust_ty> = ::rqb::Field::new(&#meta_ident);
+        let (field, alias_method) = match self.rust_ty {
+            Some(rust_ty) => {
+                let field = quote! {
+                    pub const #const_ident: ::rqb::Field<#rust_ty> = ::rqb::Field::new(&#meta_ident);
+                };
+                let alias_method = quote! {
+                    pub fn #method_ident(&self) -> ::rqb::FieldRef<#rust_ty> {
+                        #const_ident.at(self.alias.clone())
+                    }
+                };
+                (Some(field), Some(alias_method))
             }
-        });
+            None => (None, None),
+        };
 
         ExpandedColumn {
             meta_ident,
             meta,
             field,
+            alias_method,
         }
     }
 }
@@ -610,6 +667,15 @@ fn sanitize_ident(value: &str) -> String {
         out.push('_');
     }
     out
+}
+
+fn sanitize_alias_method_ident(value: &str) -> String {
+    let ident = sanitize_ident(value);
+    if matches!(ident.as_str(), "clone" | "source") {
+        format!("{ident}_")
+    } else {
+        ident
+    }
 }
 
 fn is_rust_keyword(value: &str) -> bool {

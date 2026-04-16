@@ -2,7 +2,10 @@ use sqlx::postgres::PgRow;
 use sqlx::{Decode, FromRow, PgExecutor, Postgres, Type};
 
 use crate::Result;
-use crate::typed::{BuiltQuery, Delete, Insert, Merge, RawStmt, Select, SetQuery, Stmt, Update};
+use crate::typed::{
+    BuiltQuery, Delete, Insert, Merge, RawStmt, Select, SetQuery, Stmt, Update, count_all, select,
+    subquery,
+};
 
 impl BuiltQuery {
     pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
@@ -167,6 +170,24 @@ impl Stmt {
         T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin,
     {
         self.build()?.fetch_optional_scalar(executor).await
+    }
+}
+
+impl Select {
+    pub async fn count<'e>(&self, executor: impl PgExecutor<'e>) -> Result<i64> {
+        self.build_count()?.fetch_one_scalar(executor).await
+    }
+
+    pub(crate) fn build_count(&self) -> Result<BuiltQuery> {
+        let mut count = self.clone();
+        count.order.clear();
+        count.limit = None;
+        count.offset = None;
+        count.fetch = None;
+        count.lock = None;
+        select(subquery(count, "rqb_count", Vec::new()))
+            .expr(count_all())
+            .build()
     }
 }
 

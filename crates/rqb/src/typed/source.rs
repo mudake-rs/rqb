@@ -166,37 +166,37 @@ impl JoinKind {
 }
 
 impl Join {
-    pub fn new(kind: JoinKind, source: Source, on: BoolExpr) -> Self {
+    pub fn new(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             kind,
-            source,
+            source: source.into(),
             on: Some(on),
             lateral: false,
         }
     }
 
-    pub fn lateral(kind: JoinKind, source: Source, on: BoolExpr) -> Self {
+    pub fn lateral(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             kind,
-            source,
+            source: source.into(),
             on: Some(on),
             lateral: true,
         }
     }
 
-    pub fn cross(source: Source) -> Self {
+    pub fn cross(source: impl Into<Source>) -> Self {
         Self {
             kind: JoinKind::Cross,
-            source,
+            source: source.into(),
             on: None,
             lateral: false,
         }
     }
 
-    pub fn cross_lateral(source: Source) -> Self {
+    pub fn cross_lateral(source: impl Into<Source>) -> Self {
         Self {
             kind: JoinKind::Cross,
-            source,
+            source: source.into(),
             on: None,
             lateral: true,
         }

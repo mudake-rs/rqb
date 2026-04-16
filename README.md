@@ -110,21 +110,19 @@ let paid_orders = cte(
         .column(schema::orders::USER_ID)
         .filter(schema::orders::STATUS.eq("paid")),
     vec![*schema::orders::USER_ID.meta],
-)
-.columns(["user_id"]);
+);
 let paid_orders_source = paid_orders.source().alias("po");
+let u = schema::users::alias("u");
 
-let rows = select(schema::users::table().alias("u"))
+let rows = select(&u)
     .with(paid_orders)
     .join(
         paid_orders_source,
-        schema::users::ID
-            .at("u")
-            .eq_field(schema::orders::USER_ID.at("po")),
+        u.id().eq_field(schema::orders::USER_ID.at("po")),
     )
-    .column(schema::users::EMAIL.at("u"))
-    .filter(schema::users::EMAIL.contains("@example.com"))
-    .order_desc(schema::users::ID.at("u"))
+    .column(u.email())
+    .filter(u.email().contains("@example.com"))
+    .order_desc(u.id())
     .fetch_all_as::<UserRow>(&pool)
     .await?;
 ```
@@ -132,14 +130,16 @@ let rows = select(schema::users::table().alias("u"))
 Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
 `FILTER`, window functions, array/jsonb/range predicates, `insert(...).from_select(...)`,
-and `on_conflict(...).do_update_set(...)`.
+and `on_conflict(...).do_update_set(...)`. REST-style pagination stays in
+application code; the REST sample shows `limit` / `offset` plus `Select::count()`
+for a matching count query.
 
 SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
 like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
 service module.
 
 ```rust
-use rqb::dsl::{coalesce, date_trunc, jsonb_build_object};
+use rqb::dsl::{coalesce, date_trunc};
 use rqb::prelude::*;
 ```
 

@@ -1,10 +1,10 @@
 use super::*;
 
 impl Select {
-    pub fn from(source: Source) -> Self {
+    pub fn from(source: impl Into<Source>) -> Self {
         Self {
             ctes: Vec::new(),
-            source,
+            source: source.into(),
             joins: Vec::new(),
             distinct: false,
             distinct_on: Vec::new(),
@@ -23,6 +23,11 @@ impl Select {
     pub fn with(mut self, cte: Cte) -> Self {
         self.ctes.push(cte);
         self
+    }
+
+    pub fn try_into_source(self, alias: impl Into<String>) -> crate::Result<Source> {
+        let fields = self.inferred_source_fields()?;
+        Ok(subquery(self, alias, fields))
     }
 
     pub fn into_source(self, alias: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
@@ -45,6 +50,10 @@ impl Select {
     pub fn item(mut self, item: SelectItem) -> Self {
         self.projection.push(item);
         self
+    }
+
+    pub fn agg(self, item: SelectItem) -> Self {
+        self.item(item)
     }
 
     pub fn filter(mut self, filter: BoolExpr) -> Self {
@@ -82,42 +91,42 @@ impl Select {
         self
     }
 
-    pub fn join(mut self, source: Source, on: BoolExpr) -> Self {
+    pub fn join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Inner, source, on));
         self
     }
 
-    pub fn left_join(mut self, source: Source, on: BoolExpr) -> Self {
+    pub fn left_join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Left, source, on));
         self
     }
 
-    pub fn right_join(mut self, source: Source, on: BoolExpr) -> Self {
+    pub fn right_join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Right, source, on));
         self
     }
 
-    pub fn full_join(mut self, source: Source, on: BoolExpr) -> Self {
+    pub fn full_join(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::new(JoinKind::Full, source, on));
         self
     }
 
-    pub fn join_lateral(mut self, source: Source, on: BoolExpr) -> Self {
+    pub fn join_lateral(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::lateral(JoinKind::Inner, source, on));
         self
     }
 
-    pub fn left_join_lateral(mut self, source: Source, on: BoolExpr) -> Self {
+    pub fn left_join_lateral(mut self, source: impl Into<Source>, on: BoolExpr) -> Self {
         self.joins.push(Join::lateral(JoinKind::Left, source, on));
         self
     }
 
-    pub fn cross_join(mut self, source: Source) -> Self {
+    pub fn cross_join(mut self, source: impl Into<Source>) -> Self {
         self.joins.push(Join::cross(source));
         self
     }
 
-    pub fn cross_join_lateral(mut self, source: Source) -> Self {
+    pub fn cross_join_lateral(mut self, source: impl Into<Source>) -> Self {
         self.joins.push(Join::cross_lateral(source));
         self
     }
@@ -287,5 +296,29 @@ impl Select {
     pub fn skip_locked(mut self) -> Self {
         self.lock = Some(self.lock.unwrap_or_default().skip_locked());
         self
+    }
+
+    pub(crate) fn inferred_source_fields(&self) -> crate::Result<Vec<Meta>> {
+        if self.projection.is_empty() {
+            let mut fields = Vec::new();
+            self.source.for_each_field(|field| fields.push(*field));
+            return Ok(fields);
+        }
+
+        let mut fields = Vec::with_capacity(self.projection.len());
+        for item in &self.projection {
+            let Some(meta) = item.expr.field_meta() else {
+                return Err(crate::Error::InvalidSelectShape {
+                    message: "try_into_source cannot infer fields from computed projection; use into_source",
+                });
+            };
+            if item.alias.as_deref().is_some_and(|alias| alias != meta.db) {
+                return Err(crate::Error::InvalidSelectShape {
+                    message: "try_into_source cannot infer fields from aliased projection; use into_source",
+                });
+            }
+            fields.push(*meta);
+        }
+        Ok(fields)
     }
 }

@@ -1,9 +1,9 @@
 use super::*;
 
 impl Update {
-    pub fn table(target: Source) -> Self {
+    pub fn table(target: impl Into<Source>) -> Self {
         Self {
-            target,
+            target: target.into(),
             assignments: Vec::new(),
             from: Vec::new(),
             filter: None,
@@ -21,8 +21,8 @@ impl Update {
         self
     }
 
-    pub fn from(mut self, source: Source) -> Self {
-        self.from.push(source);
+    pub fn from(mut self, source: impl Into<Source>) -> Self {
+        self.from.push(source.into());
         self
     }
 

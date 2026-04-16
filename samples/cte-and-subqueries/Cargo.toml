@@ -1,0 +1,12 @@
+[package]
+name = "rqb-sample-cte-and-subqueries"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+rqb = { path = "../../crates/rqb" }
+rqb-sample-schema = { path = "../schema" }
+uuid = "1"

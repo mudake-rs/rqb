@@ -41,7 +41,7 @@ pub async fn deactivate(pool: &PgPool, id: Uuid) -> rqb::Result<()> {
             .execute(&mut *conn)
             .await?;
 
-        orders::cancel_open_for_user(conn, id).await?;
+        orders::cancel_open_for_user(&mut *conn, id).await?;
         Ok(())
     })
     .await

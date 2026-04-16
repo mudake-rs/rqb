@@ -5,3 +5,9 @@ the table, projection, joins, raw SQL, and server filters.
 
 The schema comes from the shared `rqb-sample-schema` crate generated from
 `../schema.sql`.
+
+Run with:
+
+```bash
+cargo run --manifest-path samples/json-search/Cargo.toml
+```

@@ -230,7 +230,6 @@ impl Renderer {
                 self.sql.push_str("ON CONSTRAINT ");
                 write_quoted_ident(&mut self.sql, constraint);
             }
-            ConflictTarget::Invalid { .. } => unreachable!("invalid conflict target validated"),
         }
         match &conflict.action {
             ConflictAction::DoNothing => {

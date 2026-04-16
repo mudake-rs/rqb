@@ -20,35 +20,45 @@ pub use serde_json;
 pub use sqlx;
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use typed::{
-    Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, Changeset, ConflictAction,
-    ConflictClause, ConflictTarget, Cte, CteMaterialization, Delete, FetchClause, Field, FieldRef,
-    FrameBound, FrameExclude, GroupByItem, Insert, InsertConflictBuilder, Insertable, IntoFieldRef,
-    Join, JoinKind, JsonKind, LockMode, LockWait, Merge, MergeAction, MergeWhen, Meta,
-    NullsPosition, OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params,
-    RawStmt, RowLock, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort,
-    Select, SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr,
-    ValueOp, WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, cte,
-    cte_source, delete_from, except, except_all, function_source, insert, intersect, intersect_all,
-    merge_into, raw, raw_source, select, subquery, table, union, union_all, update, view,
+    Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, Changeset, ColumnConflictBuilder,
+    ConflictAction, ConflictClause, ConflictTarget, ConstraintConflictBuilder, Cte,
+    CteMaterialization, Delete, FetchClause, Field, FieldRef, FrameBound, FrameExclude,
+    GroupByItem, Insert, Insertable, IntoFieldRef, Join, JoinKind, JsonKind, LockMode, LockWait,
+    Merge, MergeAction, MergeWhen, Meta, NullsPosition, OffsetWindowFunctionBuilder, OpSet,
+    OrderDirection, OrderItem, Param, Params, RawStmt, RowLock, SearchFilter, SearchOperator,
+    SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SetOperator, SetQuery,
+    SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind,
+    WindowFunction, WindowFunctionBuilder, WindowSpec, cte, cte_source, delete_from, except,
+    except_all, function_source, insert, intersect, intersect_all, merge_into, raw, raw_source,
+    select, subquery, table, union, union_all, update, view,
 };
 pub use uuid;
+
+#[macro_export]
+macro_rules! jsonb_agg_object {
+    ($($item:expr),+ $(,)?) => {{
+        $crate::typed::__jsonb_agg_object_from_pairs([
+            $($crate::typed::__jsonb_object_pair($item)),+
+        ])
+    }};
+}
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// SQL expression helpers that are useful on demand but too broad for the prelude.
 pub mod dsl {
     pub use crate::typed::{
-        abs, age, aggregate, array, array_agg, array_agg_distinct, array_append, array_length,
-        array_position, array_positions, array_prepend, array_remove, array_replace,
+        abs, age, aggregate, all, any, array, array_agg, array_agg_distinct, array_append,
+        array_length, array_position, array_positions, array_prepend, array_remove, array_replace,
         array_to_string, avg, bool_and, bool_or, btrim, cardinality, ceil, char_length, coalesce,
         concat, concat_op, concat_ws, count, count_all, count_distinct, cume_dist, current_date,
         current_row, current_timestamp, date_trunc, dense_rank, every, exp, extract, first_value,
         floor, following, function, greatest, groups, json, json_agg, json_exists, json_get,
         json_get_text, json_path, json_path_text, json_query, json_scalar, json_serialize,
-        json_value, jsonb_array_elements, jsonb_build_array, jsonb_build_object, jsonb_delete,
-        jsonb_each, jsonb_insert, jsonb_object, jsonb_path_exists, jsonb_path_query, jsonb_set,
-        jsonb_strip_nulls, jsonb_typeof, lag, last_value, lead, least, left, length, ln, log,
-        lower, lpad, ltrim, make_date, make_time, make_timestamp, make_timestamptz, max,
+        json_value, jsonb_agg_object, jsonb_array_elements, jsonb_build_array, jsonb_build_object,
+        jsonb_delete, jsonb_each, jsonb_insert, jsonb_object, jsonb_path_exists, jsonb_path_query,
+        jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag, last_value, lead, least, left, length, ln,
+        log, lower, lpad, ltrim, make_date, make_time, make_timestamp, make_timestamptz, max,
         merge_action, min, mod_, mode, not_similar_to, now, nth_value, ntile, nullif,
         ordered_set_aggregate, param, partition_by, percent_rank, percentile_cont, percentile_disc,
         plainto_tsquery, pow, power, preceding, random, random_between, range, rank,
@@ -64,18 +74,19 @@ pub mod dsl {
 
 pub mod prelude {
     pub use crate::{
-        Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, Changeset, ConflictAction,
-        ConflictClause, ConflictTarget, Cte, CteMaterialization, DbErrorInfo, DbErrorPosition,
-        Delete, Error, FetchClause, Field, FieldRef, FrameBound, FrameExclude, GroupByItem, Insert,
-        InsertConflictBuilder, Insertable, IntoFieldRef, Join, JoinKind, JsonKind, LockMode,
-        LockWait, Merge, MergeAction, MergeWhen, Meta, NullsPosition, OffsetWindowFunctionBuilder,
-        OpSet, OrderDirection, OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt,
-        Result, RowLock, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort,
-        Select, SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr,
-        ValueOp, WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec,
-        cte, cte_source, delete_from, except, except_all, function_source, insert, intersect,
-        intersect_all, merge_into, raw, raw_source, schema, select, subquery, table, tx, union,
-        union_all, update, view,
+        Assignment, BoolExpr, BoolOp, BooleanTest, BuiltQuery, Changeset, ColumnConflictBuilder,
+        ConflictAction, ConflictClause, ConflictTarget, ConstraintConflictBuilder, Cte,
+        CteMaterialization, DbErrorInfo, DbErrorPosition, Delete, Error, FetchClause, Field,
+        FieldRef, FrameBound, FrameExclude, GroupByItem, Insert, Insertable, IntoFieldRef, Join,
+        JoinKind, JsonKind, LockMode, LockWait, Merge, MergeAction, MergeWhen, Meta, NullsPosition,
+        OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, PgConnection,
+        PgExecutor, PgPool, RawStmt, Result, RowLock, SearchFilter, SearchOperator,
+        SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SetOperator, SetQuery,
+        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind,
+        WindowFunction, WindowFunctionBuilder, WindowSpec, cte, cte_source, delete_from, except,
+        except_all, function_source, insert, intersect, intersect_all, jsonb_agg_object,
+        merge_into, raw, raw_source, schema, select, subquery, table, tx, union, union_all, update,
+        view,
     };
 }
 

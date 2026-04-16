@@ -75,10 +75,6 @@ pub enum ConflictTarget {
         predicate: Option<Box<BoolExpr>>,
     },
     Constraint(String),
-    #[doc(hidden)]
-    Invalid {
-        message: &'static str,
-    },
 }
 
 #[derive(Clone, Debug)]
@@ -97,9 +93,16 @@ pub struct ConflictClause {
 }
 
 #[derive(Clone, Debug)]
-pub struct InsertConflictBuilder {
+pub struct ColumnConflictBuilder {
     pub(super) insert: Insert,
-    pub(super) target: ConflictTarget,
+    pub(super) fields: Vec<Meta>,
+    pub(super) predicate: Option<Box<BoolExpr>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConstraintConflictBuilder {
+    pub(super) insert: Insert,
+    pub(super) constraint: String,
 }
 
 pub trait Insertable {

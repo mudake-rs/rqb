@@ -20,10 +20,10 @@ mod update;
 mod validate;
 
 pub use ast::{
-    Assignment, Changeset, ConflictAction, ConflictClause, ConflictTarget, Delete, FetchClause,
-    GroupByItem, Insert, InsertConflictBuilder, Insertable, LockMode, LockWait, Merge, MergeAction,
-    MergeWhen, NullsPosition, OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem,
-    SetOperator, SetQuery, Stmt, Update,
+    Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictTarget,
+    ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert, Insertable, LockMode,
+    LockWait, Merge, MergeAction, MergeWhen, NullsPosition, OrderDirection, OrderItem, RawStmt,
+    RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt, Update,
 };
 pub use constructors::{
     delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw, select,

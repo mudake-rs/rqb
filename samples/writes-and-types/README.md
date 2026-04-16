@@ -5,3 +5,9 @@ Postgres can be bound through `Param::typed` or `Field<T>`.
 
 The schema comes from the shared `rqb-sample-schema` crate generated from
 `../schema.sql`.
+
+Run with:
+
+```bash
+cargo run --manifest-path samples/writes-and-types/Cargo.toml
+```

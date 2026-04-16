@@ -150,9 +150,6 @@ impl ConflictClause {
                 });
             }
             ConflictTarget::Constraint(_) => {}
-            ConflictTarget::Invalid { message } => {
-                return Err(Error::InvalidInsertShape { message });
-            }
         }
         if let ConflictAction::DoUpdate {
             assignments,

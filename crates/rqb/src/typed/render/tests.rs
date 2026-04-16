@@ -1,6 +1,6 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
-    Stmt, ValueExpr, array, array_agg, bool_and, coalesce, count_all, count_distinct, cte,
+    Stmt, ValueExpr, all, array, array_agg, bool_and, coalesce, count_all, count_distinct, cte,
     function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont,
     row_number, select, table, to_jsonb, update, window,
 };
@@ -206,7 +206,7 @@ fn ergonomic_constructors_build_the_same_typed_ast() {
     let built = select(table("public.app_users", &USERS_FIELDS))
         .column(ID)
         .item(EMAIL.alias("email"))
-        .filter(BoolExpr::and([ID.gt(10), ID.lt(20)]))
+        .filter(all([ID.gt(10), ID.lt(20)]))
         .filter_if(false, ID.eq(999))
         .filter_option(Some("egor".to_owned()), |email| EMAIL.ne(email))
         .apply(|query| query.order_desc(ID))
@@ -427,34 +427,6 @@ fn insert_on_conflict_renders_update_and_do_nothing_actions() {
         nothing.sql,
         "INSERT INTO \"public\".\"app_users\" (\"id\") VALUES ($1) ON CONFLICT ON CONSTRAINT \"app_users_pkey\" DO NOTHING"
     );
-
-    let invalid_and = insert(users())
-        .set(ID.set(1))
-        .on_conflict_constraint("app_users_pkey")
-        .and(EMAIL)
-        .do_nothing()
-        .build()
-        .unwrap_err();
-
-    assert!(matches!(
-        invalid_and,
-        crate::Error::InvalidInsertShape { message }
-            if message == "and requires on_conflict(column), not on_conflict_constraint"
-    ));
-
-    let invalid_target_where = insert(users())
-        .set(ID.set(1))
-        .on_conflict_constraint("app_users_pkey")
-        .target_where(ID.gt(0))
-        .do_nothing()
-        .build()
-        .unwrap_err();
-
-    assert!(matches!(
-        invalid_target_where,
-        crate::Error::InvalidInsertShape { message }
-            if message == "target_where requires on_conflict(column), not on_conflict_constraint"
-    ));
 }
 
 #[test]
@@ -495,14 +467,49 @@ fn in_subquery_predicate_renders_server_owned_query_shape() {
 }
 
 #[test]
+fn select_into_source_infers_field_metadata_from_projection() {
+    let recent = select(orders())
+        .column(ORDER_USER_ID)
+        .column(TOTAL)
+        .filter(TOTAL.gt(1000))
+        .try_into_source("recent_orders")
+        .unwrap();
+
+    let built = select(recent.alias("r"))
+        .column(ORDER_USER_ID.at("r"))
+        .column(TOTAL.at("r"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"r\".\"user_id\" AS \"r_user_id\", \"r\".\"total_cents\" AS \"r_total_cents\" FROM (SELECT \"user_id\", \"total_cents\" FROM \"public\".\"orders\" WHERE \"total_cents\" > $1) AS \"r\""
+    );
+    assert_eq!(built.params.len(), 1);
+}
+
+#[test]
+fn select_into_source_rejects_projection_aliases_that_need_explicit_fields() {
+    let err = select(users())
+        .column(EMAIL)
+        .try_into_source("emails")
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "try_into_source cannot infer fields from aliased projection; use into_source"
+    ));
+}
+
+#[test]
 fn recursive_cte_source_renders_columns_and_body_params() {
     let seed = select(users()).column(ID).filter(ID.eq(1));
     let recursive_arm = select(crate::typed::cte_source("active_users", vec![ID_META]))
         .column(ID)
         .filter(ID.lt(10));
-    let active_users = cte("active_users", seed.union_all(recursive_arm), vec![ID_META])
-        .columns(["id"])
-        .recursive();
+    let active_users =
+        cte("active_users", seed.union_all(recursive_arm), vec![ID_META]).recursive();
 
     let built = select(active_users.source())
         .with(active_users)
@@ -525,8 +532,7 @@ fn joined_cte_definitions_render_before_select_and_keep_params() {
             .column(ORDER_USER_ID)
             .filter(TOTAL.gt(1000)),
         vec![ORDER_USER_ID_META],
-    )
-    .columns(["user_id"]);
+    );
     let big_orders_source = big_orders.source().alias("bo");
 
     let built = select(users().alias("u"))
@@ -592,21 +598,21 @@ fn window_helpers_render_over_partition_and_order_specs() {
 #[test]
 fn aggregate_helpers_render_common_postgres_aggregates() {
     let built = select(users())
-        .item(count_all().alias("total"))
-        .item(count_distinct(EMAIL).alias("unique_emails"))
-        .item(
+        .agg(count_all().alias("total"))
+        .agg(count_distinct(EMAIL).alias("unique_emails"))
+        .agg(
             array_agg(EMAIL)
                 .aggregate_order_desc(ID)
                 .aggregate_filter(ID.gt(10))
                 .alias("emails"),
         )
-        .item(
+        .agg(
             json_agg(ID)
                 .aggregate_order_asc(EMAIL)
                 .aggregate_filter(ID.gt(20))
                 .alias("ids_json"),
         )
-        .item(crate::typed::string_agg(EMAIL, ",").alias("emails_csv"))
+        .agg(crate::typed::string_agg(EMAIL, ",").alias("emails_csv"))
         .build()
         .unwrap();
 
@@ -615,6 +621,44 @@ fn aggregate_helpers_render_common_postgres_aggregates() {
         "SELECT count(*) AS \"total\", count(DISTINCT \"email_address\") AS \"unique_emails\", array_agg(\"email_address\" ORDER BY \"id\" DESC) FILTER (WHERE \"id\" > $1) AS \"emails\", json_agg(\"id\" ORDER BY \"email_address\" ASC) FILTER (WHERE \"id\" > $2) AS \"ids_json\", string_agg(\"email_address\", $3) AS \"emails_csv\" FROM \"public\".\"app_users\""
     );
     assert_eq!(built.params.len(), 3);
+}
+
+#[test]
+fn jsonb_agg_object_renders_keyed_objects_with_filter_and_order() {
+    let built = select(orders())
+        .item(
+            crate::jsonb_agg_object![ORDER_USER_ID, TOTAL]
+                .order_desc(TOTAL)
+                .filter(TOTAL.gt(0))
+                .alias("orders"),
+        )
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT jsonb_agg(jsonb_build_object($1, \"user_id\", $2, \"total_cents\") ORDER BY \"total_cents\" DESC) FILTER (WHERE \"total_cents\" > $3) AS \"orders\" FROM \"public\".\"orders\""
+    );
+    assert_eq!(built.params.len(), 3);
+}
+
+#[test]
+fn count_query_renders_through_normal_ast_path() {
+    let query = select(users())
+        .column(ID)
+        .filter(ID.gt(10))
+        .order_desc(ID)
+        .limit(25)
+        .offset(50);
+
+    let count = query.build_count().unwrap();
+
+    assert_eq!(
+        count.sql,
+        "SELECT count(*) FROM (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"id\" > $1) AS \"rqb_count\""
+    );
+    assert_eq!(count.params.len(), 1);
+    assert!(count.cacheable);
 }
 
 #[test]

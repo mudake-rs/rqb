@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use crate::error::{ApiError, ApiResult};
 use crate::services::{orders, users};
-use crate::types::{CheckoutResponse, CreateOrder, CreateUser, UserRow};
+use crate::types::{
+    CheckoutResponse, CreateOrder, CreateUser, OrderSearchRow, Page, UserOrderSummaryRow, UserRow,
+};
 
 #[derive(Clone)]
 struct AppState {
@@ -21,6 +23,8 @@ pub fn router(pool: PgPool) -> Router {
         .route("/users/search", post(search_users))
         .route("/users", post(create_user))
         .route("/users/{id}/deactivate", post(deactivate_user))
+        .route("/orders/search", post(search_orders))
+        .route("/orders/summary", get(order_summary))
         .route("/checkout", post(checkout))
         .with_state(AppState { pool })
 }
@@ -57,6 +61,21 @@ async fn deactivate_user(
 ) -> ApiResult<StatusCode> {
     users::deactivate(&state.pool, id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn search_orders(
+    State(state): State<AppState>,
+    Json(request): Json<SearchRequest>,
+) -> ApiResult<Json<Page<OrderSearchRow>>> {
+    let orders = orders::search(&state.pool, request).await?;
+    Ok(Json(orders))
+}
+
+async fn order_summary(
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<UserOrderSummaryRow>>> {
+    let summary = orders::summary(&state.pool).await?;
+    Ok(Json(summary))
 }
 
 async fn checkout(

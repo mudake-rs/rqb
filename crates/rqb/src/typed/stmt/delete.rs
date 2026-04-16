@@ -1,17 +1,17 @@
 use super::*;
 
 impl Delete {
-    pub fn from(target: Source) -> Self {
+    pub fn from(target: impl Into<Source>) -> Self {
         Self {
-            target,
+            target: target.into(),
             using: Vec::new(),
             filter: None,
             returning: Vec::new(),
         }
     }
 
-    pub fn using(mut self, source: Source) -> Self {
-        self.using.push(source);
+    pub fn using(mut self, source: impl Into<Source>) -> Self {
+        self.using.push(source.into());
         self
     }
 

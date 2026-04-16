@@ -16,14 +16,9 @@ impl Renderer {
             }
             write_quoted_ident(&mut self.sql, &cte.name);
             if !cte.columns.is_empty() {
-                self.sql.push_str(" (");
-                for (column_idx, column) in cte.columns.iter().enumerate() {
-                    if column_idx > 0 {
-                        self.sql.push_str(", ");
-                    }
-                    write_quoted_ident(&mut self.sql, column);
-                }
-                self.sql.push(')');
+                self.render_cte_columns(cte.columns.iter().map(String::as_str));
+            } else if !cte.fields.is_empty() {
+                self.render_cte_columns(cte.fields.iter().map(|field| field.db));
             }
             self.sql.push_str(" AS");
             if let Some(materialization) = cte.materialization {
@@ -37,6 +32,18 @@ impl Renderer {
         self.sql.push(' ');
         Ok(())
     }
+
+    fn render_cte_columns<'a>(&mut self, columns: impl IntoIterator<Item = &'a str>) {
+        self.sql.push_str(" (");
+        for (column_idx, column) in columns.into_iter().enumerate() {
+            if column_idx > 0 {
+                self.sql.push_str(", ");
+            }
+            write_quoted_ident(&mut self.sql, column);
+        }
+        self.sql.push(')');
+    }
+
     pub(super) fn render_source_fields(&mut self, source: &Source) {
         let mut rendered = 0usize;
         let qualifier = source.explicit_alias();

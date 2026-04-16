@@ -1,5 +1,13 @@
 use super::{BoolExpr, BooleanTest, Field, FieldRef, ValueExpr};
 
+pub fn all(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
+    BoolExpr::and(exprs)
+}
+
+pub fn any(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
+    BoolExpr::or(exprs)
+}
+
 impl BoolExpr {
     pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
         Self::And(exprs.into_iter().collect())

@@ -1,0 +1,13 @@
+[package]
+name = "rqb-sample-error-handling"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+rqb = { path = "../../crates/rqb" }
+rqb-sample-schema = { path = "../schema" }
+serde_json = "1"
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres"] }

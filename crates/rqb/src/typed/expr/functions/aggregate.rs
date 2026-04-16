@@ -1,4 +1,4 @@
-use crate::typed::{OrderItem, ValueExpr};
+use crate::typed::{Field, FieldRef, OrderItem, SelectItem, ValueExpr};
 
 pub fn aggregate(
     name: &'static str,
@@ -65,6 +65,82 @@ pub fn array_agg_distinct(expr: impl Into<ValueExpr>) -> ValueExpr {
 
 pub fn json_agg(expr: impl Into<ValueExpr>) -> ValueExpr {
     aggregate("json_agg", [expr], false)
+}
+
+pub fn jsonb_agg_object(items: impl IntoIterator<Item = impl Into<SelectItem>>) -> ValueExpr {
+    __jsonb_agg_object_from_pairs(items.into_iter().map(select_item_jsonb_object_pair))
+}
+
+#[doc(hidden)]
+pub fn __jsonb_agg_object_from_pairs(
+    items: impl IntoIterator<Item = (String, ValueExpr)>,
+) -> ValueExpr {
+    aggregate(
+        "jsonb_agg",
+        [ValueExpr::Function {
+            name: "jsonb_build_object",
+            args: items
+                .into_iter()
+                .flat_map(|(key, expr)| [ValueExpr::from(key), expr])
+                .collect(),
+        }],
+        false,
+    )
+}
+
+#[doc(hidden)]
+pub fn __jsonb_object_pair(item: impl JsonbObjectItem) -> (String, ValueExpr) {
+    item.into_jsonb_object_pair()
+}
+
+#[doc(hidden)]
+pub trait JsonbObjectItem {
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr);
+}
+
+impl<T> JsonbObjectItem for Field<T> {
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
+        (self.meta.api.to_owned(), self.expr())
+    }
+}
+
+impl<T> JsonbObjectItem for FieldRef<T> {
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
+        (self.meta.api.to_owned(), self.expr())
+    }
+}
+
+impl JsonbObjectItem for SelectItem {
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
+        select_item_jsonb_object_pair(self)
+    }
+}
+
+impl<V> JsonbObjectItem for (&str, V)
+where
+    V: Into<ValueExpr>,
+{
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
+        (self.0.to_owned(), self.1.into())
+    }
+}
+
+impl<V> JsonbObjectItem for (String, V)
+where
+    V: Into<ValueExpr>,
+{
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
+        (self.0, self.1.into())
+    }
+}
+
+fn select_item_jsonb_object_pair(item: impl Into<SelectItem>) -> (String, ValueExpr) {
+    let SelectItem { expr, alias } = item.into();
+    let key = alias
+        .or_else(|| expr.field_meta().map(|meta| meta.api.to_owned()))
+        .unwrap_or_else(|| "value".to_owned());
+
+    (key, expr)
 }
 
 pub fn string_agg(expr: impl Into<ValueExpr>, delimiter: impl Into<ValueExpr>) -> ValueExpr {

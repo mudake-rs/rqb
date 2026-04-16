@@ -1,8 +1,11 @@
 use rqb::prelude::*;
+use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::orders;
 use serde_json::json;
+use uuid::Uuid;
 
-fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Database errors are normalized into structured variants so API code can
     // match by meaning instead of parsing message text.
     let unique = rqb::Error::UniqueViolation {
@@ -55,6 +58,33 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Err(rqb::Error::InvalidCteShape { name, .. }) if name == "bad"
     ));
 
+    // This future is not awaited because the focused sample stays database-free.
+    // The function below is the real service shape: execute a statement, let
+    // rqb normalize sqlx errors, and match the structured variant.
+    let pool = sqlx::PgPool::connect_lazy("postgres://rqb:rqb@localhost/rqb")?;
+    let duplicate_flow = create_user_and_match_db_error(&pool);
+    drop(duplicate_flow);
+
     println!("structured errors can be matched by variant");
     Ok(())
+}
+
+async fn create_user_and_match_db_error<'e>(db: impl PgExecutor<'e>) -> rqb::Result<()> {
+    match insert(users::table())
+        .set(users::ID.set(Uuid::nil()))
+        .set(users::EMAIL.set("ada@example.com"))
+        .set(users::STATUS.set("active"))
+        .set(users::DISPLAY_NAME.set("Ada"))
+        .execute(db)
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(rqb::Error::UniqueViolation { constraint, .. }) => {
+            // Application code usually maps this to 409 Conflict; the optional
+            // constraint name is useful for logs or field-specific API errors.
+            let _constraint = constraint;
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
 }

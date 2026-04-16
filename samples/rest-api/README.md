@@ -13,6 +13,16 @@ It shows:
 - `Insertable` DTOs for write mappings.
 - Closure-style `tx!` transactions.
 
+## What This Shows
+
+- Handlers own HTTP validation and response shaping.
+- Services own database query shape and accept `impl PgExecutor<'e>` where they
+  should be reusable with a pool or transaction connection.
+- JSON search is applied only after server filters are installed.
+- Pagination is application code: `limit`, `offset`, and `Select::count()`.
+- `ApiError` maps structured rqb errors to HTTP responses without parsing
+  database message strings.
+
 The sample uses `PgPoolOptions::connect_lazy`, so `cargo check` does not need a
 running database.
 

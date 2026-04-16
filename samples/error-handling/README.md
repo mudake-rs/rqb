@@ -3,6 +3,15 @@
 Shows structured validation and database error matching without parsing error
 strings.
 
+## What This Shows
+
+- Builder validation errors are returned before SQL rendering.
+- sqlx database errors normalize into structured `rqb::Error` variants.
+- API or service code can match `UniqueViolation`, `ForeignKeyViolation`,
+  `NotFound`, and retryable transaction errors by meaning.
+- The sample includes a compile-checked executed flow and points to
+  `samples/rest-api/src/error.rs` for HTTP status mapping.
+
 Run with:
 
 ```bash

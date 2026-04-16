@@ -3,6 +3,15 @@
 Shows raw SQL binds, escaped question marks, raw sources, and raw predicates
 without giving up bind-count validation.
 
+## What This Shows
+
+- `raw("... ? ...").bind(value)` renders `$N` placeholders in order.
+- `??` renders a literal question mark without consuming a bind.
+- Raw sources still declare exposed fields so outer typed queries know what can
+  be projected or filtered.
+- Bind-count mismatches are validation errors, not Postgres runtime surprises.
+- Raw SQL is server-owned; client JSON never supplies raw fragments.
+
 Run with:
 
 ```bash

@@ -9,14 +9,10 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let pool = PgPoolOptions::new().connect_lazy("postgres://rqb:rqb@localhost/rqb")?;
     let user_id = Uuid::nil();
 
-    // The future is dropped because this sample is compile-checked without a
-    // database. In an application, `.await?` would run both statements in one tx.
-    let tx_pool = pool.clone();
-    let closure_future = tx!(&tx_pool, |conn| {
-        deactivate_user(&mut *conn, user_id).await?;
-        cancel_open_orders(conn, user_id).await?;
-        Ok::<_, rqb::Error>(user_id)
-    });
+    // The focused sample renders SQL without connecting to a database. The
+    // transaction functions below contain the real `.await?` flow; the futures
+    // are dropped here only to keep `cargo run` database-free.
+    let closure_future = closure_transaction(&pool, user_id);
     drop(closure_future);
 
     let explicit_future = explicit_transaction(&pool, user_id);
@@ -55,6 +51,15 @@ async fn cancel_open_orders<'e>(db: impl PgExecutor<'e>, user_id: Uuid) -> rqb::
         .filter(orders::STATUS.eq("open"))
         .execute(db)
         .await
+}
+
+async fn closure_transaction(pool: &PgPool, user_id: Uuid) -> rqb::Result<Uuid> {
+    tx!(pool, |conn| {
+        deactivate_user(&mut *conn, user_id).await?;
+        cancel_open_orders(conn, user_id).await?;
+        Ok(user_id)
+    })
+    .await
 }
 
 async fn explicit_transaction(pool: &PgPool, user_id: Uuid) -> rqb::Result<()> {

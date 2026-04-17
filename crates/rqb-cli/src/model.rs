@@ -43,6 +43,7 @@ pub(crate) enum KnownType {
     Timestamptz,
     Interval,
     Json,
+    Jsonb,
     Bytes,
     Inet,
     Cidr,

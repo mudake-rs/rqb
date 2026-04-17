@@ -40,7 +40,8 @@ fn map_known_udt(udt_name: &str) -> Option<KnownType> {
         "timestamp" => KnownType::Timestamp,
         "timestamptz" => KnownType::Timestamptz,
         "interval" => KnownType::Interval,
-        "json" | "jsonb" => KnownType::Json,
+        "json" => KnownType::Json,
+        "jsonb" => KnownType::Jsonb,
         "bytea" => KnownType::Bytes,
         "inet" => KnownType::Inet,
         "cidr" => KnownType::Cidr,
@@ -98,8 +99,12 @@ mod tests {
             ColumnType::Known(KnownType::Range(Box::new(KnownType::Timestamptz)))
         );
         assert_eq!(
-            map_column_type("jsonb", "jsonb"),
+            map_column_type("json", "json"),
             ColumnType::Known(KnownType::Json)
+        );
+        assert_eq!(
+            map_column_type("jsonb", "jsonb"),
+            ColumnType::Known(KnownType::Jsonb)
         );
     }
 

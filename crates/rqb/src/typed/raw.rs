@@ -11,7 +11,7 @@ pub(crate) fn validate_bind_count(sql: &str, binds: usize) -> Result<()> {
     })
 }
 
-fn count_placeholders(sql: &str) -> usize {
+pub(crate) fn count_placeholders(sql: &str) -> usize {
     let mut count = 0;
     let mut chars = sql.chars().peekable();
     while let Some(ch) = chars.next() {

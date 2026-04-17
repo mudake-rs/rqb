@@ -126,7 +126,7 @@ fn rust_type_name(known: &KnownType) -> String {
         KnownType::Timestamp => "NaiveDateTime".to_owned(),
         KnownType::Timestamptz => "DateTime<Utc>".to_owned(),
         KnownType::Interval => "PgInterval".to_owned(),
-        KnownType::Json => "Value".to_owned(),
+        KnownType::Json | KnownType::Jsonb => "Value".to_owned(),
         KnownType::Bytes => "Vec<u8>".to_owned(),
         KnownType::Range(elem) => format!("PgRange<{}>", rust_type_name(elem)),
         KnownType::Array(elem) => format!("Vec<{}>", rust_type_name(elem)),
@@ -210,7 +210,7 @@ fn collect_type_imports(known: &KnownType, imports: &mut TypeImports) {
             imports.utc = true;
         }
         KnownType::Interval => imports.pg_interval = true,
-        KnownType::Json => imports.serde_value = true,
+        KnownType::Json | KnownType::Jsonb => imports.serde_value = true,
         KnownType::Range(elem) => {
             imports.pg_range = true;
             collect_type_imports(elem, imports);
@@ -261,7 +261,8 @@ fn pg_name(known: &KnownType) -> String {
         KnownType::Timestamp => "timestamp".to_owned(),
         KnownType::Timestamptz => "timestamptz".to_owned(),
         KnownType::Interval => "interval".to_owned(),
-        KnownType::Json => "jsonb".to_owned(),
+        KnownType::Json => "json".to_owned(),
+        KnownType::Jsonb => "jsonb".to_owned(),
         KnownType::Bytes => "bytea".to_owned(),
         KnownType::Inet => "inet".to_owned(),
         KnownType::Cidr => "cidr".to_owned(),
@@ -380,9 +381,14 @@ mod tests {
                     ty: ColumnType::Known(KnownType::Range(Box::new(KnownType::Date))),
                 },
                 Column {
+                    name: "audit_payload".to_owned(),
+                    const_name: "AUDIT_PAYLOAD".to_owned(),
+                    ty: ColumnType::Known(KnownType::Json),
+                },
+                Column {
                     name: "metadata".to_owned(),
                     const_name: "METADATA".to_owned(),
-                    ty: ColumnType::Known(KnownType::Json),
+                    ty: ColumnType::Known(KnownType::Jsonb),
                 },
             ],
         }])
@@ -396,6 +402,7 @@ mod tests {
         assert!(code.contains("amount: numeric = BigDecimal"));
         assert!(code.contains("created_at: timestamptz = DateTime<Utc>"));
         assert!(code.contains("billing_window: daterange = PgRange<NaiveDate>"));
+        assert!(code.contains("audit_payload: json = Value"));
         assert!(code.contains("metadata: jsonb = Value"));
     }
 

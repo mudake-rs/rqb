@@ -45,12 +45,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         grace_period: None,
     };
 
+    // Manual field assignment and derived `Insertable` compose in the same
+    // insert statement.
     let insert_sql = insert(invoices::table())
         .set(invoices::ID.set(invoice_id))
         .values(&new_invoice)
         .returning_all()
         .build()?;
 
+    // `Changeset` keeps partial update DTOs small and skips `None` fields.
     let update_sql = update(invoices::table())
         .patch(&mark_paid)
         .filter(invoices::ID.eq(invoice_id))
@@ -95,8 +98,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(users::ID)
         .build()?;
 
-    // INSERT ... SELECT validates target column count against the select
-    // projection before rendering SQL.
+    // `INSERT ... SELECT` stays typed on both sides and validates target column
+    // count against the select projection before rendering SQL.
     let seed_open_orders_sql = insert(orders::table())
         .column(orders::ID)
         .column(orders::USER_ID)

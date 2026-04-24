@@ -2,6 +2,9 @@
 
 Compile-checked REST service shape for the sqlx-first API.
 
+Execution mode: builds the router and service layer with `connect_lazy`. It
+does not start a server or open a database connection by default.
+
 It shows:
 
 - HTTP DTOs kept separate from database row structs.

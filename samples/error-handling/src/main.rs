@@ -58,12 +58,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Err(rqb::Error::InvalidCteShape { name, .. }) if name == "bad"
     ));
 
-    // This future is not awaited because the focused sample stays database-free.
-    // The function below is the real service shape: execute a statement, let
-    // rqb normalize sqlx errors, and match the structured variant.
+    // The focused sample stays database-free. The future below is created only
+    // to compile-check the real service shape against a live sqlx executor.
     let pool = sqlx::PgPool::connect_lazy("postgres://rqb:rqb@localhost/rqb")?;
-    let duplicate_flow = create_user_and_match_db_error(&pool);
-    drop(duplicate_flow);
+    let duplicate_insert_flow = create_user_and_match_db_error(&pool);
+    drop(duplicate_insert_flow);
 
     println!("structured errors can be matched by variant");
     Ok(())

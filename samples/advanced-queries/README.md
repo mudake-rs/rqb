@@ -3,6 +3,8 @@
 Shows a larger server-owned query with CTEs, joins, lateral subqueries, window
 functions, CASE, aggregate filters, and JSON aggregation.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - A realistic report query can stay server-owned and still be built from typed

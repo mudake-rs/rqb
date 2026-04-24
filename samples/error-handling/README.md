@@ -3,6 +3,9 @@
 Shows structured validation and database error matching without parsing error
 strings.
 
+Execution mode: exercises validation and structured error values locally. The
+database flow is compile-checked but not awaited.
+
 ## What This Shows
 
 - Builder validation errors are returned before SQL rendering.

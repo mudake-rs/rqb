@@ -3,6 +3,8 @@
 Shows CTEs, recursive CTEs, `EXISTS`, `IN (subquery)`, lateral joins, set
 queries, and raw sources with field metadata.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - `try_into_cte(...)` and `try_into_source(...)` infer fields from plain

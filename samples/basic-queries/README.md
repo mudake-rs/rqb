@@ -3,6 +3,8 @@
 Typed fields build parameterized Postgres SQL. Result structs are normal sqlx
 rows when the query is executed.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - `select(users::table())` renders known metadata fields, not `SELECT *`.

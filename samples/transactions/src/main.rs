@@ -18,19 +18,20 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let explicit_future = explicit_transaction(&pool, user_id);
     drop(explicit_future);
 
-    let rendered = update(orders::table())
+    // The rendered statement matches the second helper in the transaction body.
+    let cancel_sql = update(orders::table())
         .set(orders::STATUS.set("canceled"))
         .filter(orders::USER_ID.eq(user_id))
         .filter(orders::STATUS.eq("open"))
         .build()?;
 
     assert_eq!(
-        rendered.sql,
+        cancel_sql.sql,
         "UPDATE \"sample\".\"orders\" SET \"status\" = $1 WHERE (\"user_id\" = $2 AND \"status\" = $3)"
     );
-    assert_eq!(rendered.params.len(), 3);
+    assert_eq!(cancel_sql.params.len(), 3);
 
-    println!("{}", rendered.sql);
+    println!("{}", cancel_sql.sql);
     Ok(())
 }
 
@@ -66,6 +67,7 @@ async fn explicit_transaction(pool: &PgPool, user_id: Uuid) -> rqb::Result<()> {
     let mut tx = pool.begin().await?;
 
     deactivate_user(&mut *tx, user_id).await?;
+    cancel_open_orders(&mut *tx, user_id).await?;
 
     tx.commit().await.map_err(rqb::Error::from)
 }

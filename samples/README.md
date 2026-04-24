@@ -1,51 +1,53 @@
 # rqb Samples
 
-Start here when reading the API. The samples are compile-checked; most focused
-samples also assert the SQL they render, so they double as executable API
-documentation.
+Start here when reading the API. The samples are compile-checked, and the
+focused query samples also assert the SQL they render, so they double as
+executable API documentation.
 
 ## Start Here
 
-1. **See the difference**: [`joins-and-aggregates`](joins-and-aggregates/)
+1. **Simple first**: [`basic-queries`](basic-queries/) shows typed filters,
+   default projection, ordering, and bound parameters.
+2. **See the difference**: [`joins-and-aggregates`](joins-and-aggregates/)
    shows alias handles, aggregate `FILTER`, and `jsonb_agg_object!` in one
    realistic report query.
-2. **Real service shape**: [`rest-api`](rest-api/) shows routes, DTOs,
+3. **Real service shape**: [`rest-api`](rest-api/) shows routes, DTOs,
    services, `PgExecutor`, `tx!`, JSON search, and application pagination.
-3. **Simple first**: [`basic-queries`](basic-queries/) shows typed filters,
-   default projection, ordering, and bound parameters.
 
-## Catalog
+## Reading Order
 
-- [`basic-queries`](basic-queries/): default projection, typed filters, sort,
-  limit, and SQL rendering.
-- [`json-search`](json-search/): server-owned query shape plus safe client
-  filters, sort, limit, and offset.
-- [`writes-and-types`](writes-and-types/): inserts, updates, deletes, exact
-  numeric values, UUIDs, dates, timestamps, JSONB, arrays, and conflict
-  handling.
-- [`transactions`](transactions/): `tx!` plus explicit sqlx transaction control.
-- [`error-handling`](error-handling/): structured validation and database error
-  matching.
-- [`raw-query`](raw-query/): raw SQL escape hatches that still validate bind
-  counts.
-- [`joins-and-aggregates`](joins-and-aggregates/): qualified joined fields,
-  grouped aggregates, `DISTINCT ON`, and nested JSON.
+- [`basic-queries`](basic-queries/): core typed reads. Renders SQL and asserts
+  it.
+- [`json-search`](json-search/): client-controlled filters on top of
+  server-owned query shape. Renders SQL and asserts it.
+- [`writes-and-types`](writes-and-types/): inserts, updates, deletes, write
+  DTOs, conflict handling, and sqlx-backed Postgres types. Renders SQL and
+  asserts it.
+- [`joins-and-aggregates`](joins-and-aggregates/): joins, grouped aggregates,
+  `DISTINCT ON`, and nested JSON. Renders SQL and asserts it.
 - [`cte-and-subqueries`](cte-and-subqueries/): CTEs, recursive CTEs, lateral
-  joins, set queries, and raw sources.
-- [`advanced-queries`](advanced-queries/): a larger server-owned query that
-  combines CTEs, joins, lateral subqueries, windows, CASE, aggregate filters,
-  and JSON aggregation.
+  joins, set queries, and raw sources. Renders SQL and asserts it.
+- [`advanced-queries`](advanced-queries/): denser server-owned report query
+  combining CTEs, joins, windows, CASE, and JSON aggregation. Renders SQL and
+  asserts it.
+- [`raw-query`](raw-query/): raw SQL escape hatches that still validate bind
+  counts. Renders SQL and asserts it.
+- [`error-handling`](error-handling/): validation errors and normalized
+  database errors. No database connection required.
+- [`transactions`](transactions/): `tx!` plus explicit sqlx transaction
+  control. Renders SQL and compile-checks transaction flows without connecting.
 - [`custom-types`](custom-types/): raw-only schema metadata for extension types
-  outside the typed subset.
+  outside the typed subset. Renders SQL and asserts it.
 - [`rest-api`](rest-api/): service-layer REST shape with pool execution,
-  closure-style transactions, and JSON search.
+  closure-style transactions, and JSON search. Builds the router without
+  listening or connecting.
 - [`schema`](schema/): shared generated schema crate used by the runnable
   samples.
 
 ## Running Against A Database
 
 The focused samples avoid real connections and either assert rendered SQL or
-exercise validation/error paths. `rest-api` uses `connect_lazy`, so it is
+exercise validation and error paths. `rest-api` uses `connect_lazy`, so it is
 compile-checked without a running database.
 
 To run service code against a real Postgres instance, start the sample database
@@ -56,8 +58,9 @@ make db-up
 DATABASE_URL=postgres://rqb:rqb@localhost:55432/rqb cargo run --manifest-path samples/rest-api/Cargo.toml
 ```
 
-The focused samples intentionally do not connect: they keep CI fast and make
-the rendered SQL visible. `rest-api` shows the full executed service pattern.
+The focused samples intentionally do not connect: they keep CI fast and keep
+the rendered SQL visible. `rest-api` shows the full service shape, while the
+focused samples stay small enough to read in one sitting.
 
 Sample comments call out the non-obvious pieces: default projections are
 metadata-driven, alias handles remove repeated `.at("alias")` calls, raw sources

@@ -3,6 +3,8 @@
 Shows qualified joined fields, grouped aggregates, `DISTINCT ON`, and nested
 JSON aggregation.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - `let u = users::alias("u")` removes repeated string aliases in joins.

@@ -3,6 +3,9 @@
 Shows the preferred `tx!` closure pattern plus explicit sqlx `begin` / `commit`
 for advanced transaction control.
 
+Execution mode: renders one update statement and compile-checks the real
+transaction flows without opening a database connection.
+
 ## What This Shows
 
 - `tx!(&pool, |conn| { ... })` runs several async statements in one transaction.

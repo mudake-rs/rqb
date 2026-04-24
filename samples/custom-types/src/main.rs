@@ -17,6 +17,8 @@ rqb::schema! {
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Even without typed extension support, generated metadata is enough for a
+    // useful default projection.
     let default_projection = select(vector_documents::table()).build()?;
     assert_eq!(
         default_projection.sql,
@@ -44,14 +46,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let query_text = "rust postgres";
     let search_index = vector_documents::SEARCH_INDEX_META.expr();
-    let query = plainto_tsquery(query_text);
+    let ts_query = plainto_tsquery(query_text);
     let full_text = select(vector_documents::table())
         // `.item(...)` starts an explicit projection; default fields are not
         // selected unless they are added with `.column(...)`.
         .column(vector_documents::ID)
-        .item(ts_rank(search_index.clone(), query.clone()).alias("rank"))
-        .filter(search_index.predicate("@@", query.clone()))
-        .order_desc(ts_rank(vector_documents::SEARCH_INDEX_META.expr(), query))
+        .item(ts_rank(search_index.clone(), ts_query.clone()).alias("rank"))
+        .filter(search_index.predicate("@@", ts_query.clone()))
+        .order_desc(ts_rank(vector_documents::SEARCH_INDEX_META.expr(), ts_query))
         .build()?;
 
     assert_eq!(

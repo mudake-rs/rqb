@@ -3,6 +3,8 @@
 Shows raw SQL binds, escaped question marks, raw sources, and raw predicates
 without giving up bind-count validation.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - `raw("... ? ...").bind(value)` renders `$N` placeholders in order.

@@ -4,6 +4,8 @@ Shows unknown Postgres types as raw-only schema metadata. They stay usable in
 server-owned raw SQL while typed `Field<T>` constants are generated only for
 known sqlx-supported types.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - Unknown extension types still appear in default projection metadata.

@@ -3,6 +3,8 @@
 Writes use typed field assignments. Any Rust type supported by sqlx for
 Postgres can be bound through `Param::typed` or `Field<T>`.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - `Insertable` maps DTO fields to generated schema fields without a serde JSON

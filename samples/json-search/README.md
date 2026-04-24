@@ -3,6 +3,8 @@
 `SearchRequest` accepts client filters, sort, limit, and offset. Rust still owns
 the table, projection, joins, raw SQL, and server filters.
 
+Execution mode: renders SQL and asserts it. No database connection is opened.
+
 ## What This Shows
 
 - JSON requests compile into the same typed predicate AST as Rust builders.

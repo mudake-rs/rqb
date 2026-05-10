@@ -28,10 +28,7 @@ impl ColumnConflictBuilder {
     }
 
     /// Finishes the conflict clause with `DO UPDATE SET`.
-    pub fn do_update_set<I>(self, assignments: I) -> Insert
-    where
-        I: IntoIterator<Item = Assignment>,
-    {
+    pub fn do_update_set(self, assignments: impl IntoAssignments) -> Insert {
         finish_conflict(
             self.insert,
             column_target(self.fields, self.predicate),
@@ -40,10 +37,11 @@ impl ColumnConflictBuilder {
     }
 
     /// Finishes the conflict clause with `DO UPDATE SET ... WHERE`.
-    pub fn do_update_set_where<I>(self, assignments: I, filter: BoolExpr) -> Insert
-    where
-        I: IntoIterator<Item = Assignment>,
-    {
+    pub fn do_update_set_where(
+        self,
+        assignments: impl IntoAssignments,
+        filter: BoolExpr,
+    ) -> Insert {
         finish_conflict(
             self.insert,
             column_target(self.fields, self.predicate),
@@ -63,10 +61,7 @@ impl ConstraintConflictBuilder {
     }
 
     /// Finishes the constraint conflict clause with `DO UPDATE SET`.
-    pub fn do_update_set<I>(self, assignments: I) -> Insert
-    where
-        I: IntoIterator<Item = Assignment>,
-    {
+    pub fn do_update_set(self, assignments: impl IntoAssignments) -> Insert {
         finish_conflict(
             self.insert,
             ConflictTarget::Constraint(self.constraint),
@@ -75,10 +70,11 @@ impl ConstraintConflictBuilder {
     }
 
     /// Finishes the constraint conflict clause with `DO UPDATE SET ... WHERE`.
-    pub fn do_update_set_where<I>(self, assignments: I, filter: BoolExpr) -> Insert
-    where
-        I: IntoIterator<Item = Assignment>,
-    {
+    pub fn do_update_set_where(
+        self,
+        assignments: impl IntoAssignments,
+        filter: BoolExpr,
+    ) -> Insert {
         finish_conflict(
             self.insert,
             ConflictTarget::Constraint(self.constraint),
@@ -91,12 +87,9 @@ fn column_target(fields: Vec<Meta>, predicate: Option<Box<BoolExpr>>) -> Conflic
     ConflictTarget::Columns { fields, predicate }
 }
 
-fn update_action(
-    assignments: impl IntoIterator<Item = Assignment>,
-    filter: Option<BoolExpr>,
-) -> ConflictAction {
+fn update_action(assignments: impl IntoAssignments, filter: Option<BoolExpr>) -> ConflictAction {
     ConflictAction::DoUpdate {
-        assignments: assignments.into_iter().collect(),
+        assignments: assignments.into_assignments(),
         filter: filter.map(Box::new),
     }
 }

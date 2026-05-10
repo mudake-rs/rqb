@@ -9,7 +9,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 
 - `Insertable` maps DTO fields to generated schema fields without a serde JSON
   bridge.
-- `Field<T>::set(...)` binds values through sqlx-supported Postgres types.
+- `Field<T>::set(...)` binds values through sqlx-supported Postgres types;
+  `set_many((...))` batches manual assignments without losing field metadata.
 - `returning_all()` uses generated metadata for explicit `RETURNING` columns.
 - `on_conflict(...).do_update_set(...)` keeps conflict target and update
   assignments structured.

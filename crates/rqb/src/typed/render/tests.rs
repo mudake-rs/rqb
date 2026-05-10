@@ -382,6 +382,39 @@ fn write_constructors_use_field_t_assignments() {
 }
 
 #[test]
+fn write_assignment_batches_accept_tuples() {
+    let insert_sql = insert(users())
+        .set_many((
+            ID.set(1),
+            EMAIL.set("old@example.com".to_owned()),
+            EMAIL.set("new@example.com".to_owned()),
+        ))
+        .returning(ID)
+        .build()
+        .unwrap();
+
+    let update_sql = update(users())
+        .set_many((
+            EMAIL.set_expr(EMAIL.expr().op("||", "@example.com")),
+            ID.set(2),
+        ))
+        .filter(ID.eq(1))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        insert_sql.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, $2) RETURNING \"id\""
+    );
+    assert_eq!(
+        update_sql.sql,
+        "UPDATE \"public\".\"app_users\" SET \"email_address\" = (\"email_address\" || $1), \"id\" = $2 WHERE \"id\" = $3"
+    );
+    assert_eq!(insert_sql.params.len(), 2);
+    assert_eq!(update_sql.params.len(), 3);
+}
+
+#[test]
 fn pg18_returning_old_new_and_computed_assignments_render() {
     let built = update(users())
         .set(EMAIL.set_expr(EMAIL.expr().op("||", "@new.example")))
@@ -541,12 +574,11 @@ fn insert_from_select_default_projection_ignores_joined_fields() {
 #[test]
 fn insert_on_conflict_renders_update_and_do_nothing_actions() {
     let update = insert(users())
-        .set(ID.set(1))
-        .set(EMAIL.set("new@example.com".to_owned()))
+        .set_many((ID.set(1), EMAIL.set("new@example.com".to_owned())))
         .on_conflict(ID)
         .target_where(ID.gt(0))
         .do_update_set_where(
-            [EMAIL.set_excluded()],
+            (EMAIL.set_excluded(), ID.set(2)),
             EMAIL.ne("old@example.com".to_owned()),
         )
         .returning(ID)
@@ -555,9 +587,9 @@ fn insert_on_conflict_renders_update_and_do_nothing_actions() {
 
     assert_eq!(
         update.sql,
-        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, $2) ON CONFLICT (\"id\") WHERE \"id\" > $3 DO UPDATE SET \"email_address\" = EXCLUDED.\"email_address\" WHERE \"email_address\" <> $4 RETURNING \"id\""
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, $2) ON CONFLICT (\"id\") WHERE \"id\" > $3 DO UPDATE SET \"email_address\" = EXCLUDED.\"email_address\", \"id\" = $4 WHERE \"email_address\" <> $5 RETURNING \"id\""
     );
-    assert_eq!(update.params.len(), 4);
+    assert_eq!(update.params.len(), 5);
 
     let nothing = insert(users())
         .set(ID.set(1))
@@ -1200,16 +1232,16 @@ fn cte_hints_function_sources_and_merge_render() {
         ID.at("u").eq_field(ORDER_USER_ID.at("incoming")),
     )
     .when_matched_if(TOTAL.at("incoming").gt(1000))
-    .update([EMAIL.set("merged@example.com".to_owned())])
+    .update((EMAIL.set("merged@example.com".to_owned()), ID.set(9)))
     .when_not_matched()
-    .insert([ID.set(1), EMAIL.set("new@example.com".to_owned())])
+    .insert((ID.set(1), EMAIL.set("new@example.com".to_owned())))
     .returning_item(SelectItem::new(ID.at("u").expr()));
 
     let built = merge.build().unwrap();
 
     assert_eq!(
         built.sql,
-        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"incoming\" ON \"u\".\"id\" = \"incoming\".\"user_id\" WHEN MATCHED AND \"incoming\".\"total_cents\" > $1 THEN UPDATE SET \"email_address\" = $2 WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($3, $4) RETURNING \"u\".\"id\""
+        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"incoming\" ON \"u\".\"id\" = \"incoming\".\"user_id\" WHEN MATCHED AND \"incoming\".\"total_cents\" > $1 THEN UPDATE SET \"email_address\" = $2, \"id\" = $3 WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($4, $5) RETURNING \"u\".\"id\""
     );
-    assert_eq!(built.params.len(), 4);
+    assert_eq!(built.params.len(), 5);
 }

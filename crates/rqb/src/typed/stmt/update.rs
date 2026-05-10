@@ -18,6 +18,12 @@ impl Update {
         self
     }
 
+    /// Adds or replaces multiple `SET` assignments.
+    pub fn set_many(mut self, assignments: impl IntoAssignments) -> Self {
+        extend_assignments(&mut self.assignments, assignments.into_assignments());
+        self
+    }
+
     /// Applies assignments produced by a partial update [`Changeset`] DTO.
     pub fn patch(mut self, changes: impl Changeset) -> Self {
         extend_assignments(&mut self.assignments, changes.changeset_assignments());

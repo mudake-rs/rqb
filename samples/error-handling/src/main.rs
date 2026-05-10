@@ -66,10 +66,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
 async fn create_user_and_match_db_error<'e>(db: impl PgExecutor<'e>) -> rqb::Result<()> {
     match insert(users::table())
-        .set(users::ID.set(Uuid::nil()))
-        .set(users::EMAIL.set("ada@example.com"))
-        .set(users::STATUS.set("active"))
-        .set(users::DISPLAY_NAME.set("Ada"))
+        .set_many((
+            users::ID.set(Uuid::nil()),
+            users::EMAIL.set("ada@example.com"),
+            users::STATUS.set("active"),
+            users::DISPLAY_NAME.set("Ada"),
+        ))
         .execute(db)
         .await
     {

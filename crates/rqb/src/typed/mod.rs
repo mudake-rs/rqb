@@ -58,8 +58,8 @@ pub use source::{
 pub use stmt::{
     Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields,
     ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert,
-    Insertable, IntoSelectItems, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction,
-    MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
+    Insertable, IntoAssignments, IntoSelectItems, LockMode, LockWait, MatchedMergeBuilder, Merge,
+    MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
     OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt,
     Update, delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw,
     select, union, union_all, update,

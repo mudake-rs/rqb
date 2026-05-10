@@ -113,13 +113,13 @@ impl Merge {
 
 impl MatchedMergeBuilder {
     /// Finishes this branch with `UPDATE SET`.
-    pub fn update(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
+    pub fn update(self, assignments: impl IntoAssignments) -> Merge {
         finish_merge_action(
             self.merge,
             MergeAction::Update {
                 when: MergeWhen::Matched,
                 condition: self.condition,
-                assignments: assignments.into(),
+                assignments: assignments.into_assignments(),
             },
         )
     }
@@ -149,12 +149,12 @@ impl MatchedMergeBuilder {
 
 impl NotMatchedMergeBuilder {
     /// Finishes this branch with `INSERT`.
-    pub fn insert(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
+    pub fn insert(self, assignments: impl IntoAssignments) -> Merge {
         finish_merge_action(
             self.merge,
             MergeAction::Insert {
                 condition: self.condition,
-                assignments: assignments.into(),
+                assignments: assignments.into_assignments(),
             },
         )
     }
@@ -173,13 +173,13 @@ impl NotMatchedMergeBuilder {
 
 impl NotMatchedBySourceMergeBuilder {
     /// Finishes this branch with `UPDATE SET`.
-    pub fn update(self, assignments: impl Into<Vec<Assignment>>) -> Merge {
+    pub fn update(self, assignments: impl IntoAssignments) -> Merge {
         finish_merge_action(
             self.merge,
             MergeAction::Update {
                 when: MergeWhen::NotMatchedBySource,
                 condition: self.condition,
-                assignments: assignments.into(),
+                assignments: assignments.into_assignments(),
             },
         )
     }

@@ -25,6 +25,17 @@ impl Insert {
         self
     }
 
+    /// Adds multiple column assignments. Later assignments for the same
+    /// database column replace earlier values.
+    pub fn set_many(mut self, assignments: impl IntoAssignments) -> Self {
+        extend_insert_assignments(
+            &mut self.columns,
+            &mut self.assignments,
+            assignments.into_assignments(),
+        );
+        self
+    }
+
     /// Adds assignments produced by an [`Insertable`] DTO.
     pub fn values(mut self, values: impl Insertable) -> Self {
         extend_insert_assignments(

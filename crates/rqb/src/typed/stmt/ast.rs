@@ -111,6 +111,70 @@ pub struct Assignment {
     pub value: ValueExpr,
 }
 
+/// Converts one or more write assignments into a vector.
+///
+/// This supports tuple syntax for heterogeneous manual assignments:
+/// `insert(users::table()).set_many((users::ID.set(id), users::EMAIL.set(email)))`.
+pub trait IntoAssignments {
+    /// Converts this value into write assignments.
+    fn into_assignments(self) -> Vec<Assignment>;
+}
+
+impl IntoAssignments for Assignment {
+    fn into_assignments(self) -> Vec<Assignment> {
+        vec![self]
+    }
+}
+
+impl IntoAssignments for &Assignment {
+    fn into_assignments(self) -> Vec<Assignment> {
+        vec![self.clone()]
+    }
+}
+
+impl IntoAssignments for Vec<Assignment> {
+    fn into_assignments(self) -> Vec<Assignment> {
+        self
+    }
+}
+
+impl IntoAssignments for &[Assignment] {
+    fn into_assignments(self) -> Vec<Assignment> {
+        self.to_vec()
+    }
+}
+
+impl<const N: usize> IntoAssignments for [Assignment; N] {
+    fn into_assignments(self) -> Vec<Assignment> {
+        self.into_iter().collect()
+    }
+}
+
+macro_rules! impl_assignment_tuple {
+    ($($name:ident),+ $(,)?) => {
+        impl<$($name),+> IntoAssignments for ($($name,)+)
+        where
+            $($name: IntoAssignments,)+
+        {
+            #[allow(non_snake_case)]
+            fn into_assignments(self) -> Vec<Assignment> {
+                let ($($name,)+) = self;
+                let mut assignments = Vec::new();
+                $(assignments.extend($name.into_assignments());)+
+                assignments
+            }
+        }
+    };
+}
+
+impl_assignment_tuple!(A, B);
+impl_assignment_tuple!(A, B, C);
+impl_assignment_tuple!(A, B, C, D);
+impl_assignment_tuple!(A, B, C, D, E);
+impl_assignment_tuple!(A, B, C, D, E, F);
+impl_assignment_tuple!(A, B, C, D, E, F, G);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H);
+
 /// Target of an `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 #[must_use]

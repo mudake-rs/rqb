@@ -73,26 +73,30 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Conflict targets accept one field, a tuple of fields, or a named
     // constraint. Predicates are allowed only for column targets.
     let upsert_user_sql = insert(users::table())
-        .set(users::ID.set(Uuid::nil()))
-        .set(users::EMAIL.set("ada@example.com"))
-        .set(users::DISPLAY_NAME.set("Ada"))
-        .set(users::STATUS.set("active"))
+        .set_many((
+            users::ID.set(Uuid::nil()),
+            users::EMAIL.set("ada@example.com"),
+            users::DISPLAY_NAME.set("Ada"),
+            users::STATUS.set("active"),
+        ))
         .on_conflict(users::EMAIL)
         .target_where(users::ACTIVE.eq(true))
         .do_update_set_where(
-            [
+            (
                 users::DISPLAY_NAME.set_excluded(),
                 users::STATUS.set("active"),
-            ],
+            ),
             users::ACTIVE.eq(true),
         )
         .returning_all()
         .build()?;
 
     let ignore_duplicate_sql = insert(users::table())
-        .set(users::ID.set(Uuid::nil()))
-        .set(users::EMAIL.set("ada@example.com"))
-        .set(users::DISPLAY_NAME.set("Ada"))
+        .set_many((
+            users::ID.set(Uuid::nil()),
+            users::EMAIL.set("ada@example.com"),
+            users::DISPLAY_NAME.set("Ada"),
+        ))
         .on_conflict_constraint("app_users_email_key")
         .do_nothing()
         .returning(users::ID)

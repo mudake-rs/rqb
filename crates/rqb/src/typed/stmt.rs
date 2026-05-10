@@ -22,9 +22,10 @@ mod validate;
 pub use ast::{
     Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields,
     ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert,
-    Insertable, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen,
-    NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition, OrderDirection,
-    OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt, Update,
+    Insertable, IntoAssignments, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction,
+    MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
+    OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt,
+    Update,
 };
 pub use constructors::{
     delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw, select,

@@ -130,8 +130,8 @@ let rows = select(&u)
 
 Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
-`FILTER`, window functions, array/jsonb/range predicates, `insert(...).from_select(...)`,
-`on_conflict((col_a, col_b)).do_update_set(...)`, and
+`FILTER`, window functions, array/jsonb/range predicates, `set_many((...))`,
+`insert(...).from_select(...)`, `on_conflict((col_a, col_b)).do_update_set(...)`, and
 `merge_into(...).when_matched_if(...).update(...)`. REST-style pagination stays
 in application code; the REST sample shows `limit` / `offset` plus
 `Select::count()` for a matching count query.
@@ -203,9 +203,11 @@ serde write bridge.
 
 ```rust
 let created = insert(schema::users::table())
-    .set(schema::users::ID.set(user_id))
-    .set(schema::users::EMAIL.set("ada@example.com"))
-    .set(schema::users::STATUS.set("active"))
+    .set_many((
+        schema::users::ID.set(user_id),
+        schema::users::EMAIL.set("ada@example.com"),
+        schema::users::STATUS.set("active"),
+    ))
     .returning(schema::users::ID)
     .fetch_one_scalar::<Uuid>(&pool)
     .await?;
@@ -267,8 +269,10 @@ roll back together:
 ```rust
 tx!(&pool, |conn| {
     let created_id = insert(schema::users::table())
-        .set(schema::users::ID.set(user_id))
-        .set(schema::users::EMAIL.set("ada@example.com"))
+        .set_many((
+            schema::users::ID.set(user_id),
+            schema::users::EMAIL.set("ada@example.com"),
+        ))
         .returning(schema::users::ID)
         .fetch_one_scalar::<Uuid>(conn)
         .await?;

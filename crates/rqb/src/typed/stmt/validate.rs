@@ -56,13 +56,26 @@ impl Stmt {
             Self::Raw(raw_stmt) => raw_stmt.validate(),
         }
     }
+
+    pub(crate) fn validate_query_statement(&self, message: &'static str) -> Result<()> {
+        match self {
+            Self::Select(_) | Self::Set(_) | Self::Raw(_) => self.validate(),
+            Self::Insert(_) | Self::Update(_) | Self::Delete(_) | Self::Merge(_) => {
+                Err(Error::InvalidSelectShape { message })
+            }
+        }
+    }
 }
 
 impl SetQuery {
     /// Validates both sides and trailing clauses of this set query.
     pub fn validate(&self) -> Result<()> {
-        self.left.validate()?;
-        self.right.validate()?;
+        self.left.validate_query_statement(
+            "set query operands must be SELECT, set, or raw statements",
+        )?;
+        self.right.validate_query_statement(
+            "set query operands must be SELECT, set, or raw statements",
+        )?;
         for item in &self.order {
             item.validate()?;
         }
@@ -368,12 +381,17 @@ impl Stmt {
     pub(crate) fn projection_count(&self) -> Option<usize> {
         match self {
             Self::Select(select) => select.projection_count(),
-            Self::Set(_)
-            | Self::Insert(_)
-            | Self::Update(_)
-            | Self::Delete(_)
-            | Self::Merge(_)
-            | Self::Raw(_) => None,
+            Self::Insert(insert) => {
+                (!insert.returning.is_empty()).then_some(insert.returning.len())
+            }
+            Self::Update(update) => {
+                (!update.returning.is_empty()).then_some(update.returning.len())
+            }
+            Self::Delete(delete) => {
+                (!delete.returning.is_empty()).then_some(delete.returning.len())
+            }
+            Self::Merge(merge) => (!merge.returning.is_empty()).then_some(merge.returning.len()),
+            Self::Set(_) | Self::Raw(_) => None,
         }
     }
 }

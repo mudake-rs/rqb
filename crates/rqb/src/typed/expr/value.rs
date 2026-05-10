@@ -52,6 +52,18 @@ impl Meta {
     }
 }
 
+impl From<Meta> for ValueExpr {
+    fn from(meta: Meta) -> Self {
+        meta.expr()
+    }
+}
+
+impl From<&Meta> for ValueExpr {
+    fn from(meta: &Meta) -> Self {
+        (*meta).expr()
+    }
+}
+
 impl ValueExpr {
     /// Wraps a typed Rust value as a SQL bind parameter expression.
     pub fn param<T>(value: T) -> Self

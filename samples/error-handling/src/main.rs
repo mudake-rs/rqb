@@ -47,12 +47,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             if field == "metadata" && operator == "gt"
     ));
 
-    let bad_cte = cte(
-        "bad",
-        select(orders::table()).column(orders::ID),
-        vec![*orders::ID.meta],
-    )
-    .columns(["id", "extra"]);
+    let bad_cte = cte("bad", select(orders::table()).column(orders::ID), orders::ID)
+        .columns(["id", "extra"]);
     assert!(matches!(
         select(bad_cte.source()).with(bad_cte).build(),
         Err(rqb::Error::InvalidCteShape { name, .. }) if name == "bad"

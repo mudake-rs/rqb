@@ -19,7 +19,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "SELECT ?::uuid AS id, ?::bigint AS total_cents",
         "recent",
         vec![Param::typed(Uuid::nil()), Param::typed(5_000_i64)],
-        vec![*orders::ID.meta, *orders::TOTAL_CENTS.meta],
+        (orders::ID, orders::TOTAL_CENTS),
     );
     let mixed = select(raw_orders)
         .column(orders::ID.at("recent"))

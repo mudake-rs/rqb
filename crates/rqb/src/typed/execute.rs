@@ -214,7 +214,7 @@ impl Select {
         count.offset = None;
         count.fetch = None;
         count.lock = None;
-        select(subquery(count, "rqb_count", Vec::new()))
+        select(subquery(count, "rqb_count", ()))
             .expr(count_all())
             .build()
     }

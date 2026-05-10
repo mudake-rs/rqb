@@ -31,7 +31,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // Raw-only extension columns can still participate in server-owned custom
     // operators when the SQL shape is known by the application.
-    let embedding = vector_documents::EMBEDDING_META.expr();
+    let embedding = ValueExpr::from(vector_documents::EMBEDDING_META);
     let probe = param("[0.1,0.2,0.3]".to_owned()).cast("vector");
     let vector_search = select(vector_documents::table())
         .filter(embedding.op("<->", probe).lt(0.5_f64))
@@ -45,7 +45,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert!(vector_search.cacheable);
 
     let query_text = "rust postgres";
-    let search_index = vector_documents::SEARCH_INDEX_META.expr();
+    let search_index = ValueExpr::from(vector_documents::SEARCH_INDEX_META);
     let ts_query = plainto_tsquery(query_text);
     let full_text = select(vector_documents::table())
         // `.item(...)` starts an explicit projection; default fields are not
@@ -53,7 +53,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .column(vector_documents::ID)
         .item(ts_rank(search_index.clone(), ts_query.clone()).alias("rank"))
         .filter(search_index.predicate("@@", ts_query.clone()))
-        .order_desc(ts_rank(vector_documents::SEARCH_INDEX_META.expr(), ts_query))
+        .order_desc(ts_rank(vector_documents::SEARCH_INDEX_META, ts_query))
         .build()?;
 
     assert_eq!(

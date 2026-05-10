@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rqb::dsl::{case, count_all, json_get_text, param, row_number, sum, window};
+use rqb::dsl::{case, count_all, json_get_text, param, row_number, sum, true_, window};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::events;
@@ -11,7 +11,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let last_event_at = rqb::field!("last_event_at": timestamptz => DateTime<Utc>, ordered);
 
     // `try_into_cte` infers exposed fields from explicit field projections, so
-    // common CTEs do not repeat `vec![*ID.meta, ...]`.
+    // common CTEs do not repeat explicit field metadata.
     let active_users = select(users::table())
         .column(users::ID)
         .column(users::EMAIL)
@@ -27,7 +27,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .order_desc(events::CREATED_AT)
             .limit(1),
         "latest_event",
-        vec![*last_event_at.meta],
+        last_event_at,
     );
 
     // CASE is a value expression, so it can be selected, aliased, grouped, or
@@ -39,7 +39,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let built = select(active_users_source)
         .with(active_users)
         .join(&o, au.id().eq_field(o.user_id()))
-        .left_join_lateral(latest_event, BoolExpr::Constant(true))
+        .left_join_lateral(latest_event, true_())
         .column(au.email())
         .agg(sum(o.total_cents()).alias("gross_cents"))
         .agg(

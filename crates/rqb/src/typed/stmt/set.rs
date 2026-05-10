@@ -120,7 +120,7 @@ impl SetQuery {
     }
 
     /// Turns this set query into a subquery source with explicit fields.
-    pub fn into_source(self, alias: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
+    pub fn into_source(self, alias: impl Into<String>, fields: impl IntoFieldMetas) -> Source {
         subquery(self, alias, fields)
     }
 }

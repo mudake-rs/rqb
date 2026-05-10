@@ -1,6 +1,6 @@
 pub(super) use crate::typed::{
-    BoolExpr, Cte, Field, FieldRef, Join, JoinKind, Meta, Param, Params, Source, ValueExpr, cte,
-    raw as raw_sql, subquery,
+    BindValue, BoolExpr, Cte, Field, FieldRef, IntoFieldMetas, Join, JoinKind, Meta, Param, Params,
+    Source, ValueExpr, cte, raw as raw_sql, subquery,
 };
 pub(super) use crate::{Error, Result};
 

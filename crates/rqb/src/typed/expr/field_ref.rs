@@ -129,6 +129,46 @@ impl<T> FieldRef<T> {
         self.compare_field(BoolOp::IsNotDistinctFrom, right)
     }
 
+    /// Builds an equality predicate against a value expression.
+    pub fn eq_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::Eq, right)
+    }
+
+    /// Builds an inequality predicate against a value expression.
+    pub fn ne_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::Ne, right)
+    }
+
+    /// Builds a greater-than predicate against a value expression.
+    pub fn gt_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::Gt, right)
+    }
+
+    /// Builds a greater-than-or-equal predicate against a value expression.
+    pub fn gte_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::Gte, right)
+    }
+
+    /// Builds a less-than predicate against a value expression.
+    pub fn lt_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::Lt, right)
+    }
+
+    /// Builds a less-than-or-equal predicate against a value expression.
+    pub fn lte_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::Lte, right)
+    }
+
+    /// Builds `IS DISTINCT FROM` against a value expression.
+    pub fn is_distinct_from_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::IsDistinctFrom, right)
+    }
+
+    /// Builds `IS NOT DISTINCT FROM` against a value expression.
+    pub fn is_not_distinct_from_expr(self, right: impl Into<ValueExpr>) -> BoolExpr {
+        self.compare_expr(BoolOp::IsNotDistinctFrom, right)
+    }
+
     fn compare_field<R>(self, op: BoolOp, right: R) -> BoolExpr
     where
         R: IntoFieldRef<T>,
@@ -137,6 +177,14 @@ impl<T> FieldRef<T> {
             left: self.expr(),
             op,
             right: right.into_field_ref().expr(),
+        }
+    }
+
+    fn compare_expr(self, op: BoolOp, right: impl Into<ValueExpr>) -> BoolExpr {
+        BoolExpr::Compare {
+            left: self.expr(),
+            op,
+            right: right.into(),
         }
     }
 }

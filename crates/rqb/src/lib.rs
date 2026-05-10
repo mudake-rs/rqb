@@ -50,15 +50,16 @@ pub use typed::{
     Assignment, BindValue, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
     ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
     ConstraintConflictBuilder, Cte, CteMaterialization, Delete, FetchClause, Field, FieldRef,
-    FrameBound, FrameExclude, GroupByItem, Insert, Insertable, IntoFieldRef, Join, JoinKind,
-    JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta,
-    NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
+    FrameBound, FrameExclude, GroupByItem, Insert, Insertable, IntoFieldMetas, IntoFieldRef, Join,
+    JoinKind, JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen,
+    Meta, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
     OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, RawStmt, RowLock,
     ScalarValue, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, Select,
     SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, ValueOp,
     WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec, case, cte,
-    cte_ref, delete_from, except, except_all, function_source, insert, intersect, intersect_all,
-    merge_into, raw, raw_source, select, subquery, table, union, union_all, update, view,
+    cte_ref, delete_from, except, except_all, false_, function_source, insert, intersect,
+    intersect_all, merge_into, raw, raw_source, select, subquery, table, true_, union, union_all,
+    update, view,
 };
 pub use uuid;
 
@@ -130,6 +131,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// SQL expression helpers that are useful on demand but too broad for the prelude.
 pub mod dsl {
+    /// Boolean predicate helper functions.
+    pub mod bools {
+        pub use crate::typed::{and, exists, false_, not, or, true_};
+    }
+
     /// Aggregate helper functions.
     pub mod agg {
         pub use crate::typed::{
@@ -217,7 +223,7 @@ pub mod dsl {
         array_to_string, avg, bool_and, bool_or, btrim, cardinality, case, ceil, char_length,
         coalesce, concat, concat_op, concat_ws, count, count_all, count_distinct, cume_dist,
         current_date, current_row, current_timestamp, date_trunc, dense_rank, every, exists, exp,
-        extract, first_value, floor, following, function, greatest, groups, json, json_agg,
+        extract, false_, first_value, floor, following, function, greatest, groups, json, json_agg,
         json_exists, json_get, json_get_text, json_path, json_path_text, json_query, json_scalar,
         json_serialize, json_value, jsonb_agg_object, jsonb_array_elements, jsonb_build_array,
         jsonb_build_object, jsonb_delete, jsonb_each, jsonb_insert, jsonb_object,
@@ -230,7 +236,7 @@ pub mod dsl {
         replace, right, round, row, row_number, rows, rpad, rtrim, scalar_subquery, similar_to,
         slice, split_part, sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array,
         subscript, substring, sum, timezone, to_json, to_jsonb, to_tsquery, to_tsvector,
-        to_tsvector_config, trim, trunc, ts_match, ts_rank, ts_rank_cd, unbounded_following,
+        to_tsvector_config, trim, true_, trunc, ts_match, ts_rank, ts_rank_cd, unbounded_following,
         unbounded_preceding, unnest, upper, uuid_extract_timestamp, uuid_extract_version, uuidv7,
         var_pop, var_samp, variance, websearch_to_tsquery, window,
     };
@@ -246,7 +252,7 @@ pub mod prelude {
         ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
         ConstraintConflictBuilder, Cte, CteMaterialization, DbErrorInfo, DbErrorPosition, Delete,
         Error, FetchClause, Field, FieldRef, FrameBound, FrameExclude, GroupByItem, Insert,
-        Insertable, IntoFieldRef, Join, JoinKind, JsonKind, LockMode, LockWait,
+        Insertable, IntoFieldMetas, IntoFieldRef, Join, JoinKind, JsonKind, LockMode, LockWait,
         MatchedMergeBuilder, Merge, MergeAction, MergeWhen, Meta, NotMatchedBySourceMergeBuilder,
         NotMatchedMergeBuilder, NullsPosition, OffsetWindowFunctionBuilder, OpSet, OrderDirection,
         OrderItem, Param, Params, PgConnection, PgExecutor, PgPool, RawStmt, Result, RowLock,
@@ -333,7 +339,7 @@ mod tests {
             "SELECT ?::int8 AS item_count",
             "counts",
             vec![crate::Param::typed(1_i64)],
-            vec![*item_count.meta],
+            item_count,
         );
         let built = crate::select(source)
             .column(item_count.at("counts"))

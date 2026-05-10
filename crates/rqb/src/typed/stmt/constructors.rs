@@ -79,6 +79,30 @@ impl From<SetQuery> for Stmt {
     }
 }
 
+impl From<Insert> for Stmt {
+    fn from(insert: Insert) -> Self {
+        Self::Insert(Box::new(insert))
+    }
+}
+
+impl From<Update> for Stmt {
+    fn from(update: Update) -> Self {
+        Self::Update(Box::new(update))
+    }
+}
+
+impl From<Delete> for Stmt {
+    fn from(delete: Delete) -> Self {
+        Self::Delete(Box::new(delete))
+    }
+}
+
+impl From<RawStmt> for Stmt {
+    fn from(raw: RawStmt) -> Self {
+        Self::Raw(raw)
+    }
+}
+
 impl SetOperator {
     /// Returns the SQL operator token.
     pub const fn as_sql(self) -> &'static str {

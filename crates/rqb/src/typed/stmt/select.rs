@@ -38,7 +38,7 @@ impl Select {
     }
 
     /// Turns this select into a subquery source with explicit exposed fields.
-    pub fn into_source(self, alias: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
+    pub fn into_source(self, alias: impl Into<String>, fields: impl IntoFieldMetas) -> Source {
         subquery(self, alias, fields)
     }
 
@@ -51,7 +51,7 @@ impl Select {
     }
 
     /// Turns this select into a CTE with explicit exposed fields.
-    pub fn into_cte(self, name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Cte {
+    pub fn into_cte(self, name: impl Into<String>, fields: impl IntoFieldMetas) -> Cte {
         cte(name, self, fields)
     }
 

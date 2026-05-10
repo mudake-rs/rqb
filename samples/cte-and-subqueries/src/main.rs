@@ -1,4 +1,4 @@
-use rqb::dsl::{count_all, exists, scalar_subquery};
+use rqb::dsl::{count_all, exists, scalar_subquery, true_};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::order_items as items;
@@ -36,12 +36,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // still validated and CTE field metadata defines what the outer query sees.
     let nums = cte(
         "nums",
-        Stmt::Raw(
-            raw("SELECT ?::int4 AS n UNION ALL SELECT n + 1 FROM nums WHERE n < ?")
-                .bind(1_i32)
-                .bind(3_i32),
-        ),
-        vec![*n.meta],
+        raw("SELECT ?::int4 AS n UNION ALL SELECT n + 1 FROM nums WHERE n < ?")
+            .bind(1_i32)
+            .bind(3_i32),
+        n,
     )
     .recursive();
     let recursive = select(nums.source()).with(nums).column(n).build()?;
@@ -59,11 +57,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .agg(count_all().alias("item_count"))
             .filter(items::ORDER_ID.eq_field(o.id())),
         "item_counts",
-        vec![*item_count.meta],
+        item_count,
     );
     let lateral = select(&o)
         .column(o.id())
-        .left_join_lateral(item_counts, BoolExpr::Constant(true))
+        .left_join_lateral(item_counts, true_())
         .column(item_count.at("item_counts"))
         .build()?;
 
@@ -76,7 +74,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // deletes typed without constructing `ValueExpr::Subquery` by hand.
     let retention_delete = delete_from(orders::table())
         .filter(orders::USER_ID.eq(Uuid::nil()))
-        .filter(orders::TOTAL_CENTS.expr().lte(scalar_subquery(
+        .filter(orders::TOTAL_CENTS.lte_expr(scalar_subquery(
             select(orders::table())
                 .column(orders::TOTAL_CENTS)
                 .filter(orders::USER_ID.eq(Uuid::nil()))
@@ -97,7 +95,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "SELECT ?::uuid AS id",
         "seeded",
         vec![Param::typed(Uuid::nil())],
-        vec![*users::ID.meta],
+        users::ID,
     );
     let raw_source_query = select(raw_ids).column(users::ID.at("seeded")).build()?;
     assert_eq!(

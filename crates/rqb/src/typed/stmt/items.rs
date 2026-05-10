@@ -22,9 +22,33 @@ impl<T> From<Field<T>> for SelectItem {
     }
 }
 
+impl<T> From<&Field<T>> for SelectItem {
+    fn from(field: &Field<T>) -> Self {
+        select_item_for_field(*field)
+    }
+}
+
 impl<T> From<FieldRef<T>> for SelectItem {
     fn from(field: FieldRef<T>) -> Self {
         select_item_for_ref(field)
+    }
+}
+
+impl<T> From<&FieldRef<T>> for SelectItem {
+    fn from(field: &FieldRef<T>) -> Self {
+        select_item_for_ref(field.clone())
+    }
+}
+
+impl From<Meta> for SelectItem {
+    fn from(meta: Meta) -> Self {
+        select_item_for_meta(meta)
+    }
+}
+
+impl From<&Meta> for SelectItem {
+    fn from(meta: &Meta) -> Self {
+        select_item_for_meta(*meta)
     }
 }
 

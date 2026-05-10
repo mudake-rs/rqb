@@ -1,4 +1,4 @@
-use crate::typed::{BoolExpr, Meta, Param, Stmt};
+use crate::typed::{BoolExpr, Field, FieldRef, Meta, Param, Stmt};
 use crate::{Result, typed::raw};
 
 /// Relation-like object that can appear in a `FROM`, `JOIN`, `UPDATE`, or write target.
@@ -104,6 +104,15 @@ pub struct Cte {
     pub fields: Vec<Meta>,
 }
 
+/// Converts fields, metadata, and small tuples of either into exposed metadata.
+///
+/// This keeps CTE/subquery/raw-source calls from repeating `*field.meta` when
+/// the field already carries the metadata rqb needs.
+pub trait IntoFieldMetas {
+    /// Converts this value into exposed field metadata.
+    fn into_field_metas(self) -> Vec<Meta>;
+}
+
 /// SQL join kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JoinKind {
@@ -159,7 +168,7 @@ pub fn view(name: &'static str, fields: &'static [&'static Meta]) -> Source {
 ///
 /// Prefer `Select::try_into_cte(name)` when the CTE projects plain fields and
 /// rqb can infer the exposed metadata from the select list.
-pub fn cte(name: impl Into<String>, stmt: impl Into<Stmt>, fields: impl Into<Vec<Meta>>) -> Cte {
+pub fn cte(name: impl Into<String>, stmt: impl Into<Stmt>, fields: impl IntoFieldMetas) -> Cte {
     Cte::new(name, stmt, fields)
 }
 
@@ -167,11 +176,11 @@ pub fn cte(name: impl Into<String>, stmt: impl Into<Stmt>, fields: impl Into<Vec
 ///
 /// `Cte::source()` is usually clearer because it snapshots the CTE name and
 /// field list from the CTE value.
-pub fn cte_ref(name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source {
+pub fn cte_ref(name: impl Into<String>, fields: impl IntoFieldMetas) -> Source {
     Source::Cte {
         name: name.into(),
         alias: None,
-        fields: fields.into(),
+        fields: fields.into_field_metas(),
     }
 }
 
@@ -182,12 +191,12 @@ pub fn cte_ref(name: impl Into<String>, fields: impl Into<Vec<Meta>>) -> Source 
 pub fn subquery(
     stmt: impl Into<Stmt>,
     alias: impl Into<String>,
-    fields: impl Into<Vec<Meta>>,
+    fields: impl IntoFieldMetas,
 ) -> Source {
     Source::Subquery {
         stmt: Box::new(stmt.into()),
         alias: alias.into(),
-        fields: fields.into(),
+        fields: fields.into_field_metas(),
     }
 }
 
@@ -199,13 +208,13 @@ pub fn raw_source(
     sql: impl Into<String>,
     alias: impl Into<String>,
     params: impl Into<Vec<Param>>,
-    fields: impl Into<Vec<Meta>>,
+    fields: impl IntoFieldMetas,
 ) -> Source {
     Source::Raw {
         sql: sql.into(),
         alias: alias.into(),
         params: params.into(),
-        fields: fields.into(),
+        fields: fields.into_field_metas(),
     }
 }
 
@@ -217,16 +226,107 @@ pub fn function_source(
     name: &'static str,
     args: impl Into<Vec<crate::typed::ValueExpr>>,
     alias: impl Into<String>,
-    fields: impl Into<Vec<Meta>>,
+    fields: impl IntoFieldMetas,
 ) -> Source {
     Source::Function {
         name,
         args: args.into(),
         alias: alias.into(),
-        fields: fields.into(),
+        fields: fields.into_field_metas(),
         ordinality: false,
     }
 }
+
+impl IntoFieldMetas for () {
+    fn into_field_metas(self) -> Vec<Meta> {
+        Vec::new()
+    }
+}
+
+impl IntoFieldMetas for Meta {
+    fn into_field_metas(self) -> Vec<Meta> {
+        vec![self]
+    }
+}
+
+impl IntoFieldMetas for &Meta {
+    fn into_field_metas(self) -> Vec<Meta> {
+        vec![*self]
+    }
+}
+
+impl<T> IntoFieldMetas for Field<T> {
+    fn into_field_metas(self) -> Vec<Meta> {
+        vec![*self.meta]
+    }
+}
+
+impl<T> IntoFieldMetas for &Field<T> {
+    fn into_field_metas(self) -> Vec<Meta> {
+        vec![*self.meta]
+    }
+}
+
+impl<T> IntoFieldMetas for FieldRef<T> {
+    fn into_field_metas(self) -> Vec<Meta> {
+        vec![*self.meta]
+    }
+}
+
+impl<T> IntoFieldMetas for &FieldRef<T> {
+    fn into_field_metas(self) -> Vec<Meta> {
+        vec![*self.meta]
+    }
+}
+
+impl IntoFieldMetas for Vec<Meta> {
+    fn into_field_metas(self) -> Vec<Meta> {
+        self
+    }
+}
+
+impl IntoFieldMetas for &[Meta] {
+    fn into_field_metas(self) -> Vec<Meta> {
+        self.to_vec()
+    }
+}
+
+impl<const N: usize> IntoFieldMetas for [Meta; N] {
+    fn into_field_metas(self) -> Vec<Meta> {
+        self.into_iter().collect()
+    }
+}
+
+impl<const N: usize> IntoFieldMetas for [&Meta; N] {
+    fn into_field_metas(self) -> Vec<Meta> {
+        self.into_iter().copied().collect()
+    }
+}
+
+macro_rules! impl_field_meta_tuple {
+    ($($name:ident),+ $(,)?) => {
+        impl<$($name),+> IntoFieldMetas for ($($name,)+)
+        where
+            $($name: IntoFieldMetas,)+
+        {
+            #[allow(non_snake_case)]
+            fn into_field_metas(self) -> Vec<Meta> {
+                let ($($name,)+) = self;
+                let mut fields = Vec::new();
+                $(fields.extend($name.into_field_metas());)+
+                fields
+            }
+        }
+    };
+}
+
+impl_field_meta_tuple!(A, B);
+impl_field_meta_tuple!(A, B, C);
+impl_field_meta_tuple!(A, B, C, D);
+impl_field_meta_tuple!(A, B, C, D, E);
+impl_field_meta_tuple!(A, B, C, D, E, F);
+impl_field_meta_tuple!(A, B, C, D, E, F, G);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H);
 
 impl JoinKind {
     /// Returns the SQL keyword for this join kind.
@@ -312,7 +412,7 @@ impl Cte {
     pub fn new(
         name: impl Into<String>,
         stmt: impl Into<Stmt>,
-        fields: impl Into<Vec<Meta>>,
+        fields: impl IntoFieldMetas,
     ) -> Self {
         Self {
             name: name.into(),
@@ -320,7 +420,7 @@ impl Cte {
             recursive: false,
             materialization: None,
             stmt: Box::new(stmt.into()),
-            fields: fields.into(),
+            fields: fields.into_field_metas(),
         }
     }
 
@@ -463,7 +563,9 @@ impl Source {
                 alias,
                 fields,
             } => {
-                stmt.validate()?;
+                stmt.validate_query_statement(
+                    "subquery source must be SELECT, set, or raw statement",
+                )?;
                 if let Some(count) = stmt.projection_count()
                     && !fields.is_empty()
                     && count != fields.len()
@@ -529,12 +631,23 @@ fn validate_source_alias(alias: &str, message: &'static str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CteMaterialization, Source, cte, cte_ref, function_source, raw_source, table};
+    use super::{
+        CteMaterialization, IntoFieldMetas, Source, cte, cte_ref, function_source, raw_source,
+        table,
+    };
     use crate::typed::{Field, Meta, OpSet, Param, select};
 
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
     static FIELDS: [&Meta; 1] = [&ID_META];
     const ID: Field<i32> = Field::new(&ID_META);
+
+    #[test]
+    fn into_field_metas_accepts_fields_metadata_and_tuples() {
+        assert_eq!(().into_field_metas(), Vec::<Meta>::new());
+        assert_eq!(ID.into_field_metas(), vec![ID_META]);
+        assert_eq!((&ID_META).into_field_metas(), vec![ID_META]);
+        assert_eq!((ID, &ID_META).into_field_metas(), vec![ID_META, ID_META]);
+    }
 
     #[test]
     fn table_and_view_aliases_are_optional_but_raw_sources_are_always_aliased() {

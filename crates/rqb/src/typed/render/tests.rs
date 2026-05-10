@@ -3,7 +3,7 @@ use crate::typed::{
     Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce, count_all, count_distinct,
     cte, current_date, current_timestamp, extract, function_source, insert, json_agg,
     json_get_text, lag, merge_into, param, percentile_cont, row, row_number, scalar_subquery,
-    select, slice, subscript, table, to_jsonb, update, window,
+    select, slice, subscript, table, to_jsonb, true_, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -263,7 +263,7 @@ fn right_full_cross_and_lateral_joins_render_in_clause_order() {
             ID.at("u").eq_field(ORDER_USER_ID.at("fo")),
         )
         .cross_join(orders().alias("co"))
-        .left_join_lateral(recent, BoolExpr::Constant(true))
+        .left_join_lateral(recent, true_())
         .column(ID.at("u"))
         .build()
         .unwrap();
@@ -529,7 +529,7 @@ fn scalar_subquery_renders_inside_delete_predicates() {
     );
     let built = crate::typed::delete_from(orders())
         .filter(ORDER_USER_ID.eq(7))
-        .filter(TOTAL.expr().lte(cutoff_total))
+        .filter(TOTAL.lte_expr(cutoff_total))
         .build()
         .unwrap();
 

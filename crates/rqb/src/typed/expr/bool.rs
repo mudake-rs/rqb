@@ -1,5 +1,15 @@
 use super::{BoolExpr, BooleanTest, Field, FieldRef, ValueExpr};
 
+/// Builds a SQL `TRUE` predicate.
+pub const fn true_() -> BoolExpr {
+    BoolExpr::Constant(true)
+}
+
+/// Builds a SQL `FALSE` predicate.
+pub const fn false_() -> BoolExpr {
+    BoolExpr::Constant(false)
+}
+
 /// Builds a logical `AND` group.
 pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> BoolExpr {
     BoolExpr::and(exprs)

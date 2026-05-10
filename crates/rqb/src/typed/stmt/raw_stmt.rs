@@ -12,12 +12,7 @@ impl RawStmt {
     /// Adds one bind value for a `?` placeholder in the raw SQL text.
     pub fn bind<T>(mut self, value: T) -> Self
     where
-        T: Clone
-            + Send
-            + Sync
-            + 'static
-            + for<'q> sqlx::Encode<'q, sqlx::Postgres>
-            + sqlx::Type<sqlx::Postgres>,
+        T: BindValue,
     {
         self.params.push(Param::typed(value));
         self

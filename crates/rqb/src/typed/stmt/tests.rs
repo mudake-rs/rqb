@@ -381,7 +381,7 @@ fn update_requires_assignments() {
 
 #[test]
 fn write_targets_reject_subquery_sources() {
-    let target = subquery(select(users()).column(ID), "u", vec![ID_META]);
+    let target = subquery(select(users()).column(ID), "u", ID);
 
     let err = insert(target).set(ID.set(1)).validate().unwrap_err();
 
@@ -391,6 +391,39 @@ fn write_targets_reject_subquery_sources() {
             statement: "insert",
             source_kind: "subquery",
         }
+    ));
+}
+
+#[test]
+fn cte_accepts_raw_statement_without_manual_stmt_variant() {
+    let ids = cte("ids", raw("SELECT ?::int4 AS id").bind(1_i32), ID);
+
+    assert!(select(ids.source()).with(ids).column(ID).validate().is_ok());
+}
+
+#[test]
+fn subquery_sources_reject_write_statements_after_into_stmt_conversion() {
+    let source = subquery(delete_from(users()).filter(ID.eq(1)), "deleted", ID);
+
+    let err = select(source).validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "subquery source must be SELECT, set, or raw statement"
+    ));
+}
+
+#[test]
+fn set_queries_reject_write_statement_operands() {
+    let set = select(users()).union(delete_from(users()).filter(ID.eq(1)));
+
+    let err = set.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "set query operands must be SELECT, set, or raw statements"
     ));
 }
 

@@ -126,6 +126,46 @@ fn exists_not_and_value_comparison_helpers_avoid_manual_ast_construction() {
 }
 
 #[test]
+fn scalar_subquery_rejects_write_statement_context() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    static FIELDS: [&Meta; 1] = [&ID_META];
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let expr = crate::typed::scalar_subquery(
+        crate::typed::delete_from(crate::typed::table("public.users", &FIELDS)).filter(ID.eq(1)),
+    );
+    let err = expr.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "scalar subquery must be SELECT, set, or raw statement"
+    ));
+}
+
+#[test]
+fn borrowed_field_refs_and_raw_metadata_convert_to_value_shapes() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email_address", "text").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+
+    let id = ID.at("u");
+    let expr = ValueExpr::from(&id);
+    let item = crate::typed::SelectItem::from(&id);
+    let raw_meta_item = crate::typed::SelectItem::from(EMAIL_META);
+
+    assert!(matches!(
+        expr,
+        ValueExpr::Field {
+            qualifier: Some(ref qualifier),
+            ..
+        } if qualifier == "u"
+    ));
+    assert_eq!(item.alias.as_deref(), Some("u_id"));
+    assert_eq!(raw_meta_item.alias.as_deref(), Some("email"));
+}
+
+#[test]
 fn empty_or_group_is_invalid_like_empty_and_group() {
     let err = BoolExpr::or([]).validate().unwrap_err();
 

@@ -25,7 +25,7 @@ impl BoolExpr {
             Self::InSubquery { expr, query, .. } => {
                 validate_equality_expr(expr, "in_subquery")?;
                 expr.validate()?;
-                query.validate()
+                query.validate_query_statement("IN subquery must be SELECT, set, or raw statement")
             }
             Self::Between {
                 expr, low, high, ..
@@ -83,7 +83,8 @@ impl BoolExpr {
                 Ok(())
             }
             Self::Not(expr) => expr.validate(),
-            Self::Exists(stmt) => stmt.validate(),
+            Self::Exists(stmt) => stmt
+                .validate_query_statement("EXISTS subquery must be SELECT, set, or raw statement"),
             Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
         }
     }
@@ -191,7 +192,8 @@ impl ValueExpr {
                 Ok(())
             }
             Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
-            Self::Subquery(stmt) => stmt.validate(),
+            Self::Subquery(stmt) => stmt
+                .validate_query_statement("scalar subquery must be SELECT, set, or raw statement"),
             Self::Field { .. } | Self::Excluded(_) | Self::Param(_) | Self::Keyword(_) => Ok(()),
         }
     }

@@ -9,8 +9,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 
 - `try_into_cte(...)` and `try_into_source(...)` infer fields from plain
   projections.
-- `rqb::field!` defines metadata for computed columns such as
-  `count(*) AS item_count`.
+- `rqb::field!` defines metadata for computed columns, and source helpers
+  accept fields directly instead of manual `*field.meta` vectors.
 - `scalar_subquery(...)` turns a server-owned select into a value expression for
   comparisons.
 - Recursive CTEs can use raw SQL while still validating bind counts.

@@ -4,6 +4,33 @@ use crate::typed::{BindValue, Param};
 
 use super::{BoolExpr, Field, FieldRef, ValueExpr};
 
+impl<T> Field<Vec<T>> {
+    /// Builds an array overlap predicate (`&&`) from a SQL array expression.
+    pub fn contains_any_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().contains_any_expr(values)
+    }
+
+    /// Builds an array contains-all predicate (`@>`) from a SQL array expression.
+    pub fn contains_all_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().contains_all_expr(values)
+    }
+
+    /// Builds an array contained-by predicate (`<@`) from a SQL array expression.
+    pub fn contained_by_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().contained_by_expr(values)
+    }
+
+    /// Builds `value = ANY(array)` from a SQL value expression.
+    pub fn has_expr(self, value: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().has_expr(value)
+    }
+
+    /// Builds the negated `ANY` membership predicate from a SQL value expression.
+    pub fn not_has_expr(self, value: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().not_has_expr(value)
+    }
+}
+
 impl<T> Field<Vec<T>>
 where
     T: BindValue + PgHasArrayType,
@@ -51,6 +78,55 @@ where
     /// Builds an array slice expression.
     pub fn slice(self, start: Option<i32>, end: Option<i32>) -> ValueExpr {
         self.reference().slice(start, end)
+    }
+}
+
+impl<T> FieldRef<Vec<T>> {
+    /// Builds an array overlap predicate (`&&`) from a SQL array expression.
+    pub fn contains_any_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.array_expr_infix("&&", values, false)
+    }
+
+    /// Builds an array contains-all predicate (`@>`) from a SQL array expression.
+    pub fn contains_all_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.array_expr_infix("@>", values, false)
+    }
+
+    /// Builds an array contained-by predicate (`<@`) from a SQL array expression.
+    pub fn contained_by_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.array_expr_infix("<@", values, false)
+    }
+
+    /// Builds `value = ANY(array)` from a SQL value expression.
+    pub fn has_expr(self, value: impl Into<ValueExpr>) -> BoolExpr {
+        self.any_expr_predicate(value, false)
+    }
+
+    /// Builds the negated `ANY` membership predicate from a SQL value expression.
+    pub fn not_has_expr(self, value: impl Into<ValueExpr>) -> BoolExpr {
+        self.any_expr_predicate(value, true)
+    }
+
+    fn array_expr_infix(
+        self,
+        op: &'static str,
+        values: impl Into<ValueExpr>,
+        negated: bool,
+    ) -> BoolExpr {
+        BoolExpr::Infix {
+            left: self.expr(),
+            op,
+            right: values.into(),
+            negated,
+        }
+    }
+
+    fn any_expr_predicate(self, value: impl Into<ValueExpr>, negated: bool) -> BoolExpr {
+        BoolExpr::Any {
+            value: value.into(),
+            array: self.expr(),
+            negated,
+        }
     }
 }
 

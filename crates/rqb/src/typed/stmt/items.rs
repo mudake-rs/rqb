@@ -16,6 +16,15 @@ impl SelectItem {
     }
 }
 
+/// Converts fields, metadata, and small tuples of either into projection items.
+///
+/// This lets heterogeneous field projections use tuple syntax, for example
+/// `select(users::table()).columns((users::ID, users::EMAIL))`.
+pub trait IntoSelectItems {
+    /// Converts this value into projection items.
+    fn into_select_items(self) -> Vec<SelectItem>;
+}
+
 impl<T> From<Field<T>> for SelectItem {
     fn from(field: Field<T>) -> Self {
         select_item_for_field(field)
@@ -51,6 +60,91 @@ impl From<&Meta> for SelectItem {
         select_item_for_meta(*meta)
     }
 }
+
+impl IntoSelectItems for SelectItem {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self]
+    }
+}
+
+impl<T> IntoSelectItems for Field<T> {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self.into()]
+    }
+}
+
+impl<T> IntoSelectItems for &Field<T> {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self.into()]
+    }
+}
+
+impl<T> IntoSelectItems for FieldRef<T> {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self.into()]
+    }
+}
+
+impl<T> IntoSelectItems for &FieldRef<T> {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self.into()]
+    }
+}
+
+impl IntoSelectItems for Meta {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self.into()]
+    }
+}
+
+impl IntoSelectItems for &Meta {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        vec![self.into()]
+    }
+}
+
+impl IntoSelectItems for Vec<SelectItem> {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        self
+    }
+}
+
+impl IntoSelectItems for &[SelectItem] {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        self.to_vec()
+    }
+}
+
+impl<const N: usize> IntoSelectItems for [SelectItem; N] {
+    fn into_select_items(self) -> Vec<SelectItem> {
+        self.into_iter().collect()
+    }
+}
+
+macro_rules! impl_select_item_tuple {
+    ($($name:ident),+ $(,)?) => {
+        impl<$($name),+> IntoSelectItems for ($($name,)+)
+        where
+            $($name: IntoSelectItems,)+
+        {
+            #[allow(non_snake_case)]
+            fn into_select_items(self) -> Vec<SelectItem> {
+                let ($($name,)+) = self;
+                let mut items = Vec::new();
+                $(items.extend($name.into_select_items());)+
+                items
+            }
+        }
+    };
+}
+
+impl_select_item_tuple!(A, B);
+impl_select_item_tuple!(A, B, C);
+impl_select_item_tuple!(A, B, C, D);
+impl_select_item_tuple!(A, B, C, D, E);
+impl_select_item_tuple!(A, B, C, D, E, F);
+impl_select_item_tuple!(A, B, C, D, E, F, G);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H);
 
 impl Assignment {
     /// Creates a field assignment from a value expression.

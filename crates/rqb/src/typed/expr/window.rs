@@ -47,6 +47,33 @@ impl FrameExclude {
     }
 }
 
+impl FrameBound {
+    /// Returns `UNBOUNDED PRECEDING`.
+    pub const fn unbounded_preceding() -> Self {
+        Self::UnboundedPreceding
+    }
+
+    /// Returns `expr PRECEDING`.
+    pub fn preceding(expr: impl Into<ValueExpr>) -> Self {
+        Self::Preceding(Box::new(expr.into()))
+    }
+
+    /// Returns `CURRENT ROW`.
+    pub const fn current_row() -> Self {
+        Self::CurrentRow
+    }
+
+    /// Returns `expr FOLLOWING`.
+    pub fn following(expr: impl Into<ValueExpr>) -> Self {
+        Self::Following(Box::new(expr.into()))
+    }
+
+    /// Returns `UNBOUNDED FOLLOWING`.
+    pub const fn unbounded_following() -> Self {
+        Self::UnboundedFollowing
+    }
+}
+
 impl WindowFrame {
     /// Creates a window frame with a start boundary.
     pub fn new(kind: WindowFrameKind, start: FrameBound) -> Self {
@@ -288,27 +315,27 @@ pub fn groups(start: FrameBound) -> WindowFrame {
 
 /// Returns `UNBOUNDED PRECEDING`.
 pub fn unbounded_preceding() -> FrameBound {
-    FrameBound::UnboundedPreceding
+    FrameBound::unbounded_preceding()
 }
 
 /// Returns `expr PRECEDING`.
 pub fn preceding(expr: impl Into<ValueExpr>) -> FrameBound {
-    FrameBound::Preceding(Box::new(expr.into()))
+    FrameBound::preceding(expr)
 }
 
 /// Returns `CURRENT ROW`.
 pub fn current_row() -> FrameBound {
-    FrameBound::CurrentRow
+    FrameBound::current_row()
 }
 
 /// Returns `expr FOLLOWING`.
 pub fn following(expr: impl Into<ValueExpr>) -> FrameBound {
-    FrameBound::Following(Box::new(expr.into()))
+    FrameBound::following(expr)
 }
 
 /// Returns `UNBOUNDED FOLLOWING`.
 pub fn unbounded_following() -> FrameBound {
-    FrameBound::UnboundedFollowing
+    FrameBound::unbounded_following()
 }
 
 fn offset_window_function(

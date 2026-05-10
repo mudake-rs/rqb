@@ -399,6 +399,81 @@ fn pg18_returning_old_new_and_computed_assignments_render() {
 }
 
 #[test]
+fn expression_backed_text_and_array_predicates_render() {
+    let text_built = select(users())
+        .column(ID)
+        .filter(EMAIL.like_expr(crate::typed::lower("%@example.com")))
+        .filter(EMAIL.contains_expr(crate::typed::lower(EMAIL)))
+        .filter(EMAIL.text_search_expr(crate::typed::plainto_tsquery(EMAIL)))
+        .filter(EMAIL.websearch_expr(EMAIL))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        text_built.sql,
+        "SELECT \"id\" FROM \"public\".\"app_users\" WHERE (\"email_address\" LIKE lower($1) AND \"email_address\" ILIKE (($2 || replace(replace(replace(lower(\"email_address\"), $3, $4), $5, $6), $7, $8)) || $9) ESCAPE '\\' AND to_tsvector(\"email_address\") @@ plainto_tsquery(\"email_address\") AND to_tsvector(\"email_address\") @@ websearch_to_tsquery(\"email_address\"))"
+    );
+    assert_eq!(text_built.params.len(), 9);
+
+    let array_built = select(orders())
+        .column(ORDER_USER_ID)
+        .filter(TAGS.contains_any_expr(array(["vip", "staff"])))
+        .filter(TAGS.contains_all_expr(crate::typed::array_cat(TAGS, array(["paid"]))))
+        .filter(TAGS.contained_by_expr(crate::typed::array_cat(TAGS, array(["archived"]))))
+        .filter(TAGS.has_expr(crate::typed::lower("VIP")))
+        .filter(TAGS.not_has_expr("blocked"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        array_built.sql,
+        "SELECT \"user_id\" FROM \"public\".\"orders\" WHERE (\"tags\" && ARRAY[$1, $2] AND \"tags\" @> array_cat(\"tags\", ARRAY[$3]) AND \"tags\" <@ array_cat(\"tags\", ARRAY[$4]) AND lower($5) = ANY(\"tags\") AND NOT ($6 = ANY(\"tags\")))"
+    );
+    assert_eq!(array_built.params.len(), 6);
+}
+
+#[test]
+fn variadic_select_projection_helpers_render() {
+    let built = select(users())
+        .columns((ID, EMAIL))
+        .exprs([crate::typed::lower(EMAIL), crate::typed::upper(EMAIL)])
+        .items([crate::typed::length(EMAIL).alias("email_length")])
+        .aggs([crate::typed::count_all().alias("rows")])
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\", \"email_address\" AS \"email\", lower(\"email_address\"), upper(\"email_address\"), length(\"email_address\") AS \"email_length\", count(*) AS \"rows\" FROM \"public\".\"app_users\""
+    );
+    assert_eq!(built.params.len(), 0);
+}
+
+#[test]
+fn frame_bound_constructors_render_without_manual_boxing() {
+    let built = select(orders())
+        .column(ORDER_USER_ID)
+        .item(
+            lag(TOTAL)
+                .over(
+                    window().partition_by(ORDER_USER_ID).order_asc(TOTAL).frame(
+                        crate::typed::rows(crate::typed::FrameBound::preceding(2_i32))
+                            .between(crate::typed::FrameBound::following(1_i32)),
+                    ),
+                )
+                .alias("nearby_total"),
+        )
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"user_id\", lag(\"total_cents\") OVER (PARTITION BY \"user_id\" ORDER BY \"total_cents\" ASC ROWS BETWEEN $1 PRECEDING AND $2 FOLLOWING) AS \"nearby_total\" FROM \"public\".\"orders\""
+    );
+    assert_eq!(built.params.len(), 2);
+}
+
+#[test]
 fn later_write_assignments_replace_earlier_ones_for_same_column() {
     let insert_sql = insert(users())
         .set(ID.set(1))

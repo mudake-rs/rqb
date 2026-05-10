@@ -65,6 +65,12 @@ impl Select {
         self
     }
 
+    /// Adds multiple schema fields or aliased field references to the projection.
+    pub fn columns(mut self, fields: impl IntoSelectItems) -> Self {
+        self.projection.extend(fields.into_select_items());
+        self
+    }
+
     /// Adds an expression without an output alias.
     pub fn expr(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.projection.push(SelectItem {
@@ -74,15 +80,44 @@ impl Select {
         self
     }
 
+    /// Adds multiple expressions without output aliases.
+    ///
+    /// This accepts regular iterators of value expressions. For heterogeneous
+    /// field or aliased item batches, use [`Select::columns`] or
+    /// [`Select::items`] with tuple syntax.
+    pub fn exprs<I, T>(mut self, exprs: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<ValueExpr>,
+    {
+        self.projection
+            .extend(exprs.into_iter().map(|expr| SelectItem {
+                expr: expr.into(),
+                alias: None,
+            }));
+        self
+    }
+
     /// Adds a fully specified projection item, usually an aliased expression.
     pub fn item(mut self, item: SelectItem) -> Self {
         self.projection.push(item);
         self
     }
 
+    /// Adds multiple fully specified projection items.
+    pub fn items(mut self, items: impl IntoSelectItems) -> Self {
+        self.projection.extend(items.into_select_items());
+        self
+    }
+
     /// Alias for `item(...)` in aggregate-heavy selects.
     pub fn agg(self, item: SelectItem) -> Self {
         self.item(item)
+    }
+
+    /// Adds multiple aggregate projection items.
+    pub fn aggs(self, items: impl IntoSelectItems) -> Self {
+        self.items(items)
     }
 
     /// Adds a predicate to `WHERE`, composing with existing predicates using `AND`.

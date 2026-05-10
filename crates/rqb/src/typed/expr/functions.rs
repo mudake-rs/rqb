@@ -96,9 +96,86 @@ pub fn array(values: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExp
 }
 
 /// Builds an SQL row expression from value expressions.
-pub fn row(values: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
-    ValueExpr::Row(values.into_iter().map(Into::into).collect())
+pub fn row(values: impl IntoRowValues) -> ValueExpr {
+    ValueExpr::Row(values.into_row_values())
 }
+
+/// Converts iterators and tuples into SQL row expression values.
+///
+/// Iterator inputs are useful when every row value has the same Rust type.
+/// Tuple inputs keep cursor-pagination and composite-key comparisons concise
+/// when the row mixes different column/value types.
+pub trait IntoRowValues {
+    /// Converts this input into row value expressions.
+    fn into_row_values(self) -> Vec<ValueExpr>;
+}
+
+impl<T> IntoRowValues for Vec<T>
+where
+    T: Into<ValueExpr>,
+{
+    fn into_row_values(self) -> Vec<ValueExpr> {
+        self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<T> IntoRowValues for &[T]
+where
+    T: Clone + Into<ValueExpr>,
+{
+    fn into_row_values(self) -> Vec<ValueExpr> {
+        self.iter().cloned().map(Into::into).collect()
+    }
+}
+
+impl<T, const N: usize> IntoRowValues for [T; N]
+where
+    T: Into<ValueExpr>,
+{
+    fn into_row_values(self) -> Vec<ValueExpr> {
+        self.into_iter().map(Into::into).collect()
+    }
+}
+
+macro_rules! impl_row_tuple {
+    ($($name:ident),+ $(,)?) => {
+        impl<$($name),+> IntoRowValues for ($($name,)+)
+        where
+            $($name: Into<ValueExpr>,)+
+        {
+            #[allow(non_snake_case)]
+            fn into_row_values(self) -> Vec<ValueExpr> {
+                let ($($name,)+) = self;
+                vec![$($name.into(),)+]
+            }
+        }
+
+        impl<$($name),+> From<($($name,)+)> for ValueExpr
+        where
+            $($name: Into<ValueExpr>,)+
+        {
+            fn from(values: ($($name,)+)) -> Self {
+                row(values)
+            }
+        }
+    };
+}
+
+impl_row_tuple!(A, B);
+impl_row_tuple!(A, B, C);
+impl_row_tuple!(A, B, C, D);
+impl_row_tuple!(A, B, C, D, E);
+impl_row_tuple!(A, B, C, D, E, F);
+impl_row_tuple!(A, B, C, D, E, F, G);
+impl_row_tuple!(A, B, C, D, E, F, G, H);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 /// Builds an array or JSON subscript expression.
 pub fn subscript(expr: impl Into<ValueExpr>, index: impl Into<ValueExpr>) -> ValueExpr {

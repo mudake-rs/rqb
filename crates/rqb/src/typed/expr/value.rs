@@ -281,3 +281,12 @@ macro_rules! impl_param_value_expr {
 }
 
 impl_param_value_expr!(bool, i16, i32, i64, f32, f64);
+impl_param_value_expr!(
+    uuid::Uuid,
+    chrono::DateTime<chrono::Utc>,
+    chrono::DateTime<chrono::FixedOffset>,
+    chrono::NaiveDate,
+    chrono::NaiveDateTime,
+    chrono::NaiveTime,
+    serde_json::Value,
+);

@@ -1,3 +1,5 @@
+use futures_core::stream::BoxStream;
+use futures_util::{StreamExt, TryStreamExt};
 use sqlx::postgres::PgRow;
 use sqlx::{Decode, FromRow, PgExecutor, Postgres, Type};
 
@@ -34,6 +36,24 @@ impl BuiltQuery {
             .map_err(Into::into)
     }
 
+    /// Streams raw sqlx `PgRow` values.
+    ///
+    /// The returned stream borrows this [`BuiltQuery`], so keep the built query
+    /// value alive until the stream is fully consumed.
+    pub fn fetch_stream<'q, 'e>(
+        &'q self,
+        executor: impl PgExecutor<'e> + 'q,
+    ) -> Result<BoxStream<'q, Result<PgRow>>>
+    where
+        'e: 'q,
+    {
+        Ok(sqlx::query_with(&self.sql, self.arguments()?)
+            .persistent(self.cacheable)
+            .fetch(executor)
+            .map_err(Into::into)
+            .boxed())
+    }
+
     /// Fetches exactly one raw sqlx `PgRow`.
     pub async fn fetch_one<'e>(&self, executor: impl PgExecutor<'e>) -> Result<PgRow> {
         sqlx::query_with(&self.sql, self.arguments()?)
@@ -62,6 +82,25 @@ impl BuiltQuery {
             .fetch_all(executor)
             .await
             .map_err(Into::into)
+    }
+
+    /// Streams rows into a `sqlx::FromRow` type.
+    ///
+    /// Streaming avoids materializing large exports in memory. Keep the
+    /// [`BuiltQuery`] value alive while consuming the stream.
+    pub fn fetch_stream_as<'q, 'e, T>(
+        &'q self,
+        executor: impl PgExecutor<'e> + 'q,
+    ) -> Result<BoxStream<'q, Result<T>>>
+    where
+        'e: 'q,
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'q,
+    {
+        Ok(sqlx::query_as_with::<_, T, _>(&self.sql, self.arguments()?)
+            .persistent(self.cacheable)
+            .fetch(executor)
+            .map_err(Into::into)
+            .boxed())
     }
 
     /// Fetches exactly one row into a `sqlx::FromRow` type.
@@ -98,6 +137,26 @@ impl BuiltQuery {
             .fetch_all(executor)
             .await
             .map_err(Into::into)
+    }
+
+    /// Streams rows as a single decoded scalar column.
+    ///
+    /// Keep the [`BuiltQuery`] value alive while consuming the stream.
+    pub fn fetch_stream_scalar<'q, 'e, T>(
+        &'q self,
+        executor: impl PgExecutor<'e> + 'q,
+    ) -> Result<BoxStream<'q, Result<T>>>
+    where
+        'e: 'q,
+        T: ScalarValue + 'q,
+    {
+        Ok(
+            sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
+                .persistent(self.cacheable)
+                .fetch(executor)
+                .map_err(Into::into)
+                .boxed(),
+        )
     }
 
     /// Fetches exactly one decoded scalar value.

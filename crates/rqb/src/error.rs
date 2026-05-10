@@ -310,6 +310,15 @@ pub enum Error {
         logical: String,
     },
 
+    /// A row-value comparison used row expressions with different arity.
+    #[error("row comparison requires the same arity, got {left} and {right}")]
+    InvalidRowShape {
+        /// Number of values in the left row expression.
+        left: usize,
+        /// Number of values in the right row expression.
+        right: usize,
+    },
+
     /// A write statement targeted a source kind that cannot be written to.
     #[error("{statement} target must be a table or view source, got {source_kind}")]
     InvalidWriteTarget {

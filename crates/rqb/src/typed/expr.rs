@@ -18,9 +18,9 @@ pub use ast::{
 pub use bool::{and, exists, false_, not, or, true_};
 pub use field::{Field, FieldRef, IntoFieldRef};
 pub use functions::{
-    __jsonb_agg_object_from_pairs, __jsonb_object_pair, JsonbObjectItem, abs, age, aggregate,
-    any_value, array, array_agg, array_agg_distinct, array_append, array_cat, array_dims,
-    array_fill, array_fill_with_lower_bounds, array_length, array_lower, array_ndims,
+    __jsonb_agg_object_from_pairs, __jsonb_object_pair, IntoRowValues, JsonbObjectItem, abs, age,
+    aggregate, any_value, array, array_agg, array_agg_distinct, array_append, array_cat,
+    array_dims, array_fill, array_fill_with_lower_bounds, array_length, array_lower, array_ndims,
     array_position, array_positions, array_prepend, array_remove, array_replace, array_reverse,
     array_sample, array_shuffle, array_sort, array_sort_desc, array_sort_with, array_to_string,
     array_upper, avg, bit_and, bit_or, bit_xor, bool_and, bool_or, btrim, cardinality, case,

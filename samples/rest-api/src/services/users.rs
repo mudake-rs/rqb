@@ -3,7 +3,7 @@ use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
 
 use crate::services::orders;
-use crate::types::{CreateUser, UserRow};
+use crate::types::{CreateUser, PatchUser, UserRow};
 
 pub async fn find<'e>(db: impl PgExecutor<'e>, id: Uuid) -> rqb::Result<UserRow> {
     select(users::table())
@@ -30,6 +30,21 @@ pub async fn create<'e>(db: impl PgExecutor<'e>, input: CreateUser) -> rqb::Resu
         .set(users::ID.set(Uuid::new_v4()))
         .values(&input)
         .set(users::ACTIVE.set(true))
+        .returning_all()
+        .fetch_one_as::<UserRow>(db)
+        .await
+}
+
+pub async fn patch<'e>(
+    db: impl PgExecutor<'e>,
+    id: Uuid,
+    input: PatchUser,
+) -> rqb::Result<UserRow> {
+    // `Changeset` is the REST PATCH bridge: only `Some(...)` fields become
+    // assignments, so omitted JSON fields do not accidentally overwrite data.
+    update(users::table())
+        .filter(users::ID.eq(id))
+        .patch(&input)
         .returning_all()
         .fetch_one_as::<UserRow>(db)
         .await

@@ -7,6 +7,7 @@ pub type ApiResult<T> = std::result::Result<T, ApiError>;
 #[derive(Debug)]
 pub enum ApiError {
     BadRequest(String),
+    Conflict(String),
     Db(Box<rqb::Error>),
 }
 
@@ -16,10 +17,17 @@ impl From<rqb::Error> for ApiError {
     }
 }
 
+impl From<Box<rqb::Error>> for ApiError {
+    fn from(error: Box<rqb::Error>) -> Self {
+        Self::Db(error)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
+            Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::Db(error) => match *error {
                 rqb::Error::NotFound => (StatusCode::NOT_FOUND, "not found".to_owned()),
                 rqb::Error::UniqueViolation { constraint, .. } => (

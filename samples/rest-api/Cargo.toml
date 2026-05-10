@@ -7,8 +7,10 @@ publish = false
 [workspace]
 
 [dependencies]
-axum = { version = "0.8", default-features = false, features = ["json", "tokio"] }
+async-stream = "0.3"
+axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio"] }
 chrono = { version = "0.4", features = ["serde"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 rqb = { path = "../../crates/rqb" }
 rqb-sample-schema = { path = "../schema" }
 serde = { version = "1", features = ["derive"] }

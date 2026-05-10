@@ -10,6 +10,7 @@ impl BoolExpr {
             Self::Constant(_) => Ok(()),
             Self::Compare { left, op, right } => {
                 validate_compare(left, *op)?;
+                validate_row_compare(left, right)?;
                 left.validate()?;
                 right.validate()
             }
@@ -233,6 +234,19 @@ fn validate_compare(left: &ValueExpr, op: BoolOp) -> Result<()> {
     Err(Error::InvalidOperator {
         field: meta.api.to_owned(),
         operator: op.as_name().to_owned(),
+    })
+}
+
+fn validate_row_compare(left: &ValueExpr, right: &ValueExpr) -> Result<()> {
+    let (ValueExpr::Row(left), ValueExpr::Row(right)) = (left, right) else {
+        return Ok(());
+    };
+    if left.len() == right.len() {
+        return Ok(());
+    }
+    Err(Error::InvalidRowShape {
+        left: left.len(),
+        right: right.len(),
     })
 }
 

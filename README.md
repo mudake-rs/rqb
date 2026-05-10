@@ -131,10 +131,12 @@ let rows = select(&u)
 Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
 `FILTER`, window functions, array/jsonb/range predicates, `set_many((...))`,
-`insert(...).from_select(...)`, `on_conflict((col_a, col_b)).do_update_set(...)`, and
+row-value comparisons for cursor pagination, `insert(...).from_select(...)`,
+`on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. REST-style pagination stays
 in application code; the REST sample shows `limit` / `offset` plus
-`Select::count()` for a matching count query.
+`Select::count()` for a matching count query, cursor pagination, and streaming
+CSV responses from `BuiltQuery::fetch_stream_as` into axum `Body::from_stream`.
 
 For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
 and `Select::try_into_source` infer it from explicit field projections.

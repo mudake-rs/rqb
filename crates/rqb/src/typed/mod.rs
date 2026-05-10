@@ -14,7 +14,7 @@ pub use built::BuiltQuery;
 pub use execute::ScalarValue;
 pub use expr::{
     __jsonb_agg_object_from_pairs, __jsonb_object_pair, BoolExpr, BoolOp, BooleanTest, CaseBuilder,
-    Field, FieldRef, FrameBound, FrameExclude, IntoFieldRef, JsonbObjectItem,
+    Field, FieldRef, FrameBound, FrameExclude, IntoFieldRef, IntoRowValues, JsonbObjectItem,
     OffsetWindowFunctionBuilder, ValueExpr, ValueOp, WindowFrame, WindowFrameKind, WindowFunction,
     WindowFunctionBuilder, WindowSpec, abs, age, aggregate, and, any_value, array, array_agg,
     array_agg_distinct, array_append, array_cat, array_dims, array_fill,

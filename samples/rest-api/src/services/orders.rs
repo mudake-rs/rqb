@@ -1,14 +1,23 @@
-use rqb::dsl::{count_all, max};
+use async_stream::try_stream;
+use futures_util::{Stream, TryStreamExt};
+use rqb::dsl::{count_all, max, row};
 use rqb::prelude::*;
 use rqb_sample_schema::{app_users as user_fields, events, order_search_view, orders};
+use serde_json::json;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::services::users;
 use crate::types::{
-    CheckoutResponse, CreateOrder, OrderRow, OrderSearchRow, Page, UserOrderSummaryRow,
+    CheckoutResponse, CreateOrder, CursorPage, OrderCursor, OrderExportRow, OrderRow,
+    OrderSearchRow, Page, TransitionOrder, UserOrderSummaryRow,
 };
 
 const DEFAULT_PAGE_LIMIT: u32 = 100;
+
+// Stream items carry boxed rqb errors so each yielded item stays pointer-sized
+// instead of embedding the full structured error enum in the stream state.
+type StreamResult<T> = std::result::Result<T, Box<rqb::Error>>;
 
 pub async fn checkout(pool: &PgPool, input: CreateOrder) -> rqb::Result<CheckoutResponse> {
     tx!(pool, |conn| {
@@ -21,12 +30,53 @@ pub async fn checkout(pool: &PgPool, input: CreateOrder) -> rqb::Result<Checkout
 
 async fn create<'e>(db: impl PgExecutor<'e>, input: CreateOrder) -> rqb::Result<OrderRow> {
     insert(orders::table())
-        .set(orders::ID.set(Uuid::new_v4()))
+        .set_many((orders::ID.set(Uuid::new_v4()), orders::STATUS.set("open")))
         .values(&input)
-        .set(orders::STATUS.set("open"))
         .returning_all()
         .fetch_one_as::<OrderRow>(db)
         .await
+}
+
+pub async fn list_after<'e>(
+    db: impl PgExecutor<'e>,
+    user_id: Uuid,
+    cursor: Option<OrderCursor>,
+    limit: u32,
+) -> rqb::Result<CursorPage<OrderRow>> {
+    let limit = limit.clamp(1, 100);
+
+    // Cursor pagination uses the same ORDER BY columns as the seek predicate.
+    // Postgres can compare row values directly, so the usual "created_at OR
+    // created_at = ... AND id ..." expansion stays out of application code.
+    //
+    // Fetching one extra row lets the API tell the client whether another page
+    // exists without running a separate count query.
+    let mut items = select(orders::table())
+        .filter(orders::USER_ID.eq(user_id))
+        .filter_option(cursor, |cursor| {
+            row((orders::CREATED_AT, orders::ID)).lt((cursor.created_at, cursor.id))
+        })
+        .order_desc(orders::CREATED_AT)
+        .order_desc(orders::ID)
+        .limit(limit + 1)
+        .fetch_all_as::<OrderRow>(db)
+        .await?;
+
+    let next_cursor = if items.len() > limit as usize {
+        items.pop();
+        items.last().map(|row| OrderCursor {
+            created_at: row.created_at,
+            id: row.id,
+        })
+    } else {
+        None
+    };
+
+    Ok(CursorPage {
+        items,
+        next_cursor,
+        limit,
+    })
 }
 
 pub async fn cancel_open_for_user<'e>(
@@ -40,6 +90,51 @@ pub async fn cancel_open_for_user<'e>(
         .execute(db)
         .await?;
     Ok(())
+}
+
+pub async fn transition(
+    pool: &PgPool,
+    order_id: Uuid,
+    input: TransitionOrder,
+) -> rqb::Result<Option<OrderRow>> {
+    tx!(pool, |conn| {
+        // Lock before checking the state machine. The later update and audit
+        // insert run in the same transaction, so concurrent transitions cannot
+        // observe a stale status.
+        let current = select(orders::table())
+            .filter(orders::ID.eq(order_id))
+            .for_update()
+            .fetch_one_as::<OrderRow>(&mut *conn)
+            .await?;
+
+        if !is_valid_transition(&current.status, &input.status) {
+            return Ok(None);
+        }
+
+        let updated = update(orders::table())
+            .set(orders::STATUS.set(input.status.clone()))
+            .filter(orders::ID.eq(order_id))
+            .returning_all()
+            .fetch_one_as::<OrderRow>(&mut *conn)
+            .await?;
+
+        insert(events::table())
+            .set_many((
+                events::ID.set(Uuid::new_v4()),
+                events::ORDER_ID.set(order_id),
+                events::EVENT_TYPE.set(input.status.clone()),
+                events::PAYLOAD.set(json!({
+                    "actor_id": input.actor_id,
+                    "old_status": current.status,
+                    "new_status": updated.status,
+                })),
+            ))
+            .execute(&mut *conn)
+            .await?;
+
+        Ok(Some(updated))
+    })
+    .await
 }
 
 pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Page<OrderSearchRow>> {
@@ -65,6 +160,40 @@ pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Page<Ord
         total,
         limit,
         offset,
+    })
+}
+
+pub fn export_csv_stream(
+    pool: PgPool,
+    user_id: Uuid,
+) -> StreamResult<impl Stream<Item = StreamResult<String>> + Send + 'static> {
+    let built = select(orders::table())
+        .columns((
+            orders::ID,
+            orders::USER_ID,
+            orders::STATUS,
+            orders::TOTAL_CENTS,
+            orders::CREATED_AT,
+        ))
+        .filter(orders::USER_ID.eq(user_id))
+        .order_asc(orders::CREATED_AT)
+        .build()
+        .map_err(Box::new)?;
+
+    Ok(try_stream! {
+        yield String::from("id,user_id,status,total_cents,created_at\n");
+
+        // The stream owns the pool clone and the built query, so axum can keep
+        // pulling chunks after the handler has returned the response headers.
+        let mut rows = built
+            .fetch_stream_as::<OrderExportRow>(&pool)
+            .map_err(Box::new)?;
+        while let Some(row) = rows.try_next().await.map_err(Box::new)? {
+            yield format!(
+                "{},{},{},{},{}\n",
+                row.id, row.user_id, row.status, row.total_cents, row.created_at
+            );
+        }
     })
 }
 
@@ -99,4 +228,11 @@ pub async fn summary<'e>(db: impl PgExecutor<'e>) -> rqb::Result<Vec<UserOrderSu
         .group_by(u.email())
         .fetch_all_as::<UserOrderSummaryRow>(db)
         .await
+}
+
+fn is_valid_transition(current: &str, next: &str) -> bool {
+    matches!(
+        (current, next),
+        ("open", "paid") | ("open", "canceled") | ("paid", "refunded")
+    )
 }

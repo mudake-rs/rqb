@@ -622,6 +622,20 @@ fn insert_on_conflict_renders_update_and_do_nothing_actions() {
     );
     assert_eq!(update.params.len(), 5);
 
+    let excluded = insert(users())
+        .set_many((ID.set(1), EMAIL.set("new@example.com".to_owned())))
+        .on_conflict(ID)
+        .do_update_excluded((EMAIL, ID))
+        .returning(ID)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        excluded.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, $2) ON CONFLICT (\"id\") DO UPDATE SET \"email_address\" = EXCLUDED.\"email_address\", \"id\" = EXCLUDED.\"id\" RETURNING \"id\""
+    );
+    assert_eq!(excluded.params.len(), 2);
+
     let nothing = insert(users())
         .set(ID.set(1))
         .on_conflict_constraint("app_users_pkey")
@@ -951,7 +965,7 @@ fn keyword_helpers_render_without_function_parentheses_or_params() {
 #[test]
 fn row_array_subscript_slice_extract_and_cast_render_value_expressions() {
     let built = select(orders())
-        .item(row([ORDER_USER_ID.expr(), TOTAL.expr()]).alias("row_value"))
+        .item(row((ORDER_USER_ID, TOTAL)).alias("row_value"))
         .item(array([ORDER_USER_ID.expr(), ValueExpr::from(2_i32)]).alias("ids"))
         .item(subscript(TAGS, ValueExpr::from(1_i32)).alias("first_tag"))
         .item(
@@ -970,14 +984,15 @@ fn row_array_subscript_slice_extract_and_cast_render_value_expressions() {
             }
             .alias("answer"),
         )
+        .filter(row((ORDER_USER_ID, TOTAL)).lt((1_i32, 100_i64)))
         .build()
         .unwrap();
 
     assert_eq!(
         built.sql,
-        "SELECT ROW(\"user_id\", \"total_cents\") AS \"row_value\", ARRAY[\"user_id\", $1] AS \"ids\", \"tags\"[$2] AS \"first_tag\", \"tags\"[$3:$4] AS \"tag_slice\", extract(year FROM CURRENT_TIMESTAMP) AS \"year\", CAST($5 AS int4) AS \"answer\" FROM \"public\".\"orders\""
+        "SELECT ROW(\"user_id\", \"total_cents\") AS \"row_value\", ARRAY[\"user_id\", $1] AS \"ids\", \"tags\"[$2] AS \"first_tag\", \"tags\"[$3:$4] AS \"tag_slice\", extract(year FROM CURRENT_TIMESTAMP) AS \"year\", CAST($5 AS int4) AS \"answer\" FROM \"public\".\"orders\" WHERE ROW(\"user_id\", \"total_cents\") < ROW($6, $7)"
     );
-    assert_eq!(built.params.len(), 5);
+    assert_eq!(built.params.len(), 7);
 }
 
 #[test]

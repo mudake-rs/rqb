@@ -50,4 +50,20 @@ mod tests {
         assert_eq!(cloned.params.len(), 1);
         assert!(!cloned.cacheable);
     }
+
+    #[test]
+    fn built_query_stream_methods_type_check() {
+        fn assert_type_checks(pool: sqlx::PgPool, built: BuiltQuery) {
+            let rows = built.fetch_stream(&pool).unwrap();
+            drop(rows);
+
+            let typed_rows = built.fetch_stream_as::<(i64,)>(&pool).unwrap();
+            drop(typed_rows);
+
+            let scalars = built.fetch_stream_scalar::<i64>(&pool).unwrap();
+            drop(scalars);
+        }
+
+        let _ = assert_type_checks as fn(sqlx::PgPool, BuiltQuery);
+    }
 }

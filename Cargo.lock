@@ -1161,6 +1161,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "divan",
+ "futures-core",
+ "futures-util",
  "itoa",
  "rqb-macros",
  "serde",

@@ -3,7 +3,7 @@ use uuid::Uuid;
 use super::escaped_like_pattern;
 use crate::typed::{
     BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, Params,
-    ValueExpr,
+    ValueExpr, row,
 };
 
 #[test]
@@ -427,6 +427,23 @@ fn value_expr_array_row_subscript_slice_validate_nested_values() {
         .validate()
         .unwrap();
     TAGS.slice(Some(1), Some(3)).validate().unwrap();
+}
+
+#[test]
+fn row_compare_rejects_mismatched_arity_before_rendering() {
+    let err = row((ValueExpr::from(1_i32), ValueExpr::from(2_i32)))
+        .eq(row((
+            ValueExpr::from(1_i32),
+            ValueExpr::from(2_i32),
+            ValueExpr::from(3_i32),
+        )))
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidRowShape { left: 2, right: 3 }
+    ));
 }
 
 #[test]

@@ -174,6 +174,14 @@ impl_assignment_tuple!(A, B, C, D, E);
 impl_assignment_tuple!(A, B, C, D, E, F);
 impl_assignment_tuple!(A, B, C, D, E, F, G);
 impl_assignment_tuple!(A, B, C, D, E, F, G, H);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 /// Target of an `ON CONFLICT` clause.
 #[derive(Clone, Debug)]

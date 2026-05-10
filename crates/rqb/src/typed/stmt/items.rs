@@ -16,7 +16,7 @@ impl SelectItem {
     }
 }
 
-/// Converts fields, metadata, and small tuples of either into projection items.
+/// Converts fields, metadata, and tuples of either into projection items.
 ///
 /// This lets heterogeneous field projections use tuple syntax, for example
 /// `select(users::table()).columns((users::ID, users::EMAIL))`.
@@ -145,6 +145,14 @@ impl_select_item_tuple!(A, B, C, D, E);
 impl_select_item_tuple!(A, B, C, D, E, F);
 impl_select_item_tuple!(A, B, C, D, E, F, G);
 impl_select_item_tuple!(A, B, C, D, E, F, G, H);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 impl Assignment {
     /// Creates a field assignment from a value expression.

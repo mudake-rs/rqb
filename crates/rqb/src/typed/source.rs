@@ -104,7 +104,7 @@ pub struct Cte {
     pub fields: Vec<Meta>,
 }
 
-/// Converts fields, metadata, and small tuples of either into exposed metadata.
+/// Converts fields, metadata, and tuples of either into exposed metadata.
 ///
 /// This keeps CTE/subquery/raw-source calls from repeating `*field.meta` when
 /// the field already carries the metadata rqb needs.
@@ -327,6 +327,14 @@ impl_field_meta_tuple!(A, B, C, D, E);
 impl_field_meta_tuple!(A, B, C, D, E, F);
 impl_field_meta_tuple!(A, B, C, D, E, F, G);
 impl_field_meta_tuple!(A, B, C, D, E, F, G, H);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 impl JoinKind {
     /// Returns the SQL keyword for this join kind.
@@ -647,6 +655,14 @@ mod tests {
         assert_eq!(ID.into_field_metas(), vec![ID_META]);
         assert_eq!((&ID_META).into_field_metas(), vec![ID_META]);
         assert_eq!((ID, &ID_META).into_field_metas(), vec![ID_META, ID_META]);
+        assert_eq!(
+            (
+                ID, ID, ID, ID, ID, ID, ID, ID, ID, ID, ID, ID, ID, ID, ID, ID,
+            )
+                .into_field_metas()
+                .len(),
+            16
+        );
     }
 
     #[test]

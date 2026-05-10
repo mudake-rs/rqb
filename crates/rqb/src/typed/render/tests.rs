@@ -1,9 +1,9 @@
 use crate::typed::{
-    Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
-    Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce, count_all, count_distinct,
-    cte, current_date, current_timestamp, extract, function_source, insert, json_agg,
-    json_get_text, lag, merge_into, param, percentile_cont, row, row_number, scalar_subquery,
-    select, slice, subscript, table, to_jsonb, true_, update, window,
+    Assignment, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param, RawStmt, Select,
+    SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce,
+    count_all, count_distinct, cte, current_date, current_timestamp, extract, function_source,
+    insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont, row, row_number,
+    scalar_subquery, select, slice, subscript, table, to_jsonb, true_, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -401,6 +401,27 @@ fn write_assignment_batches_accept_tuples() {
         .filter(ID.eq(1))
         .build()
         .unwrap();
+    let wide_insert_sql = insert(users())
+        .set_many((
+            ID.set(1),
+            EMAIL.set("email-2".to_owned()),
+            ID.set(3),
+            EMAIL.set("email-4".to_owned()),
+            ID.set(5),
+            EMAIL.set("email-6".to_owned()),
+            ID.set(7),
+            EMAIL.set("email-8".to_owned()),
+            ID.set(9),
+            EMAIL.set("email-10".to_owned()),
+            ID.set(11),
+            EMAIL.set("email-12".to_owned()),
+            ID.set(13),
+            EMAIL.set("email-14".to_owned()),
+            ID.set(15),
+            EMAIL.set("email-16".to_owned()),
+        ))
+        .build()
+        .unwrap();
 
     assert_eq!(
         insert_sql.sql,
@@ -410,8 +431,13 @@ fn write_assignment_batches_accept_tuples() {
         update_sql.sql,
         "UPDATE \"public\".\"app_users\" SET \"email_address\" = (\"email_address\" || $1), \"id\" = $2 WHERE \"id\" = $3"
     );
+    assert_eq!(
+        wide_insert_sql.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, $2)"
+    );
     assert_eq!(insert_sql.params.len(), 2);
     assert_eq!(update_sql.params.len(), 3);
+    assert_eq!(wide_insert_sql.params.len(), 2);
 }
 
 #[test]
@@ -467,6 +493,10 @@ fn expression_backed_text_and_array_predicates_render() {
 
 #[test]
 fn variadic_select_projection_helpers_render() {
+    let sixteen_items = (
+        ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL,
+    )
+        .into_select_items();
     let built = select(users())
         .columns((ID, EMAIL))
         .exprs([crate::typed::lower(EMAIL), crate::typed::upper(EMAIL)])
@@ -475,6 +505,7 @@ fn variadic_select_projection_helpers_render() {
         .build()
         .unwrap();
 
+    assert_eq!(sixteen_items.len(), 16);
     assert_eq!(
         built.sql,
         "SELECT \"id\", \"email_address\" AS \"email\", lower(\"email_address\"), upper(\"email_address\"), length(\"email_address\") AS \"email_length\", count(*) AS \"rows\" FROM \"public\".\"app_users\""

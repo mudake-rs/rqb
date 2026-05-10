@@ -4,6 +4,7 @@ use super::{ValueExpr, ValueOp};
 
 mod aggregate;
 mod array_fn;
+mod binary;
 mod date;
 mod fts;
 mod json;
@@ -14,15 +15,22 @@ mod text;
 mod uuid;
 
 pub use aggregate::{
-    __jsonb_agg_object_from_pairs, __jsonb_object_pair, JsonbObjectItem, aggregate, array_agg,
-    array_agg_distinct, avg, bool_and, bool_or, count, count_all, count_distinct, every, json_agg,
-    jsonb_agg_object, max, min, mode, ordered_set_aggregate, percentile_cont, percentile_disc,
-    stddev, stddev_pop, stddev_samp, string_agg, sum, var_pop, var_samp, variance,
+    __jsonb_agg_object_from_pairs, __jsonb_object_pair, JsonbObjectItem, aggregate, any_value,
+    array_agg, array_agg_distinct, avg, bit_and, bit_or, bit_xor, bool_and, bool_or, count,
+    count_all, count_distinct, every, grouping, json_agg, json_agg_strict, json_object_agg,
+    json_object_agg_strict, json_object_agg_unique, json_object_agg_unique_strict, jsonb_agg,
+    jsonb_agg_object, jsonb_agg_strict, jsonb_object_agg, jsonb_object_agg_strict,
+    jsonb_object_agg_unique, jsonb_object_agg_unique_strict, max, min, mode, ordered_set_aggregate,
+    percentile_cont, percentile_disc, range_agg, range_intersect_agg, stddev, stddev_pop,
+    stddev_samp, string_agg, sum, var_pop, var_samp, variance,
 };
 pub use array_fn::{
-    array_append, array_length, array_position, array_positions, array_prepend, array_remove,
-    array_replace, array_to_string, cardinality, string_to_array, unnest,
+    array_append, array_cat, array_dims, array_fill, array_fill_with_lower_bounds, array_length,
+    array_lower, array_ndims, array_position, array_positions, array_prepend, array_remove,
+    array_replace, array_reverse, array_sample, array_shuffle, array_sort, array_sort_desc,
+    array_sort_with, array_to_string, array_upper, cardinality, string_to_array, unnest,
 };
+pub use binary::{crc32, crc32c};
 pub use date::{
     age, current_date, current_timestamp, date_trunc, extract, make_date, make_time,
     make_timestamp, make_timestamptz, now, timezone,
@@ -38,16 +46,20 @@ pub use json::{
     jsonb_set, jsonb_strip_nulls, jsonb_typeof, to_json, to_jsonb,
 };
 pub use math::{
-    abs, ceil, exp, floor, ln, log, mod_, pow, power, random, random_between, round, sqrt, trunc,
+    abs, cbrt, ceil, degrees, div, exp, factorial, floor, gamma, gcd, lcm, lgamma, ln, log, mod_,
+    pi, pow, power, radians, random, random_between, round, sign, sqrt, trunc,
 };
 pub use merge::merge_action;
 pub use scalar::{coalesce, greatest, least, nullif};
 pub use text::{
-    btrim, char_length, concat, concat_ws, left, length, lower, lpad, ltrim, regexp_matches,
-    regexp_replace, regexp_split_to_array, replace, right, rpad, rtrim, split_part, substring,
-    trim, upper,
+    btrim, casefold, char_length, concat, concat_ws, left, length, lower, lpad, ltrim, md5,
+    normalize, normalize_form, regexp_matches, regexp_replace, regexp_split_to_array, replace,
+    reverse, right, rpad, rtrim, split_part, strpos, substring, text_starts_with, trim,
+    unicode_assigned, upper,
 };
-pub use uuid::{uuid_extract_timestamp, uuid_extract_version, uuidv7};
+pub use uuid::{
+    gen_random_uuid, uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7, uuidv7_shift,
+};
 
 /// Wraps an owned Rust value as a typed bind parameter expression.
 pub fn param<T>(value: T) -> ValueExpr

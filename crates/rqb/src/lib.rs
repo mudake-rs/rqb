@@ -139,19 +139,31 @@ pub mod dsl {
     /// Aggregate helper functions.
     pub mod agg {
         pub use crate::typed::{
-            aggregate, array_agg, array_agg_distinct, avg, bool_and, bool_or, count, count_all,
-            count_distinct, every, json_agg, jsonb_agg_object, max, min, mode,
-            ordered_set_aggregate, percentile_cont, percentile_disc, stddev, stddev_pop,
-            stddev_samp, string_agg, sum, var_pop, var_samp, variance,
+            aggregate, any_value, array_agg, array_agg_distinct, avg, bit_and, bit_or, bit_xor,
+            bool_and, bool_or, count, count_all, count_distinct, every, grouping, json_agg,
+            json_agg_strict, json_object_agg, json_object_agg_strict, json_object_agg_unique,
+            json_object_agg_unique_strict, jsonb_agg, jsonb_agg_object, jsonb_agg_strict,
+            jsonb_object_agg, jsonb_object_agg_strict, jsonb_object_agg_unique,
+            jsonb_object_agg_unique_strict, max, min, mode, ordered_set_aggregate, percentile_cont,
+            percentile_disc, range_agg, range_intersect_agg, stddev, stddev_pop, stddev_samp,
+            string_agg, sum, var_pop, var_samp, variance,
         };
     }
 
     /// Array helper functions.
     pub mod arrays {
         pub use crate::typed::{
-            array, array_append, array_length, array_position, array_positions, array_prepend,
-            array_remove, array_replace, array_to_string, cardinality, string_to_array, unnest,
+            array, array_append, array_cat, array_dims, array_fill, array_fill_with_lower_bounds,
+            array_length, array_lower, array_ndims, array_position, array_positions, array_prepend,
+            array_remove, array_replace, array_reverse, array_sample, array_shuffle, array_sort,
+            array_sort_desc, array_sort_with, array_to_string, array_upper, cardinality,
+            string_to_array, unnest,
         };
+    }
+
+    /// Binary string helper functions.
+    pub mod binary {
+        pub use crate::typed::{crc32, crc32c};
     }
 
     /// Date and time helper functions.
@@ -184,8 +196,8 @@ pub mod dsl {
     /// Math helper functions.
     pub mod math {
         pub use crate::typed::{
-            abs, ceil, exp, floor, ln, log, mod_, pow, power, random, random_between, round, sqrt,
-            trunc,
+            abs, cbrt, ceil, degrees, div, exp, factorial, floor, gamma, gcd, lcm, lgamma, ln, log,
+            mod_, pi, pow, power, radians, random, random_between, round, sign, sqrt, trunc,
         };
     }
 
@@ -197,15 +209,19 @@ pub mod dsl {
     /// Text helper functions.
     pub mod text {
         pub use crate::typed::{
-            btrim, char_length, concat, concat_op, concat_ws, left, length, lower, lpad, ltrim,
-            not_similar_to, regexp_matches, regexp_replace, regexp_split_to_array, replace, right,
-            rpad, rtrim, similar_to, split_part, substring, trim, upper,
+            btrim, casefold, char_length, concat, concat_op, concat_ws, left, length, lower, lpad,
+            ltrim, md5, normalize, normalize_form, not_similar_to, regexp_matches, regexp_replace,
+            regexp_split_to_array, replace, reverse, right, rpad, rtrim, similar_to, split_part,
+            strpos, substring, text_starts_with, trim, unicode_assigned, upper,
         };
     }
 
     /// UUID helper functions.
     pub mod uuid {
-        pub use crate::typed::{uuid_extract_timestamp, uuid_extract_version, uuidv7};
+        pub use crate::typed::{
+            gen_random_uuid, uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7,
+            uuidv7_shift,
+        };
     }
 
     /// Window helper functions and frame constructors.
@@ -218,27 +234,37 @@ pub mod dsl {
     }
 
     pub use crate::typed::{
-        abs, age, aggregate, and, array, array_agg, array_agg_distinct, array_append, array_length,
-        array_position, array_positions, array_prepend, array_remove, array_replace,
-        array_to_string, avg, bool_and, bool_or, btrim, cardinality, case, ceil, char_length,
-        coalesce, concat, concat_op, concat_ws, count, count_all, count_distinct, cume_dist,
-        current_date, current_row, current_timestamp, date_trunc, dense_rank, every, exists, exp,
-        extract, false_, first_value, floor, following, function, greatest, groups, json, json_agg,
-        json_exists, json_get, json_get_text, json_path, json_path_text, json_query, json_scalar,
-        json_serialize, json_value, jsonb_agg_object, jsonb_array_elements, jsonb_build_array,
-        jsonb_build_object, jsonb_delete, jsonb_each, jsonb_insert, jsonb_object,
-        jsonb_path_exists, jsonb_path_query, jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag,
-        last_value, lead, least, left, length, ln, log, lower, lpad, ltrim, make_date, make_time,
-        make_timestamp, make_timestamptz, max, merge_action, min, mod_, mode, not, not_similar_to,
-        now, nth_value, ntile, nullif, or, ordered_set_aggregate, param, partition_by,
-        percent_rank, percentile_cont, percentile_disc, plainto_tsquery, pow, power, preceding,
-        random, random_between, range, rank, regexp_matches, regexp_replace, regexp_split_to_array,
-        replace, right, round, row, row_number, rows, rpad, rtrim, scalar_subquery, similar_to,
-        slice, split_part, sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array,
-        subscript, substring, sum, timezone, to_json, to_jsonb, to_tsquery, to_tsvector,
-        to_tsvector_config, trim, true_, trunc, ts_match, ts_rank, ts_rank_cd, unbounded_following,
-        unbounded_preceding, unnest, upper, uuid_extract_timestamp, uuid_extract_version, uuidv7,
-        var_pop, var_samp, variance, websearch_to_tsquery, window,
+        abs, age, aggregate, and, any_value, array, array_agg, array_agg_distinct, array_append,
+        array_cat, array_dims, array_fill, array_fill_with_lower_bounds, array_length, array_lower,
+        array_ndims, array_position, array_positions, array_prepend, array_remove, array_replace,
+        array_reverse, array_sample, array_shuffle, array_sort, array_sort_desc, array_sort_with,
+        array_to_string, array_upper, avg, bit_and, bit_or, bit_xor, bool_and, bool_or, btrim,
+        cardinality, case, casefold, cbrt, ceil, char_length, coalesce, concat, concat_op,
+        concat_ws, count, count_all, count_distinct, crc32, crc32c, cume_dist, current_date,
+        current_row, current_timestamp, date_trunc, degrees, dense_rank, div, every, exists, exp,
+        extract, factorial, false_, first_value, floor, following, function, gamma, gcd,
+        gen_random_uuid, greatest, grouping, groups, json, json_agg, json_agg_strict, json_exists,
+        json_get, json_get_text, json_object_agg, json_object_agg_strict, json_object_agg_unique,
+        json_object_agg_unique_strict, json_path, json_path_text, json_query, json_scalar,
+        json_serialize, json_value, jsonb_agg, jsonb_agg_object, jsonb_agg_strict,
+        jsonb_array_elements, jsonb_build_array, jsonb_build_object, jsonb_delete, jsonb_each,
+        jsonb_insert, jsonb_object, jsonb_object_agg, jsonb_object_agg_strict,
+        jsonb_object_agg_unique, jsonb_object_agg_unique_strict, jsonb_path_exists,
+        jsonb_path_query, jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag, last_value, lcm, lead,
+        least, left, length, lgamma, ln, log, lower, lpad, ltrim, make_date, make_time,
+        make_timestamp, make_timestamptz, max, md5, merge_action, min, mod_, mode, normalize,
+        normalize_form, not, not_similar_to, now, nth_value, ntile, nullif, or,
+        ordered_set_aggregate, param, partition_by, percent_rank, percentile_cont, percentile_disc,
+        pi, plainto_tsquery, pow, power, preceding, radians, random, random_between, range,
+        range_agg, range_intersect_agg, rank, regexp_matches, regexp_replace,
+        regexp_split_to_array, replace, reverse, right, round, row, row_number, rows, rpad, rtrim,
+        scalar_subquery, sign, similar_to, slice, split_part, sqrt, stddev, stddev_pop,
+        stddev_samp, string_agg, string_to_array, strpos, subscript, substring, sum,
+        text_starts_with, timezone, to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config,
+        trim, true_, trunc, ts_match, ts_rank, ts_rank_cd, unbounded_following,
+        unbounded_preceding, unicode_assigned, unnest, upper, uuid_extract_timestamp,
+        uuid_extract_version, uuidv4, uuidv7, uuidv7_shift, var_pop, var_samp, variance,
+        websearch_to_tsquery, window,
     };
 }
 

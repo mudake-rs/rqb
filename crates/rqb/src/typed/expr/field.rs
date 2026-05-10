@@ -79,6 +79,16 @@ impl<T> Field<T> {
         self.reference().expr()
     }
 
+    /// Returns this field qualified as `old.field` for PostgreSQL 18 DML `RETURNING`.
+    pub fn old_value(self) -> FieldRef<T> {
+        self.at("old")
+    }
+
+    /// Returns this field qualified as `new.field` for PostgreSQL 18 DML `RETURNING`.
+    pub fn new_value(self) -> FieldRef<T> {
+        self.at("new")
+    }
+
     /// Builds a custom value operator expression for this field.
     pub fn op(self, op: &'static str, right: impl Into<ValueExpr>) -> ValueExpr {
         self.expr().op(op, right)
@@ -102,6 +112,14 @@ impl<T> Field<T> {
     /// Returns `EXCLUDED.field` for `ON CONFLICT DO UPDATE`.
     pub fn excluded(self) -> ValueExpr {
         ValueExpr::Excluded(*self.meta)
+    }
+
+    /// Creates an assignment from an expression.
+    pub fn set_expr(self, value: impl Into<ValueExpr>) -> crate::typed::Assignment {
+        crate::typed::Assignment {
+            field: *self.meta,
+            value: value.into(),
+        }
     }
 
     /// Creates an assignment from `EXCLUDED.field`.
@@ -273,10 +291,7 @@ impl<T> Field<T> {
 impl<T: BindValue> Field<T> {
     /// Creates an assignment for writes.
     pub fn set(self, value: impl Into<T>) -> crate::typed::Assignment {
-        crate::typed::Assignment {
-            field: *self.meta,
-            value: ValueExpr::Param(Param::typed(value.into())),
-        }
+        self.set_expr(ValueExpr::Param(Param::typed(value.into())))
     }
 
     /// Creates an assignment from a borrowed value by cloning it.

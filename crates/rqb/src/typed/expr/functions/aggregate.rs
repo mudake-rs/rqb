@@ -69,6 +69,12 @@ aggregate_fn!(/// Builds `array_agg(DISTINCT expr)`.
     array_agg_distinct => distinct "array_agg");
 aggregate_fn!(/// Builds `json_agg(expr)`.
     json_agg => "json_agg");
+aggregate_fn!(/// Builds `json_agg_strict(expr)`.
+    json_agg_strict => "json_agg_strict");
+aggregate_fn!(/// Builds `jsonb_agg(expr)`.
+    jsonb_agg => "jsonb_agg");
+aggregate_fn!(/// Builds `jsonb_agg_strict(expr)`.
+    jsonb_agg_strict => "jsonb_agg_strict");
 
 /// Builds `jsonb_agg(jsonb_build_object(...))` from selected fields or aliased expressions.
 pub fn jsonb_agg_object(items: impl IntoIterator<Item = impl Into<SelectItem>>) -> ValueExpr {
@@ -152,12 +158,84 @@ pub fn string_agg(expr: impl Into<ValueExpr>, delimiter: impl Into<ValueExpr>) -
     aggregate("string_agg", [expr.into(), delimiter.into()], false)
 }
 
+/// Builds `json_object_agg(key, value)`.
+pub fn json_object_agg(key: impl Into<ValueExpr>, value: impl Into<ValueExpr>) -> ValueExpr {
+    aggregate("json_object_agg", [key.into(), value.into()], false)
+}
+
+/// Builds `jsonb_object_agg(key, value)`.
+pub fn jsonb_object_agg(key: impl Into<ValueExpr>, value: impl Into<ValueExpr>) -> ValueExpr {
+    aggregate("jsonb_object_agg", [key.into(), value.into()], false)
+}
+
+/// Builds `json_object_agg_strict(key, value)`.
+pub fn json_object_agg_strict(key: impl Into<ValueExpr>, value: impl Into<ValueExpr>) -> ValueExpr {
+    aggregate("json_object_agg_strict", [key.into(), value.into()], false)
+}
+
+/// Builds `jsonb_object_agg_strict(key, value)`.
+pub fn jsonb_object_agg_strict(
+    key: impl Into<ValueExpr>,
+    value: impl Into<ValueExpr>,
+) -> ValueExpr {
+    aggregate("jsonb_object_agg_strict", [key.into(), value.into()], false)
+}
+
+/// Builds `json_object_agg_unique(key, value)`.
+pub fn json_object_agg_unique(key: impl Into<ValueExpr>, value: impl Into<ValueExpr>) -> ValueExpr {
+    aggregate("json_object_agg_unique", [key.into(), value.into()], false)
+}
+
+/// Builds `jsonb_object_agg_unique(key, value)`.
+pub fn jsonb_object_agg_unique(
+    key: impl Into<ValueExpr>,
+    value: impl Into<ValueExpr>,
+) -> ValueExpr {
+    aggregate("jsonb_object_agg_unique", [key.into(), value.into()], false)
+}
+
+/// Builds `json_object_agg_unique_strict(key, value)`.
+pub fn json_object_agg_unique_strict(
+    key: impl Into<ValueExpr>,
+    value: impl Into<ValueExpr>,
+) -> ValueExpr {
+    aggregate(
+        "json_object_agg_unique_strict",
+        [key.into(), value.into()],
+        false,
+    )
+}
+
+/// Builds `jsonb_object_agg_unique_strict(key, value)`.
+pub fn jsonb_object_agg_unique_strict(
+    key: impl Into<ValueExpr>,
+    value: impl Into<ValueExpr>,
+) -> ValueExpr {
+    aggregate(
+        "jsonb_object_agg_unique_strict",
+        [key.into(), value.into()],
+        false,
+    )
+}
+
 aggregate_fn!(/// Builds `bool_and(expr)`.
     bool_and => "bool_and");
 aggregate_fn!(/// Builds `bool_or(expr)`.
     bool_or => "bool_or");
 aggregate_fn!(/// Builds `every(expr)`.
     every => "every");
+aggregate_fn!(/// Builds `any_value(expr)`.
+    any_value => "any_value");
+aggregate_fn!(/// Builds `bit_and(expr)`.
+    bit_and => "bit_and");
+aggregate_fn!(/// Builds `bit_or(expr)`.
+    bit_or => "bit_or");
+aggregate_fn!(/// Builds `bit_xor(expr)`.
+    bit_xor => "bit_xor");
+aggregate_fn!(/// Builds `range_agg(expr)`.
+    range_agg => "range_agg");
+aggregate_fn!(/// Builds `range_intersect_agg(expr)`.
+    range_intersect_agg => "range_intersect_agg");
 aggregate_fn!(/// Builds `stddev(expr)`.
     stddev => "stddev");
 aggregate_fn!(/// Builds `stddev_pop(expr)`.
@@ -190,4 +268,12 @@ pub fn percentile_disc(
 /// Builds `mode() WITHIN GROUP (ORDER BY order_by ASC)`.
 pub fn mode(order_by: impl Into<ValueExpr>) -> ValueExpr {
     ordered_set_aggregate("mode", Vec::<ValueExpr>::new(), [OrderItem::asc(order_by)])
+}
+
+/// Builds `GROUPING(...)` for grouped reports using rollups, cubes, or grouping sets.
+pub fn grouping(args: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
+    ValueExpr::Function {
+        name: "GROUPING",
+        args: args.into_iter().map(Into::into).collect(),
+    }
 }

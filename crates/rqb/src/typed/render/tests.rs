@@ -382,6 +382,23 @@ fn write_constructors_use_field_t_assignments() {
 }
 
 #[test]
+fn pg18_returning_old_new_and_computed_assignments_render() {
+    let built = update(users())
+        .set(EMAIL.set_expr(EMAIL.expr().op("||", "@new.example")))
+        .filter(ID.eq(1))
+        .returning_item(EMAIL.old_value().alias("old_email"))
+        .returning_item(EMAIL.new_value().alias("new_email"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "UPDATE \"public\".\"app_users\" SET \"email_address\" = (\"email_address\" || $1) WHERE \"id\" = $2 RETURNING \"old\".\"email_address\" AS \"old_email\", \"new\".\"email_address\" AS \"new_email\""
+    );
+    assert_eq!(built.params.len(), 2);
+}
+
+#[test]
 fn later_write_assignments_replace_earlier_ones_for_same_column() {
     let insert_sql = insert(users())
         .set(ID.set(1))
@@ -971,6 +988,74 @@ fn helper_functions_cover_common_postgres_builtins() {
         "SELECT bool_and(\"active\") AS \"all_active\", percentile_cont($1) WITHIN GROUP (ORDER BY \"total_cents\" ASC) AS \"p95\", CASE WHEN \"total_cents\" >= $2 THEN $3 ELSE $4 END AS \"bucket\", (\"total_cents\" % $5) AS \"total_remainder\", coalesce((\"payload\" ->> $6), $7) AS \"source\", to_jsonb(ARRAY[\"user_id\", \"total_cents\"]) AS \"ids\" FROM \"public\".\"orders\" WHERE (\"active\" IS NOT FALSE AND \"email_address\" SIMILAR TO $8 AND to_tsvector(\"email_address\") @@ websearch_to_tsquery($9) AND (\"payload\" #>> $10) IS NOT NULL)"
     );
     assert_eq!(built.params.len(), 10);
+}
+
+#[test]
+fn postgres_18_function_helpers_render_without_raw_sql() {
+    let built = select(users())
+        .item(crate::typed::casefold(EMAIL).alias("folded_email"))
+        .item(crate::typed::normalize_form(EMAIL, "NFC").alias("normalized_email"))
+        .item(crate::typed::gamma(ID).alias("gamma_id"))
+        .item(crate::typed::lgamma(ID).alias("lgamma_id"))
+        .item(crate::typed::crc32(param(vec![1_u8, 2, 3])).alias("crc"))
+        .item(crate::typed::uuidv4().alias("uuid_v4"))
+        .item(crate::typed::gen_random_uuid().alias("random_uuid"))
+        .item(
+            crate::typed::uuidv7_shift(param("1 hour".to_owned()).cast("interval"))
+                .alias("shifted_uuid_v7"),
+        )
+        .filter(crate::typed::text_starts_with(EMAIL, "egor"))
+        .filter(crate::typed::unicode_assigned(EMAIL))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT casefold(\"email_address\") AS \"folded_email\", normalize(\"email_address\", NFC) AS \"normalized_email\", gamma(\"id\") AS \"gamma_id\", lgamma(\"id\") AS \"lgamma_id\", crc32($1) AS \"crc\", uuidv4() AS \"uuid_v4\", gen_random_uuid() AS \"random_uuid\", uuidv7(CAST($2 AS interval)) AS \"shifted_uuid_v7\" FROM \"public\".\"app_users\" WHERE (starts_with(\"email_address\", $3) IS TRUE AND unicode_assigned(\"email_address\") IS TRUE)"
+    );
+    assert_eq!(built.params.len(), 3);
+}
+
+#[test]
+fn array_and_aggregate_fill_in_helpers_render_without_raw_sql() {
+    let array_built = select(orders())
+        .item(crate::typed::array_cat(TAGS, array(["vip", "new"])).alias("tag_cat"))
+        .item(crate::typed::array_dims(TAGS).alias("tag_dims"))
+        .item(crate::typed::array_lower(TAGS, 1_i32).alias("tag_lower"))
+        .item(crate::typed::array_upper(TAGS, 1_i32).alias("tag_upper"))
+        .item(crate::typed::array_ndims(TAGS).alias("tag_ndims"))
+        .item(crate::typed::array_reverse(TAGS).alias("tag_reverse"))
+        .item(crate::typed::array_sample(TAGS, 2_i32).alias("tag_sample"))
+        .item(crate::typed::array_shuffle(TAGS).alias("tag_shuffle"))
+        .item(crate::typed::array_sort_desc(TAGS).alias("tag_sort_desc"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        array_built.sql,
+        "SELECT array_cat(\"tags\", ARRAY[$1, $2]) AS \"tag_cat\", array_dims(\"tags\") AS \"tag_dims\", array_lower(\"tags\", $3) AS \"tag_lower\", array_upper(\"tags\", $4) AS \"tag_upper\", array_ndims(\"tags\") AS \"tag_ndims\", array_reverse(\"tags\") AS \"tag_reverse\", array_sample(\"tags\", $5) AS \"tag_sample\", array_shuffle(\"tags\") AS \"tag_shuffle\", array_sort(\"tags\", $6, $7) AS \"tag_sort_desc\" FROM \"public\".\"orders\""
+    );
+    assert_eq!(array_built.params.len(), 7);
+
+    let aggregate_built = select(orders())
+        .column(ORDER_USER_ID)
+        .item(crate::typed::grouping([ORDER_USER_ID]).alias("grouping_mask"))
+        .item(crate::typed::any_value(PAYLOAD).alias("any_payload"))
+        .item(crate::typed::bit_xor(TOTAL).alias("checksum"))
+        .item(crate::typed::jsonb_agg_strict(PAYLOAD).alias("payloads"))
+        .item(
+            crate::typed::jsonb_object_agg_unique(ORDER_USER_ID, PAYLOAD).alias("payload_by_user"),
+        )
+        .item(crate::typed::range_agg(SCORE_RANGE).alias("score_ranges"))
+        .rollup([ORDER_USER_ID])
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        aggregate_built.sql,
+        "SELECT \"user_id\", GROUPING(\"user_id\") AS \"grouping_mask\", any_value(\"payload\") AS \"any_payload\", bit_xor(\"total_cents\") AS \"checksum\", jsonb_agg_strict(\"payload\") AS \"payloads\", jsonb_object_agg_unique(\"user_id\", \"payload\") AS \"payload_by_user\", range_agg(\"score_range\") AS \"score_ranges\" FROM \"public\".\"orders\" GROUP BY ROLLUP(\"user_id\")"
+    );
+    assert_eq!(aggregate_built.params.len(), 0);
 }
 
 #[test]

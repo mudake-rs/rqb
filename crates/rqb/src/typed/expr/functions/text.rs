@@ -1,4 +1,4 @@
-use crate::typed::ValueExpr;
+use crate::typed::{BoolExpr, ValueExpr};
 
 use super::function;
 
@@ -20,6 +20,26 @@ pub fn lower(expr: impl Into<ValueExpr>) -> ValueExpr {
 /// Builds `upper(expr)`.
 pub fn upper(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("upper", [expr])
+}
+
+/// Builds `casefold(expr)`.
+pub fn casefold(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("casefold", [expr])
+}
+
+/// Builds `normalize(expr)`.
+pub fn normalize(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("normalize", [expr])
+}
+
+/// Builds `normalize(expr, form)` where form is a PostgreSQL normalization keyword.
+pub fn normalize_form(expr: impl Into<ValueExpr>, form: &'static str) -> ValueExpr {
+    function("normalize", [expr.into(), ValueExpr::Keyword(form)])
+}
+
+/// Builds `unicode_assigned(expr)`.
+pub fn unicode_assigned(expr: impl Into<ValueExpr>) -> BoolExpr {
+    function("unicode_assigned", [expr]).is_true()
 }
 
 /// Builds `substring(...)`.
@@ -61,6 +81,16 @@ pub fn split_part(
     field: impl Into<ValueExpr>,
 ) -> ValueExpr {
     function("split_part", [text.into(), delimiter.into(), field.into()])
+}
+
+/// Builds `strpos(text, substring)`.
+pub fn strpos(text: impl Into<ValueExpr>, substring: impl Into<ValueExpr>) -> ValueExpr {
+    function("strpos", [text.into(), substring.into()])
+}
+
+/// Builds `starts_with(text, prefix)`.
+pub fn text_starts_with(text: impl Into<ValueExpr>, prefix: impl Into<ValueExpr>) -> BoolExpr {
+    function("starts_with", [text.into(), prefix.into()]).is_true()
 }
 
 /// Builds `trim(expr)`.
@@ -124,4 +154,14 @@ pub fn concat_ws(
     let mut values = vec![separator.into()];
     values.extend(args.into_iter().map(Into::into));
     function("concat_ws", values)
+}
+
+/// Builds `reverse(expr)`.
+pub fn reverse(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("reverse", [expr])
+}
+
+/// Builds `md5(expr)`.
+pub fn md5(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("md5", [expr])
 }

@@ -42,6 +42,11 @@ pub fn sqrt(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("sqrt", [expr])
 }
 
+/// Builds `cbrt(expr)`.
+pub fn cbrt(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("cbrt", [expr])
+}
+
 /// Builds `exp(expr)`.
 pub fn exp(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("exp", [expr])
@@ -60,6 +65,56 @@ pub fn log(args: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
 /// Builds `mod(left, right)`.
 pub fn mod_(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> ValueExpr {
     function("mod", [left.into(), right.into()])
+}
+
+/// Builds `div(left, right)`.
+pub fn div(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> ValueExpr {
+    function("div", [left.into(), right.into()])
+}
+
+/// Builds `gcd(left, right)`.
+pub fn gcd(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> ValueExpr {
+    function("gcd", [left.into(), right.into()])
+}
+
+/// Builds `lcm(left, right)`.
+pub fn lcm(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> ValueExpr {
+    function("lcm", [left.into(), right.into()])
+}
+
+/// Builds `degrees(expr)`.
+pub fn degrees(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("degrees", [expr])
+}
+
+/// Builds `radians(expr)`.
+pub fn radians(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("radians", [expr])
+}
+
+/// Builds `sign(expr)`.
+pub fn sign(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("sign", [expr])
+}
+
+/// Builds `factorial(expr)`.
+pub fn factorial(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("factorial", [expr])
+}
+
+/// Builds `gamma(expr)`.
+pub fn gamma(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("gamma", [expr])
+}
+
+/// Builds `lgamma(expr)`.
+pub fn lgamma(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("lgamma", [expr])
+}
+
+/// Builds `pi()`.
+pub fn pi() -> ValueExpr {
+    function("pi", Vec::<ValueExpr>::new())
 }
 
 /// Builds `random()`.

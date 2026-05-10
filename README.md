@@ -217,6 +217,21 @@ update(schema::users::table())
     .await?;
 ```
 
+Computed writes use `set_expr(...)`, and PostgreSQL 18 `RETURNING old.field` /
+`new.field` is available on generated fields:
+
+```rust
+let changed = update(schema::users::table())
+    .set(schema::users::LOGIN_COUNT.set_expr(
+        schema::users::LOGIN_COUNT.expr().op("+", 1),
+    ))
+    .filter(schema::users::ID.eq(user_id))
+    .returning_item(schema::users::LOGIN_COUNT.old_value().alias("old_login_count"))
+    .returning_item(schema::users::LOGIN_COUNT.new_value().alias("new_login_count"))
+    .fetch_one_as::<LoginCountChange>(&pool)
+    .await?;
+```
+
 With generated schema modules, request DTOs can derive write mappings:
 
 ```rust

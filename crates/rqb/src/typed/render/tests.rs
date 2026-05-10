@@ -2,8 +2,8 @@ use crate::typed::{
     Assignment, BoolExpr, Field, Insert, Meta, OpSet, Param, RawStmt, Select, SelectItem, Source,
     Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce, count_all, count_distinct,
     cte, current_date, current_timestamp, extract, function_source, insert, json_agg,
-    json_get_text, lag, merge_into, param, percentile_cont, row, row_number, select, slice,
-    subscript, table, to_jsonb, update, window,
+    json_get_text, lag, merge_into, param, percentile_cont, row, row_number, scalar_subquery,
+    select, slice, subscript, table, to_jsonb, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -515,6 +515,29 @@ fn in_subquery_predicate_renders_server_owned_query_shape() {
         "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" WHERE \"id\" IN (SELECT \"user_id\" FROM \"public\".\"orders\" WHERE \"total_cents\" > $1)"
     );
     assert_eq!(built.params.len(), 1);
+}
+
+#[test]
+fn scalar_subquery_renders_inside_delete_predicates() {
+    let cutoff_total = scalar_subquery(
+        select(orders())
+            .column(TOTAL)
+            .filter(ORDER_USER_ID.eq(7))
+            .order_desc(TOTAL)
+            .offset(200)
+            .limit(1),
+    );
+    let built = crate::typed::delete_from(orders())
+        .filter(ORDER_USER_ID.eq(7))
+        .filter(TOTAL.expr().lte(cutoff_total))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "DELETE FROM \"public\".\"orders\" WHERE (\"user_id\" = $1 AND \"total_cents\" <= (SELECT \"total_cents\" FROM \"public\".\"orders\" WHERE \"user_id\" = $2 ORDER BY \"total_cents\" DESC LIMIT $3 OFFSET $4))"
+    );
+    assert_eq!(built.params.len(), 4);
 }
 
 #[test]

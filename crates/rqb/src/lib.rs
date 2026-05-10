@@ -185,7 +185,7 @@ pub mod dsl {
 
     /// Scalar helper functions.
     pub mod scalar {
-        pub use crate::typed::{case, coalesce, greatest, least, nullif};
+        pub use crate::typed::{case, coalesce, greatest, least, nullif, scalar_subquery};
     }
 
     /// Text helper functions.
@@ -227,12 +227,12 @@ pub mod dsl {
         now, nth_value, ntile, nullif, or, ordered_set_aggregate, param, partition_by,
         percent_rank, percentile_cont, percentile_disc, plainto_tsquery, pow, power, preceding,
         random, random_between, range, rank, regexp_matches, regexp_replace, regexp_split_to_array,
-        replace, right, round, row, row_number, rows, rpad, rtrim, similar_to, slice, split_part,
-        sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array, subscript, substring,
-        sum, timezone, to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config, trim, trunc,
-        ts_match, ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding, unnest, upper,
-        uuid_extract_timestamp, uuid_extract_version, uuidv7, var_pop, var_samp, variance,
-        websearch_to_tsquery, window,
+        replace, right, round, row, row_number, rows, rpad, rtrim, scalar_subquery, similar_to,
+        slice, split_part, sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array,
+        subscript, substring, sum, timezone, to_json, to_jsonb, to_tsquery, to_tsvector,
+        to_tsvector_config, trim, trunc, ts_match, ts_rank, ts_rank_cd, unbounded_following,
+        unbounded_preceding, unnest, upper, uuid_extract_timestamp, uuid_extract_version, uuidv7,
+        var_pop, var_samp, variance, websearch_to_tsquery, window,
     };
 }
 

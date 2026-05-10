@@ -31,11 +31,12 @@ pub use functions::{
     make_time, make_timestamp, make_timestamptz, max, merge_action, min, mod_, mode,
     not_similar_to, now, nullif, ordered_set_aggregate, param, percentile_cont, percentile_disc,
     plainto_tsquery, pow, power, random, random_between, regexp_matches, regexp_replace,
-    regexp_split_to_array, replace, right, round, row, rpad, rtrim, similar_to, slice, split_part,
-    sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array, subscript, substring, sum,
-    timezone, to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config, trim, trunc,
-    ts_match, ts_rank, ts_rank_cd, unnest, upper, uuid_extract_timestamp, uuid_extract_version,
-    uuidv7, var_pop, var_samp, variance, websearch_to_tsquery,
+    regexp_split_to_array, replace, right, round, row, rpad, rtrim, scalar_subquery, similar_to,
+    slice, split_part, sqrt, stddev, stddev_pop, stddev_samp, string_agg, string_to_array,
+    subscript, substring, sum, timezone, to_json, to_jsonb, to_tsquery, to_tsvector,
+    to_tsvector_config, trim, trunc, ts_match, ts_rank, ts_rank_cd, unnest, upper,
+    uuid_extract_timestamp, uuid_extract_version, uuidv7, var_pop, var_samp, variance,
+    websearch_to_tsquery,
 };
 pub use window::{
     cume_dist, current_row, dense_rank, first_value, following, groups, lag, last_value, lead,

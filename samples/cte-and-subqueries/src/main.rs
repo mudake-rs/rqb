@@ -1,4 +1,4 @@
-use rqb::dsl::{count_all, exists};
+use rqb::dsl::{count_all, exists, scalar_subquery};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::order_items as items;
@@ -72,6 +72,26 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "SELECT \"o\".\"id\" AS \"o_id\", \"item_counts\".\"item_count\" AS \"item_counts_item_count\" FROM \"sample\".\"orders\" AS \"o\" LEFT JOIN LATERAL (SELECT count(*) AS \"item_count\" FROM \"sample\".\"order_items\" WHERE \"order_id\" = \"o\".\"id\") AS \"item_counts\" (\"item_count\") ON TRUE"
     );
 
+    // Scalar subqueries are value expressions. This keeps retention-style
+    // deletes typed without constructing `ValueExpr::Subquery` by hand.
+    let retention_delete = delete_from(orders::table())
+        .filter(orders::USER_ID.eq(Uuid::nil()))
+        .filter(orders::TOTAL_CENTS.expr().lte(scalar_subquery(
+            select(orders::table())
+                .column(orders::TOTAL_CENTS)
+                .filter(orders::USER_ID.eq(Uuid::nil()))
+                .order_desc(orders::TOTAL_CENTS)
+                .offset(200)
+                .limit(1),
+        )))
+        .build()?;
+
+    assert_eq!(
+        retention_delete.sql,
+        "DELETE FROM \"sample\".\"orders\" WHERE (\"user_id\" = $1 AND \"total_cents\" <= (SELECT \"total_cents\" FROM \"sample\".\"orders\" WHERE \"user_id\" = $2 ORDER BY \"total_cents\" DESC LIMIT $3 OFFSET $4))"
+    );
+    assert_eq!(retention_delete.params.len(), 4);
+
     // Raw sources use the same exposed-field rule as subqueries.
     let raw_ids = raw_source(
         "SELECT ?::uuid AS id",
@@ -102,6 +122,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("{}", paid_users.sql);
     println!("{}", recursive.sql);
     println!("{}", lateral.sql);
+    println!("{}", retention_delete.sql);
     println!("{}", raw_source_query.sql);
     println!("{}", set_query.sql);
     Ok(())

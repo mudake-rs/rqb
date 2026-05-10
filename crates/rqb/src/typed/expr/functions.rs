@@ -57,6 +57,11 @@ where
     ValueExpr::Param(Param::typed(value))
 }
 
+/// Builds a scalar subquery value expression.
+pub fn scalar_subquery(stmt: impl Into<crate::typed::Stmt>) -> ValueExpr {
+    ValueExpr::Subquery(Box::new(stmt.into()))
+}
+
 /// Starts a SQL `CASE` expression builder.
 pub fn case() -> CaseBuilder {
     CaseBuilder::new()

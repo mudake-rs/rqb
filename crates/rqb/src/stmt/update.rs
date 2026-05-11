@@ -14,12 +14,14 @@ impl Update {
     }
 
     /// Adds a CTE to the update statement.
+    #[inline]
     pub fn with(mut self, cte: Cte) -> Self {
         self.ctes.push(cte);
         self
     }
 
     /// Adds or replaces one `SET` assignment.
+    #[inline]
     pub fn set(mut self, assignment: Assignment) -> Self {
         push_assignment(&mut self.assignments, assignment);
         self
@@ -32,6 +34,7 @@ impl Update {
     }
 
     /// Adds one `SET` assignment only when `condition` is true.
+    #[inline]
     pub fn set_if(self, condition: bool, assignment: Assignment) -> Self {
         if condition {
             self.set(assignment)
@@ -61,6 +64,7 @@ impl Update {
     }
 
     /// Adds a `WHERE` predicate, composing with existing predicates using `AND`.
+    #[inline]
     pub fn filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
@@ -70,18 +74,21 @@ impl Update {
     ///
     /// Use `filter(or([...]))` when only part of the current `WHERE` tree
     /// should be OR-grouped.
+    #[inline]
     pub fn or_filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::or_option(self.filter, filter));
         self
     }
 
     /// Replaces the entire `WHERE` predicate.
+    #[inline]
     pub fn replace_filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(filter);
         self
     }
 
     /// Adds a `WHERE` predicate only when `condition` is true.
+    #[inline]
     pub fn filter_if(self, condition: bool, filter: BoolExpr) -> Self {
         if condition { self.filter(filter) } else { self }
     }
@@ -95,6 +102,7 @@ impl Update {
     }
 
     /// Adds an OR-composed `WHERE` predicate only when `condition` is true.
+    #[inline]
     pub fn or_filter_if(self, condition: bool, filter: BoolExpr) -> Self {
         if condition {
             self.or_filter(filter)
@@ -118,6 +126,7 @@ impl Update {
     }
 
     /// Replaces `RETURNING` with every field exposed by the target source.
+    #[inline]
     pub fn returning_all(mut self) -> Self {
         self.returning.clear();
         push_all_source_fields(&self.target, &mut self.returning);
@@ -125,6 +134,7 @@ impl Update {
     }
 
     /// Adds an arbitrary item to `RETURNING`.
+    #[inline]
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self

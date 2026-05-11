@@ -34,6 +34,7 @@ pub enum BooleanTest {
 
 impl BooleanTest {
     /// Returns the SQL keyword for this test.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::True => "TRUE",
@@ -45,6 +46,7 @@ impl BooleanTest {
 
 impl BoolOp {
     /// Returns the SQL operator token.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Eq => "=",
@@ -59,6 +61,7 @@ impl BoolOp {
     }
 
     /// Returns a stable operator name for diagnostics.
+    #[inline]
     pub const fn as_name(self) -> &'static str {
         match self {
             Self::Eq => "eq",
@@ -73,6 +76,7 @@ impl BoolOp {
     }
 
     /// Returns true when this operator requires ordered field capability.
+    #[inline]
     pub const fn requires_ordering(self) -> bool {
         matches!(self, Self::Gt | Self::Gte | Self::Lt | Self::Lte)
     }
@@ -95,6 +99,7 @@ pub enum ValueOp {
 
 impl ValueOp {
     /// Returns the SQL operator token.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Add => "+",

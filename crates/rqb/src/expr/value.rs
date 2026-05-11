@@ -15,6 +15,7 @@ impl CaseBuilder {
     }
 
     /// Finishes the expression without an `ELSE` branch.
+    #[inline]
     pub fn end(self) -> ValueExpr {
         ValueExpr::Case {
             branches: self.branches,
@@ -36,6 +37,7 @@ impl Meta {
     ///
     /// This is useful for raw-only extension columns that are known to the
     /// schema generator but intentionally do not have a typed [`Field`](crate::Field).
+    #[inline]
     pub fn expr(self) -> ValueExpr {
         ValueExpr::Field {
             meta: self,
@@ -82,6 +84,7 @@ impl ValueExpr {
     }
 
     /// Casts this expression to a Postgres type.
+    #[inline]
     pub fn cast(self, pg: &'static str) -> Self {
         Self::Cast {
             expr: Box::new(self),
@@ -122,6 +125,7 @@ impl ValueExpr {
     }
 
     /// Builds `expr IS NULL`.
+    #[inline]
     pub fn is_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self,
@@ -130,6 +134,7 @@ impl ValueExpr {
     }
 
     /// Builds `expr IS NOT NULL`.
+    #[inline]
     pub fn is_not_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self,
@@ -178,6 +183,7 @@ impl ValueExpr {
     }
 
     /// Adds aggregate-local `ORDER BY`.
+    #[inline]
     pub fn aggregate_order_by(mut self, item: OrderItem) -> Self {
         if let Self::Aggregate { order_by, .. } = &mut self {
             order_by.push(item);
@@ -201,6 +207,7 @@ impl ValueExpr {
     }
 
     /// Adds an aggregate `FILTER (WHERE ...)` predicate.
+    #[inline]
     pub fn aggregate_filter(mut self, filter: BoolExpr) -> Self {
         match &mut self {
             Self::Aggregate {

@@ -166,6 +166,7 @@ impl Assignment {
 
 impl OrderDirection {
     /// Returns the SQL token for this order direction.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Asc => "ASC",
@@ -176,6 +177,7 @@ impl OrderDirection {
 
 impl NullsPosition {
     /// Returns the SQL token for this null placement.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::First => "NULLS FIRST",
@@ -186,6 +188,7 @@ impl NullsPosition {
 
 impl LockMode {
     /// Returns the SQL token for this lock mode.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Update => "FOR UPDATE",
@@ -198,6 +201,7 @@ impl LockMode {
 
 impl LockWait {
     /// Returns the optional SQL token for this lock wait behavior.
+    #[inline]
     pub const fn as_sql(self) -> Option<&'static str> {
         match self {
             Self::Wait => None,
@@ -209,6 +213,7 @@ impl LockWait {
 
 impl RowLock {
     /// Creates a row lock clause with default wait behavior.
+    #[inline]
     pub const fn new(mode: LockMode) -> Self {
         Self {
             mode,
@@ -218,12 +223,14 @@ impl RowLock {
     }
 
     /// Sets `NOWAIT`.
+    #[inline]
     pub const fn nowait(mut self) -> Self {
         self.wait = LockWait::NoWait;
         self
     }
 
     /// Sets `SKIP LOCKED`.
+    #[inline]
     pub const fn skip_locked(mut self) -> Self {
         self.wait = LockWait::SkipLocked;
         self
@@ -262,12 +269,14 @@ impl OrderItem {
     }
 
     /// Adds `NULLS FIRST`.
+    #[inline]
     pub fn nulls_first(mut self) -> Self {
         self.nulls = Some(NullsPosition::First);
         self
     }
 
     /// Adds `NULLS LAST`.
+    #[inline]
     pub fn nulls_last(mut self) -> Self {
         self.nulls = Some(NullsPosition::Last);
         self

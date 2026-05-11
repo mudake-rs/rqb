@@ -7,6 +7,7 @@ use super::{
 
 impl WindowFunction {
     /// Returns the SQL function name.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::RowNumber => "row_number",
@@ -26,6 +27,7 @@ impl WindowFunction {
 
 impl WindowFrameKind {
     /// Returns the SQL frame unit.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Rows => "ROWS",
@@ -37,6 +39,7 @@ impl WindowFrameKind {
 
 impl FrameExclude {
     /// Returns the SQL exclusion clause.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::CurrentRow => "EXCLUDE CURRENT ROW",
@@ -49,6 +52,7 @@ impl FrameExclude {
 
 impl FrameBound {
     /// Returns `UNBOUNDED PRECEDING`.
+    #[inline]
     pub const fn unbounded_preceding() -> Self {
         Self::UnboundedPreceding
     }
@@ -59,6 +63,7 @@ impl FrameBound {
     }
 
     /// Returns `CURRENT ROW`.
+    #[inline]
     pub const fn current_row() -> Self {
         Self::CurrentRow
     }
@@ -69,6 +74,7 @@ impl FrameBound {
     }
 
     /// Returns `UNBOUNDED FOLLOWING`.
+    #[inline]
     pub const fn unbounded_following() -> Self {
         Self::UnboundedFollowing
     }
@@ -224,6 +230,7 @@ impl OffsetWindowFunctionBuilder {
 }
 
 /// Starts a window specification.
+#[inline]
 pub fn window() -> WindowSpec {
     WindowSpec::new()
 }
@@ -234,16 +241,19 @@ pub fn partition_by(expr: impl Into<ValueExpr>) -> WindowSpec {
 }
 
 /// Builds `row_number()`.
+#[inline]
 pub fn row_number() -> WindowFunctionBuilder {
     window_function(WindowFunction::RowNumber, [])
 }
 
 /// Builds `rank()`.
+#[inline]
 pub fn rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::Rank, [])
 }
 
 /// Builds `dense_rank()`.
+#[inline]
 pub fn dense_rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::DenseRank, [])
 }
@@ -269,11 +279,13 @@ pub fn ntile(buckets: impl Into<ValueExpr>) -> WindowFunctionBuilder {
 }
 
 /// Builds `percent_rank()`.
+#[inline]
 pub fn percent_rank() -> WindowFunctionBuilder {
     window_function(WindowFunction::PercentRank, [])
 }
 
 /// Builds `cume_dist()`.
+#[inline]
 pub fn cume_dist() -> WindowFunctionBuilder {
     window_function(WindowFunction::CumeDist, [])
 }
@@ -314,6 +326,7 @@ pub fn groups(start: FrameBound) -> WindowFrame {
 }
 
 /// Returns `UNBOUNDED PRECEDING`.
+#[inline]
 pub fn unbounded_preceding() -> FrameBound {
     FrameBound::unbounded_preceding()
 }
@@ -324,6 +337,7 @@ pub fn preceding(expr: impl Into<ValueExpr>) -> FrameBound {
 }
 
 /// Returns `CURRENT ROW`.
+#[inline]
 pub fn current_row() -> FrameBound {
     FrameBound::current_row()
 }
@@ -334,6 +348,7 @@ pub fn following(expr: impl Into<ValueExpr>) -> FrameBound {
 }
 
 /// Returns `UNBOUNDED FOLLOWING`.
+#[inline]
 pub fn unbounded_following() -> FrameBound {
     FrameBound::unbounded_following()
 }

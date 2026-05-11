@@ -19,6 +19,7 @@ impl Insert {
     /// This makes it safe to layer server-owned values around a DTO mapping:
     /// call `values(&dto)` for request-owned fields and use `set(...)` for
     /// generated IDs, tenant IDs, status defaults, or explicit overrides.
+    #[inline]
     pub fn set(mut self, assignment: Assignment) -> Self {
         push_column(&mut self.columns, assignment.field);
         push_assignment(&mut self.assignments, assignment);
@@ -37,6 +38,7 @@ impl Insert {
     }
 
     /// Adds one assignment only when `condition` is true.
+    #[inline]
     pub fn set_if(self, condition: bool, assignment: Assignment) -> Self {
         if condition {
             self.set(assignment)
@@ -78,6 +80,7 @@ impl Insert {
     }
 
     /// Uses a select statement as the insert source.
+    #[inline]
     pub fn from_select(mut self, select: Select) -> Self {
         self.source = Some(Box::new(select));
         self
@@ -112,6 +115,7 @@ impl Insert {
     }
 
     /// Replaces `RETURNING` with every field exposed by the target source.
+    #[inline]
     pub fn returning_all(mut self) -> Self {
         self.returning.clear();
         push_all_source_fields(&self.target, &mut self.returning);
@@ -119,6 +123,7 @@ impl Insert {
     }
 
     /// Adds an arbitrary item to `RETURNING`.
+    #[inline]
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self

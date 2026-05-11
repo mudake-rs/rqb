@@ -2,6 +2,7 @@ use super::*;
 
 impl MergeWhen {
     /// Returns the SQL branch token.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Matched => "MATCHED",
@@ -25,12 +26,14 @@ impl Merge {
     }
 
     /// Adds a CTE to the merge statement.
+    #[inline]
     pub fn with(mut self, cte: Cte) -> Self {
         self.ctes.push(cte);
         self
     }
 
     /// Starts a `WHEN MATCHED` branch.
+    #[inline]
     pub fn when_matched(self) -> MatchedMergeBuilder {
         MatchedMergeBuilder {
             merge: self,
@@ -39,6 +42,7 @@ impl Merge {
     }
 
     /// Starts a conditional `WHEN MATCHED AND ...` branch.
+    #[inline]
     pub fn when_matched_if(self, condition: BoolExpr) -> MatchedMergeBuilder {
         MatchedMergeBuilder {
             merge: self,
@@ -47,6 +51,7 @@ impl Merge {
     }
 
     /// Starts a `WHEN NOT MATCHED` branch.
+    #[inline]
     pub fn when_not_matched(self) -> NotMatchedMergeBuilder {
         NotMatchedMergeBuilder {
             merge: self,
@@ -55,6 +60,7 @@ impl Merge {
     }
 
     /// Starts a conditional `WHEN NOT MATCHED AND ...` branch.
+    #[inline]
     pub fn when_not_matched_if(self, condition: BoolExpr) -> NotMatchedMergeBuilder {
         NotMatchedMergeBuilder {
             merge: self,
@@ -63,6 +69,7 @@ impl Merge {
     }
 
     /// Starts a `WHEN NOT MATCHED BY SOURCE` branch.
+    #[inline]
     pub fn when_not_matched_by_source(self) -> NotMatchedBySourceMergeBuilder {
         NotMatchedBySourceMergeBuilder {
             merge: self,
@@ -71,6 +78,7 @@ impl Merge {
     }
 
     /// Starts a conditional `WHEN NOT MATCHED BY SOURCE AND ...` branch.
+    #[inline]
     pub fn when_not_matched_by_source_if(
         self,
         condition: BoolExpr,
@@ -88,12 +96,14 @@ impl Merge {
     }
 
     /// Adds an arbitrary item to `RETURNING`.
+    #[inline]
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self
     }
 
     /// Replaces `RETURNING` with every field exposed by the target source.
+    #[inline]
     pub fn returning_all(mut self) -> Self {
         let qualifier = self.target.explicit_alias().map(str::to_owned);
         let mut returning = Vec::new();
@@ -125,6 +135,7 @@ impl MatchedMergeBuilder {
     }
 
     /// Finishes this branch with `DELETE`.
+    #[inline]
     pub fn delete(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -136,6 +147,7 @@ impl MatchedMergeBuilder {
     }
 
     /// Finishes this branch with `DO NOTHING`.
+    #[inline]
     pub fn do_nothing(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -161,6 +173,7 @@ impl NotMatchedMergeBuilder {
     }
 
     /// Finishes this branch with `DO NOTHING`.
+    #[inline]
     pub fn do_nothing(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -186,6 +199,7 @@ impl NotMatchedBySourceMergeBuilder {
     }
 
     /// Finishes this branch with `DELETE`.
+    #[inline]
     pub fn delete(self) -> Merge {
         finish_merge_action(
             self.merge,
@@ -197,6 +211,7 @@ impl NotMatchedBySourceMergeBuilder {
     }
 
     /// Finishes this branch with `DO NOTHING`.
+    #[inline]
     pub fn do_nothing(self) -> Merge {
         finish_merge_action(
             self.merge,

@@ -296,11 +296,13 @@ impl Select {
     /// The request filter is AND-composed with existing server filters. Sort,
     /// limit, and offset are request-controlled clauses, so request values
     /// replace any existing builder values for those clauses.
+    #[inline]
     pub fn apply_search(self, request: SearchRequest) -> Result<Self> {
         request.merge_in(self)
     }
 
     /// Applies a JSON search request, replacing filter, sort, limit, and offset.
+    #[inline]
     pub fn replace_search(self, request: SearchRequest) -> Result<Self> {
         request.replace_in(self)
     }

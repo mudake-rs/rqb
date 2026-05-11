@@ -22,6 +22,7 @@ impl Select {
     }
 
     /// Adds a CTE to the select.
+    #[inline]
     pub fn with(mut self, cte: Cte) -> Self {
         self.ctes.push(cte);
         self
@@ -99,6 +100,7 @@ impl Select {
     }
 
     /// Adds a fully specified projection item, usually an aliased expression.
+    #[inline]
     pub fn item(mut self, item: SelectItem) -> Self {
         self.projection.push(item);
         self
@@ -111,6 +113,7 @@ impl Select {
     }
 
     /// Adds a predicate to `WHERE`, composing with existing predicates using `AND`.
+    #[inline]
     pub fn filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
@@ -120,18 +123,21 @@ impl Select {
     ///
     /// Use `filter(or([...]))` when only part of the current `WHERE` tree
     /// should be OR-grouped.
+    #[inline]
     pub fn or_filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::or_option(self.filter, filter));
         self
     }
 
     /// Replaces the entire `WHERE` predicate.
+    #[inline]
     pub fn replace_filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(filter);
         self
     }
 
     /// Adds a predicate only when `condition` is true.
+    #[inline]
     pub fn filter_if(self, condition: bool, filter: BoolExpr) -> Self {
         if condition { self.filter(filter) } else { self }
     }
@@ -145,6 +151,7 @@ impl Select {
     }
 
     /// Adds an OR-composed predicate only when `condition` is true.
+    #[inline]
     pub fn or_filter_if(self, condition: bool, filter: BoolExpr) -> Self {
         if condition {
             self.or_filter(filter)
@@ -167,6 +174,7 @@ impl Select {
     }
 
     /// Adds `DISTINCT`.
+    #[inline]
     pub fn distinct(mut self) -> Self {
         self.distinct = true;
         self
@@ -227,6 +235,7 @@ impl Select {
     }
 
     /// Adds a fully specified `ORDER BY` item.
+    #[inline]
     pub fn order_by(mut self, item: OrderItem) -> Self {
         self.order.push(item);
         self
@@ -278,6 +287,7 @@ impl Select {
     }
 
     /// Adds a `HAVING` predicate, composing with existing predicates using `AND`.
+    #[inline]
     pub fn having(mut self, having: BoolExpr) -> Self {
         self.having = Some(BoolExpr::and_option(self.having, having));
         self
@@ -320,6 +330,7 @@ impl Select {
     }
 
     /// Sets a `LIMIT` value and clears any `FETCH FIRST` clause.
+    #[inline]
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(Param::typed(i64::from(limit)));
         self.fetch = None;
@@ -347,12 +358,14 @@ impl Select {
     }
 
     /// Sets an `OFFSET` value.
+    #[inline]
     pub fn offset(mut self, offset: u32) -> Self {
         self.offset = Some(Param::typed(i64::from(offset)));
         self
     }
 
     /// Adds a row lock with the given mode.
+    #[inline]
     pub fn lock(mut self, mode: LockMode) -> Self {
         self.lock = Some(RowLock::new(mode));
         self
@@ -365,6 +378,7 @@ impl Select {
     }
 
     /// Adds `FOR UPDATE`.
+    #[inline]
     pub fn for_update(self) -> Self {
         self.lock(LockMode::Update)
     }
@@ -375,6 +389,7 @@ impl Select {
     }
 
     /// Adds `FOR SHARE`.
+    #[inline]
     pub fn for_share(self) -> Self {
         self.lock(LockMode::Share)
     }
@@ -385,12 +400,14 @@ impl Select {
     }
 
     /// Sets `NOWAIT` on the current row lock, creating `FOR UPDATE` if absent.
+    #[inline]
     pub fn nowait(mut self) -> Self {
         self.lock = Some(self.lock.unwrap_or_default().nowait());
         self
     }
 
     /// Sets `SKIP LOCKED` on the current row lock, creating `FOR UPDATE` if absent.
+    #[inline]
     pub fn skip_locked(mut self) -> Self {
         self.lock = Some(self.lock.unwrap_or_default().skip_locked());
         self

@@ -48,11 +48,13 @@ impl Param {
     }
 
     /// Adds this value to an existing sqlx `PgArguments` buffer.
+    #[inline]
     pub fn add_to(&self, args: &mut PgArguments) -> Result<()> {
         self.inner.add_to(args)
     }
 
     /// Returns the stored Rust type name for diagnostics and tests.
+    #[inline]
     pub fn debug_name(&self) -> &'static str {
         self.inner.debug_name()
     }
@@ -78,11 +80,13 @@ impl Params {
     }
 
     /// Creates a parameter list from an existing vector.
+    #[inline]
     pub fn from_vec(params: Vec<Param>) -> Self {
         Self { params }
     }
 
     /// Appends an already-erased parameter.
+    #[inline]
     pub fn push(&mut self, param: Param) {
         self.params.push(param);
     }
@@ -96,16 +100,19 @@ impl Params {
     }
 
     /// Returns the number of parameters.
+    #[inline]
     pub fn len(&self) -> usize {
         self.params.len()
     }
 
     /// Returns true when there are no parameters.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.params.is_empty()
     }
 
     /// Returns the parameters as a slice in SQL placeholder order.
+    #[inline]
     pub fn as_slice(&self) -> &[Param] {
         &self.params
     }

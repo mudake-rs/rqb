@@ -66,6 +66,7 @@ impl<T> Field<T> {
         }
     }
 
+    #[inline]
     pub(super) fn reference(self) -> FieldRef<T> {
         FieldRef {
             meta: self.meta,
@@ -75,16 +76,19 @@ impl<T> Field<T> {
     }
 
     /// Returns this field as a value expression.
+    #[inline]
     pub fn expr(self) -> ValueExpr {
         self.reference().expr()
     }
 
     /// Returns this field qualified as `old.field` for PostgreSQL 18 DML `RETURNING`.
+    #[inline]
     pub fn old_value(self) -> FieldRef<T> {
         self.at("old")
     }
 
     /// Returns this field qualified as `new.field` for PostgreSQL 18 DML `RETURNING`.
+    #[inline]
     pub fn new_value(self) -> FieldRef<T> {
         self.at("new")
     }
@@ -110,6 +114,7 @@ impl<T> Field<T> {
     }
 
     /// Returns `EXCLUDED.field` for `ON CONFLICT DO UPDATE`.
+    #[inline]
     pub fn excluded(self) -> ValueExpr {
         ValueExpr::Excluded(*self.meta)
     }
@@ -123,11 +128,13 @@ impl<T> Field<T> {
     }
 
     /// Creates an assignment that writes SQL `NULL`.
+    #[inline]
     pub fn set_null(self) -> crate::Assignment {
         self.set_expr(ValueExpr::Null)
     }
 
     /// Creates an assignment from `EXCLUDED.field`.
+    #[inline]
     pub fn set_excluded(self) -> crate::Assignment {
         crate::Assignment {
             field: *self.meta,
@@ -136,6 +143,7 @@ impl<T> Field<T> {
     }
 
     /// Builds `field IS NULL`.
+    #[inline]
     pub fn is_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self.expr(),
@@ -144,6 +152,7 @@ impl<T> Field<T> {
     }
 
     /// Builds `field IS NOT NULL`.
+    #[inline]
     pub fn is_not_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self.expr(),

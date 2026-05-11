@@ -45,6 +45,7 @@ impl SetQuery {
     }
 
     /// Adds a fully specified `ORDER BY` item.
+    #[inline]
     pub fn order_by(mut self, item: OrderItem) -> Self {
         self.order.push(item);
         self
@@ -87,6 +88,7 @@ impl SetQuery {
     }
 
     /// Sets a `LIMIT` value and clears any `FETCH FIRST` clause.
+    #[inline]
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(Param::typed(i64::from(limit)));
         self.fetch = None;
@@ -114,6 +116,7 @@ impl SetQuery {
     }
 
     /// Sets an `OFFSET` value.
+    #[inline]
     pub fn offset(mut self, offset: u32) -> Self {
         self.offset = Some(Param::typed(i64::from(offset)));
         self

@@ -10,6 +10,7 @@ impl ColumnConflictBuilder {
     /// Adds an index predicate to an `ON CONFLICT (columns...)` target.
     ///
     /// Repeated calls are AND-combined, matching repeated `filter(...)` calls.
+    #[inline]
     pub fn target_where(mut self, predicate: BoolExpr) -> Self {
         self.predicate = Some(Box::new(BoolExpr::and_option(
             self.predicate.take().map(|existing| *existing),
@@ -19,6 +20,7 @@ impl ColumnConflictBuilder {
     }
 
     /// Finishes the conflict clause with `DO NOTHING`.
+    #[inline]
     pub fn do_nothing(self) -> Insert {
         finish_conflict(
             self.insert,
@@ -62,6 +64,7 @@ impl ColumnConflictBuilder {
 
 impl ConstraintConflictBuilder {
     /// Finishes the constraint conflict clause with `DO NOTHING`.
+    #[inline]
     pub fn do_nothing(self) -> Insert {
         finish_conflict(
             self.insert,

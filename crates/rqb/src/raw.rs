@@ -1,5 +1,6 @@
 use crate::{Error, Result};
 
+#[inline]
 pub(crate) fn validate_bind_count(sql: &str, binds: usize) -> Result<()> {
     let placeholders = count_placeholders(sql);
     if placeholders == binds {
@@ -11,6 +12,7 @@ pub(crate) fn validate_bind_count(sql: &str, binds: usize) -> Result<()> {
     })
 }
 
+#[inline]
 pub(crate) fn count_placeholders(sql: &str) -> usize {
     let mut count = 0;
     let mut chars = sql.chars().peekable();

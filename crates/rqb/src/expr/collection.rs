@@ -212,11 +212,13 @@ where
 
 impl Field<serde_json::Value> {
     /// Builds a JSONB containment predicate (`@>`).
+    #[inline]
     pub fn contains(self, value: serde_json::Value) -> BoolExpr {
         self.reference().contains(value)
     }
 
     /// Builds a JSONB contained-by predicate (`<@`).
+    #[inline]
     pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.reference().contained_by(value)
     }
@@ -227,11 +229,13 @@ impl Field<serde_json::Value> {
     }
 
     /// Builds a JSONB any-key-exists predicate (`?|`).
+    #[inline]
     pub fn has_any_keys(self, keys: Vec<String>) -> BoolExpr {
         self.reference().has_any_keys(keys)
     }
 
     /// Builds a JSONB all-keys-exist predicate (`?&`).
+    #[inline]
     pub fn has_all_keys(self, keys: Vec<String>) -> BoolExpr {
         self.reference().has_all_keys(keys)
     }
@@ -247,11 +251,13 @@ impl Field<serde_json::Value> {
     }
 
     /// Builds a JSON path access expression (`#>`).
+    #[inline]
     pub fn path(self, path: Vec<String>) -> ValueExpr {
         self.reference().path(path)
     }
 
     /// Builds a JSON path text access expression (`#>>`).
+    #[inline]
     pub fn path_text(self, path: Vec<String>) -> ValueExpr {
         self.reference().path_text(path)
     }
@@ -375,11 +381,13 @@ where
 
 impl FieldRef<serde_json::Value> {
     /// Builds a JSONB containment predicate (`@>`).
+    #[inline]
     pub fn contains(self, value: serde_json::Value) -> BoolExpr {
         self.json_infix("@>", Param::typed(value))
     }
 
     /// Builds a JSONB contained-by predicate (`<@`).
+    #[inline]
     pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.json_infix("<@", Param::typed(value))
     }
@@ -390,11 +398,13 @@ impl FieldRef<serde_json::Value> {
     }
 
     /// Builds a JSONB any-key-exists predicate (`?|`).
+    #[inline]
     pub fn has_any_keys(self, keys: Vec<String>) -> BoolExpr {
         self.json_infix("?|", Param::typed(keys))
     }
 
     /// Builds a JSONB all-keys-exist predicate (`?&`).
+    #[inline]
     pub fn has_all_keys(self, keys: Vec<String>) -> BoolExpr {
         self.json_infix("?&", Param::typed(keys))
     }
@@ -410,11 +420,13 @@ impl FieldRef<serde_json::Value> {
     }
 
     /// Builds a JSON path access expression (`#>`).
+    #[inline]
     pub fn path(self, path: Vec<String>) -> ValueExpr {
         self.json_value_infix("#>", Param::typed(path))
     }
 
     /// Builds a JSON path text access expression (`#>>`).
+    #[inline]
     pub fn path_text(self, path: Vec<String>) -> ValueExpr {
         self.json_value_infix("#>>", Param::typed(path))
     }

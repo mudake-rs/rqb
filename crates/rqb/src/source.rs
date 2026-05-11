@@ -108,6 +108,7 @@ pub enum CteMaterialization {
 
 impl CteMaterialization {
     /// Returns the SQL keyword for this materialization hint.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Materialized => "MATERIALIZED",
@@ -177,6 +178,7 @@ pub struct Join {
 /// Creates a table source from static metadata.
 ///
 /// Generated schema modules usually expose this as `users::table()`.
+#[inline]
 pub fn table(name: &'static str, fields: &'static [&'static Meta]) -> Source {
     Source::Table {
         name,
@@ -188,6 +190,7 @@ pub fn table(name: &'static str, fields: &'static [&'static Meta]) -> Source {
 /// Creates a view source from static metadata.
 ///
 /// Generated schema modules usually expose this as `search_view::view()`.
+#[inline]
 pub fn view(name: &'static str, fields: &'static [&'static Meta]) -> Source {
     Source::View {
         name,
@@ -510,6 +513,7 @@ impl_field_meta_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 impl JoinKind {
     /// Returns the SQL keyword for this join kind.
+    #[inline]
     pub const fn as_sql(self) -> &'static str {
         match self {
             Self::Inner => "JOIN",
@@ -521,6 +525,7 @@ impl JoinKind {
     }
 
     /// Returns true when this join kind requires an `ON` condition.
+    #[inline]
     pub const fn requires_condition(self) -> bool {
         !matches!(self, Self::Cross)
     }
@@ -615,18 +620,21 @@ impl Cte {
     }
 
     /// Marks the CTE and surrounding `WITH` clause as recursive.
+    #[inline]
     pub fn recursive(mut self) -> Self {
         self.recursive = true;
         self
     }
 
     /// Adds the PostgreSQL `MATERIALIZED` hint.
+    #[inline]
     pub fn materialized(mut self) -> Self {
         self.materialization = Some(CteMaterialization::Materialized);
         self
     }
 
     /// Adds the PostgreSQL `NOT MATERIALIZED` hint.
+    #[inline]
     pub fn not_materialized(mut self) -> Self {
         self.materialization = Some(CteMaterialization::NotMaterialized);
         self
@@ -636,6 +644,7 @@ impl Cte {
     ///
     /// The returned source owns a snapshot of the CTE name and exposed fields,
     /// so call this after finalizing the CTE metadata you want to query.
+    #[inline]
     pub fn source(&self) -> Source {
         cte_ref(self.name.clone(), self.fields.clone())
     }
@@ -681,6 +690,7 @@ impl FunctionSource {
     ///
     /// The ordinality column remains explicit metadata: include it in the
     /// `fields` argument when callers need to project it through rqb.
+    #[inline]
     pub fn with_ordinality(mut self) -> Self {
         self.ordinality = true;
         self
@@ -701,6 +711,7 @@ impl From<FunctionSource> for Source {
 
 impl Source {
     /// Returns a stable source-kind name for diagnostics.
+    #[inline]
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::Table { .. } => "table",
@@ -714,6 +725,7 @@ impl Source {
     }
 
     /// Returns true when this source is a table.
+    #[inline]
     pub const fn is_table(&self) -> bool {
         matches!(self, Self::Table { .. })
     }

@@ -1,11 +1,13 @@
 use super::{BoolExpr, BooleanTest, Field, FieldRef, ValueExpr};
 
 /// Builds a SQL `TRUE` predicate.
+#[inline]
 pub const fn true_() -> BoolExpr {
     BoolExpr::Constant(true)
 }
 
 /// Builds a SQL `FALSE` predicate.
+#[inline]
 pub const fn false_() -> BoolExpr {
     BoolExpr::Constant(false)
 }
@@ -26,6 +28,7 @@ pub fn exists(stmt: impl Into<crate::Stmt>) -> BoolExpr {
 }
 
 /// Negates a predicate.
+#[inline]
 pub fn not(expr: BoolExpr) -> BoolExpr {
     BoolExpr::negate(expr)
 }
@@ -42,6 +45,7 @@ impl BoolExpr {
     }
 
     /// Builds a logical `NOT`.
+    #[inline]
     pub fn negate(expr: BoolExpr) -> Self {
         Self::Not(Box::new(expr))
     }
@@ -64,6 +68,7 @@ impl BoolExpr {
         }
     }
 
+    #[inline]
     pub(crate) fn and_option(current: Option<Self>, next: Self) -> Self {
         match current {
             Some(existing) => Self::and_pair(existing, next),
@@ -89,6 +94,7 @@ impl BoolExpr {
         }
     }
 
+    #[inline]
     pub(crate) fn or_option(current: Option<Self>, next: Self) -> Self {
         match current {
             Some(existing) => Self::or_pair(existing, next),
@@ -99,31 +105,37 @@ impl BoolExpr {
 
 impl ValueExpr {
     /// Builds `expr IS TRUE`.
+    #[inline]
     pub fn is_true(self) -> BoolExpr {
         self.boolean_test(BooleanTest::True, false)
     }
 
     /// Builds `expr IS NOT TRUE`.
+    #[inline]
     pub fn is_not_true(self) -> BoolExpr {
         self.boolean_test(BooleanTest::True, true)
     }
 
     /// Builds `expr IS FALSE`.
+    #[inline]
     pub fn is_false(self) -> BoolExpr {
         self.boolean_test(BooleanTest::False, false)
     }
 
     /// Builds `expr IS NOT FALSE`.
+    #[inline]
     pub fn is_not_false(self) -> BoolExpr {
         self.boolean_test(BooleanTest::False, true)
     }
 
     /// Builds `expr IS UNKNOWN`.
+    #[inline]
     pub fn is_unknown(self) -> BoolExpr {
         self.boolean_test(BooleanTest::Unknown, false)
     }
 
     /// Builds `expr IS NOT UNKNOWN`.
+    #[inline]
     pub fn is_not_unknown(self) -> BoolExpr {
         self.boolean_test(BooleanTest::Unknown, true)
     }

@@ -4,6 +4,7 @@ use super::{BoolExpr, BoolOp, FieldRef, IntoFieldRef, ValueExpr};
 
 impl<T> FieldRef<T> {
     /// Returns this qualified field as a value expression.
+    #[inline]
     pub fn expr(self) -> ValueExpr {
         ValueExpr::Field {
             meta: *self.meta,
@@ -32,6 +33,7 @@ impl<T> FieldRef<T> {
     }
 
     /// Builds `field IS NULL`.
+    #[inline]
     pub fn is_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self.expr(),
@@ -40,6 +42,7 @@ impl<T> FieldRef<T> {
     }
 
     /// Builds `field IS NOT NULL`.
+    #[inline]
     pub fn is_not_null(self) -> BoolExpr {
         BoolExpr::IsNull {
             expr: self.expr(),

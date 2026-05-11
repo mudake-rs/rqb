@@ -76,6 +76,30 @@ fn insertable_derive_maps_struct_fields_to_assignments() {
 }
 
 #[test]
+fn insertable_derive_outputs_expected_assignments() {
+    let new_user = NewUser {
+        email: "ada@example.com".to_owned(),
+        state: "active".to_owned(),
+        r#type: "admin".to_owned(),
+        nickname: Some("Ada".to_owned()),
+        _local_note: "not persisted".to_owned(),
+    };
+
+    let assignments = new_user.insert_assignments();
+    let fields = assignments
+        .iter()
+        .map(|assignment| assignment.field.db)
+        .collect::<Vec<_>>();
+
+    assert_eq!(fields, ["email", "status", "type", "nickname"]);
+    assert!(
+        assignments
+            .iter()
+            .all(|assignment| matches!(assignment.value, ValueExpr::Param(_)))
+    );
+}
+
+#[test]
 fn insertable_derive_includes_skip_none_fields_when_present() {
     let new_user = NewUser {
         email: "ada@example.com".to_owned(),
@@ -96,6 +120,28 @@ fn insertable_derive_includes_skip_none_fields_when_present() {
         "INSERT INTO \"public\".\"users\" (\"email\", \"status\", \"type\", \"nickname\") VALUES ($1, $2, $3, $4) RETURNING \"nickname\""
     );
     assert_eq!(built.params.len(), 4);
+}
+
+#[test]
+fn changeset_derive_outputs_expected_assignments() {
+    let changes = UserChanges {
+        email: Some("ada@example.com".to_owned()),
+        status: None,
+        display_name: "Ada".to_owned(),
+    };
+
+    let assignments = changes.changeset_assignments();
+    let fields = assignments
+        .iter()
+        .map(|assignment| assignment.field.db)
+        .collect::<Vec<_>>();
+
+    assert_eq!(fields, ["email", "nickname"]);
+    assert!(
+        assignments
+            .iter()
+            .all(|assignment| matches!(assignment.value, ValueExpr::Param(_)))
+    );
 }
 
 #[test]

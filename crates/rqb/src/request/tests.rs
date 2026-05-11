@@ -107,6 +107,29 @@ fn search_request_merges_filter_and_applies_sort_limit_offset() {
 }
 
 #[test]
+fn search_request_applies_multiple_sort_keys_in_client_order() {
+    let request: SearchRequest = serde_json::from_value(json!({
+        "sort": [
+            { "field": "status", "dir": "asc" },
+            { "field": "id", "dir": "desc" }
+        ]
+    }))
+    .unwrap();
+
+    let built = crate::select(source())
+        .request(request)
+        .unwrap()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\", \"status\", \"active\", \"internal\" FROM \"public\".\"orders\" ORDER BY \"status\" ASC, \"id\" DESC"
+    );
+    assert_eq!(built.params.len(), 0);
+}
+
+#[test]
 fn search_request_qualifies_fields_when_root_source_is_aliased() {
     let request: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "status", "operator": "equals", "value": "paid" },

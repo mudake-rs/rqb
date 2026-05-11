@@ -24,10 +24,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mixed = select(raw_orders)
         .column(orders::ID.at("recent"))
         .column(orders::TOTAL_CENTS.at("recent"))
-        .filter(BoolExpr::Raw {
-            sql: "total_cents > ?".to_owned(),
-            params: vec![Param::typed(1_000_i64)],
-        })
+        .filter(raw_predicate("total_cents > ?", [Param::typed(1_000_i64)]))
         .build()?;
 
     assert_eq!(

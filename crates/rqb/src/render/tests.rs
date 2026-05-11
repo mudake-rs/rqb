@@ -2,8 +2,9 @@ use crate::{
     Assignment, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param, RawStmt, Select,
     SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce,
     count_all, count_distinct, cte, current_date, current_timestamp, delete_from, extract,
-    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont, row,
-    row_number, scalar_subquery, select, slice, subscript, table, to_jsonb, true_, update, window,
+    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont,
+    raw_expr, raw_predicate, row, row_number, scalar_subquery, select, slice, subscript, table,
+    to_jsonb, true_, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -93,17 +94,8 @@ fn raw_fragments_are_numbered_in_render_order() {
         joins: Vec::new(),
         distinct: false,
         distinct_on: Vec::new(),
-        projection: vec![SelectItem {
-            expr: ValueExpr::Raw {
-                sql: "?::text".to_owned(),
-                params: vec![Param::typed("first".to_owned())],
-            },
-            alias: Some("label".to_owned()),
-        }],
-        filter: Some(BoolExpr::Raw {
-            sql: "id > ?".to_owned(),
-            params: vec![Param::typed(2_i32)],
-        }),
+        projection: vec![raw_expr("?::text", [Param::typed("first".to_owned())]).alias("label")],
+        filter: Some(raw_predicate("id > ?", [Param::typed(2_i32)])),
         group_by: Vec::new(),
         having: None,
         order: Vec::new(),

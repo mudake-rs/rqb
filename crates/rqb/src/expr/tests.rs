@@ -3,7 +3,7 @@ use uuid::Uuid;
 use super::escaped_like_pattern;
 use crate::{
     BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, Params,
-    ValueExpr, row,
+    ValueExpr, raw_expr, raw_predicate, row,
 };
 
 #[test]
@@ -191,12 +191,9 @@ fn meta_defaults_to_no_typed_operators() {
 
 #[test]
 fn raw_predicate_validates_bind_count() {
-    let err = crate::BoolExpr::Raw {
-        sql: "score > ? and active = ?".to_owned(),
-        params: vec![Param::typed(10_i32)],
-    }
-    .validate()
-    .unwrap_err();
+    let err = raw_predicate("score > ? and active = ?", [Param::typed(10_i32)])
+        .validate()
+        .unwrap_err();
 
     assert!(matches!(
         err,
@@ -377,12 +374,9 @@ fn escaped_like_pattern_escapes_wildcards_and_backslashes() {
 
 #[test]
 fn raw_value_expr_validates_bind_count() {
-    let err = ValueExpr::Raw {
-        sql: "lower(?) || ?".to_owned(),
-        params: vec![Param::typed("email".to_owned())],
-    }
-    .validate()
-    .unwrap_err();
+    let err = raw_expr("lower(?) || ?", [Param::typed("email".to_owned())])
+        .validate()
+        .unwrap_err();
 
     assert!(matches!(
         err,

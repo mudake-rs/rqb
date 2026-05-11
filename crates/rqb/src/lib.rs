@@ -73,14 +73,14 @@ pub use expr::{
     merge_action, min, mod_, mode, normalize, normalize_form, not, not_similar_to, now, nth_value,
     ntile, nullif, or, ordered_set_aggregate, param, partition_by, percent_rank, percentile_cont,
     percentile_disc, pi, plainto_tsquery, pow, power, preceding, radians, random, random_between,
-    range, range_agg, range_intersect_agg, rank, regexp_matches, regexp_replace,
-    regexp_split_to_array, replace, reverse, right, round, row, row_number, rows, rpad, rtrim,
-    scalar_subquery, sign, similar_to, slice, split_part, sqrt, stddev, stddev_pop, stddev_samp,
-    string_agg, string_to_array, strpos, subscript, substring, sum, text_starts_with, timezone,
-    to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config, trim, true_, trunc, ts_match,
-    ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding, unicode_assigned, unnest, upper,
-    uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7, uuidv7_shift, var_pop, var_samp,
-    variance, websearch_to_tsquery, window,
+    range, range_agg, range_intersect_agg, rank, raw_expr, raw_predicate, regexp_matches,
+    regexp_replace, regexp_split_to_array, replace, reverse, right, round, row, row_number, rows,
+    rpad, rtrim, scalar_subquery, sign, similar_to, slice, split_part, sqrt, stddev, stddev_pop,
+    stddev_samp, string_agg, string_to_array, strpos, subscript, substring, sum, text_starts_with,
+    timezone, to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config, trim, true_, trunc,
+    ts_match, ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding, unicode_assigned,
+    unnest, upper, uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7, uuidv7_shift,
+    var_pop, var_samp, variance, websearch_to_tsquery, window,
 };
 pub use meta::{JsonKind, Meta, OpSet};
 pub use param::{BindValue, Param, Params};
@@ -198,10 +198,10 @@ pub mod dsl {
         normalize_form, not, not_similar_to, now, nth_value, ntile, nullif, or,
         ordered_set_aggregate, param, partition_by, percent_rank, percentile_cont, percentile_disc,
         pi, plainto_tsquery, pow, power, preceding, radians, random, random_between, range,
-        range_agg, range_intersect_agg, rank, regexp_matches, regexp_replace,
-        regexp_split_to_array, replace, reverse, right, round, row, row_number, rows, rpad, rtrim,
-        scalar_subquery, sign, similar_to, slice, split_part, sqrt, stddev, stddev_pop,
-        stddev_samp, string_agg, string_to_array, strpos, subscript, substring, sum,
+        range_agg, range_intersect_agg, rank, raw_expr, raw_predicate, regexp_matches,
+        regexp_replace, regexp_split_to_array, replace, reverse, right, round, row, row_number,
+        rows, rpad, rtrim, scalar_subquery, sign, similar_to, slice, split_part, sqrt, stddev,
+        stddev_pop, stddev_samp, string_agg, string_to_array, strpos, subscript, substring, sum,
         text_starts_with, timezone, to_json, to_jsonb, to_tsquery, to_tsvector, to_tsvector_config,
         trim, true_, trunc, ts_match, ts_rank, ts_rank_cd, unbounded_following,
         unbounded_preceding, unicode_assigned, unnest, upper, uuid_extract_timestamp,
@@ -229,8 +229,8 @@ pub mod prelude {
         SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind,
         WindowFunction, WindowFunctionBuilder, WindowSpec, cte, cte_ref, delete_from, except,
         except_all, field, function_source, insert, intersect, intersect_all, jsonb_agg_object,
-        merge_into, raw, raw_source, schema, select, subquery, table, tx, union, union_all, update,
-        view,
+        merge_into, raw, raw_expr, raw_predicate, raw_source, schema, select, subquery, table, tx,
+        union, union_all, update, view,
     };
 }
 

@@ -8,6 +8,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 ## What This Shows
 
 - `raw("... ? ...").bind(value)` renders `$N` placeholders in order.
+- `raw_expr(...)` and `raw_predicate(...)` plug server-owned fragments into
+  typed projections and filters without manual struct literals.
 - `??` renders a literal question mark without consuming a bind.
 - Raw sources still declare exposed fields so outer typed queries know what can
   be projected or filtered.

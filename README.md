@@ -192,6 +192,50 @@ Common helper families in the flat catalog:
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
 | Window functions | `window`, `row_number`, `rank`, `lag`, `preceding` |
 
+## Raw Escape Hatches
+
+The typed DSL is not meant to mirror every PostgreSQL catalog function. For
+simple unlisted functions, use `function(...)`, `aggregate(...)`, or
+`function_source(...)`. For PostgreSQL syntax that does not fit those shapes,
+rqb exposes raw constructors at the exact AST slot:
+
+| Helper | Returns | Use for |
+| --- | --- | --- |
+| `raw(...)` | `RawStmt` | A full server-owned statement |
+| `raw_expr(...)` | `ValueExpr` | A projection, assignment value, or comparison side |
+| `raw_predicate(...)` | `BoolExpr` | A `WHERE`, `ON`, or `HAVING` predicate |
+| `raw_source(...)` | `Source` | A derived table or set-returning expression in `FROM` |
+
+Raw fragments use rqb `?` placeholders. They are validated for bind-count
+mismatches and numbered together with the surrounding typed query:
+
+```rust
+use rqb::prelude::*;
+
+let month = raw_expr(
+    "to_char(created_at, ?)",
+    [Param::typed("YYYY-MM".to_owned())],
+)
+.alias("month");
+
+let score_bucket = raw_expr(
+    "width_bucket(score, 0, 100, ?)",
+    [Param::typed(10_i32)],
+)
+.alias("score_bucket");
+
+let days = raw_source(
+    "generate_series(?::date, ?::date, ?::interval)",
+    "days",
+    vec![
+        Param::typed(start_date),
+        Param::typed(end_date),
+        Param::typed("1 day".to_owned()),
+    ],
+    rqb::field!("day": date => chrono::NaiveDate, ordered),
+);
+```
+
 ## JSON Search
 
 `SearchRequest` is for client-controlled search parameters only. It cannot

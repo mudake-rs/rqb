@@ -69,6 +69,28 @@ where
     ValueExpr::Param(Param::typed(value))
 }
 
+/// Builds a server-owned raw value expression with rqb `?` placeholders.
+///
+/// Use this for PostgreSQL syntax that is intentionally outside the typed DSL.
+/// Placeholder numbering is still composed with the surrounding query.
+pub fn raw_expr(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> ValueExpr {
+    ValueExpr::Raw {
+        sql: sql.into(),
+        params: params.into(),
+    }
+}
+
+/// Builds a server-owned raw predicate with rqb `?` placeholders.
+///
+/// Use this for PostgreSQL predicates that are intentionally outside the typed
+/// DSL. Placeholder numbering is still composed with the surrounding query.
+pub fn raw_predicate(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> BoolExpr {
+    BoolExpr::Raw {
+        sql: sql.into(),
+        params: params.into(),
+    }
+}
+
 /// Builds a scalar subquery value expression.
 pub fn scalar_subquery(stmt: impl Into<crate::Stmt>) -> ValueExpr {
     ValueExpr::Subquery(Box::new(stmt.into()))

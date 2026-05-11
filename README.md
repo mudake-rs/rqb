@@ -484,6 +484,33 @@ The CLI also annotates nullable, generated, identity, and materialized-view
 metadata in comments. It does not generate row structs; use `Option<T>` in
 `sqlx::FromRow` structs for nullable columns.
 
+## Migrations And Schema Drift
+
+rqb does not run or generate database migrations. Keep schema changes in SQL
+migration files and apply them with `sqlx::migrate!`, `sqlx migrate`, refinery,
+sqitch, psql, or your deployment system.
+
+The intended flow is:
+
+1. Apply migrations to a real Postgres database.
+2. Regenerate the schema module:
+
+   ```bash
+   rqb generate \
+     --database-url "$DATABASE_URL" \
+     --schema public \
+     --out src/schema.rs
+   ```
+
+3. Commit the generated schema module with the migration.
+4. In CI, run the same command with `--check` to catch drift between the
+   database schema and the checked-in generated module.
+
+`rqb-cli` introspects the schema that already exists. It does not diff schema
+versions, generate `ALTER TABLE`, or decide migration ordering. When a column is
+renamed, removed, or changes type, regenerate the schema module and let Rust
+compile errors point at stale query code.
+
 ## Crates
 
 - `rqb`: typed AST, renderer, params, execution helpers, and public API.

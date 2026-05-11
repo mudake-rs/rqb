@@ -118,6 +118,25 @@ Primary keys, foreign keys, unique constraints, check constraints, and indexes
 are not introspected into the generated API. They remain database constraints;
 runtime violations are mapped by `rqb::Error` when sqlx returns them.
 
+## Migrations
+
+`rqb-cli` runs after migrations. It introspects the database that exists; it
+does not generate migrations, diff schemas, or emit `ALTER TABLE`.
+
+A typical CI check is:
+
+1. Apply migrations with `sqlx::migrate!`, `sqlx migrate`, refinery, sqitch,
+   psql, or your deployment system.
+2. Verify the generated schema is current:
+
+   ```bash
+   rqb generate \
+     --database-url "$DATABASE_URL" \
+     --schema public \
+     --out src/schema.rs \
+     --check
+   ```
+
 ## Versioning
 
 `rqb-cli` follows the same 0.x versioning as `rqb`. Before 1.0, minor versions

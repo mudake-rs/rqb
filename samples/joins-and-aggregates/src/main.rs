@@ -40,9 +40,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let latest_per_user = select(orders::table())
         .distinct_on(orders::USER_ID)
-        .column(orders::USER_ID)
-        .column(orders::ID)
-        .column(orders::STATUS)
+        .columns((orders::USER_ID, orders::ID, orders::STATUS))
         .order_asc(orders::USER_ID)
         .order_desc(orders::CREATED_AT)
         .build()?;

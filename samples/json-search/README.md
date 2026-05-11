@@ -9,6 +9,7 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 
 - JSON requests compile into the same typed predicate AST as Rust builders.
 - Server filters are preserved and combined with request filters using `AND`.
+- Multiple sort keys are applied in client order after the server-owned filter.
 - Unknown fields, hidden fields, bad operators, and bad JSON value shapes fail
   before rendering.
 - Client input can control filter/sort/page, but not joins, projection, raw SQL,

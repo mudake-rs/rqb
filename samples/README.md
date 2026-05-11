@@ -27,7 +27,8 @@ executable API documentation.
 - [`joins-and-aggregates`](joins-and-aggregates/): joins, grouped aggregates,
   `DISTINCT ON`, and nested JSON. Renders SQL and asserts it.
 - [`cte-and-subqueries`](cte-and-subqueries/): CTEs, recursive CTEs, lateral
-  joins, set queries, and raw sources. Renders SQL and asserts it.
+  joins, set queries, raw sources, set-returning function sources, and
+  `VALUES` sources. Renders SQL and asserts it.
 - [`advanced-queries`](advanced-queries/): denser server-owned report query
   combining CTEs, joins, windows, CASE, and JSON aggregation. Renders SQL and
   asserts it.

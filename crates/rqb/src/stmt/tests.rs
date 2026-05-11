@@ -255,8 +255,7 @@ fn insert_from_select_rejects_projection_count_mismatch() {
     static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
     const EMAIL: Field<String> = Field::new(&EMAIL_META);
     let insert = insert(users())
-        .column(ID)
-        .column(EMAIL)
+        .columns((ID, EMAIL))
         .from_select(select(users()).column(ID));
 
     let err = insert.validate().unwrap_err();

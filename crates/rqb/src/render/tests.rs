@@ -641,10 +641,9 @@ fn later_write_assignments_replace_earlier_ones_for_same_column() {
 
 #[test]
 fn insert_from_select_renders_columns_and_nested_select_params() {
-    let source = select(users()).column(ID).column(EMAIL).filter(ID.gt(10));
+    let source = select(users()).columns((ID, EMAIL)).filter(ID.gt(10));
     let built = insert(users())
-        .column(ID)
-        .column(EMAIL)
+        .columns((ID, EMAIL))
         .from_select(source)
         .returning(ID)
         .build()
@@ -664,8 +663,7 @@ fn insert_from_select_default_projection_ignores_joined_fields() {
         ID.at("u").eq_field(ORDER_USER_ID.at("o")),
     );
     let built = insert(users())
-        .column(ID)
-        .column(EMAIL)
+        .columns((ID, EMAIL))
         .from_select(source)
         .build()
         .unwrap();

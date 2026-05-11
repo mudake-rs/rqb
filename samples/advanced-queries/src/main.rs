@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
-use rqb::dsl::{case, count_all, json_get_text, param, row_number, sum, true_, window};
+use rqb::dsl::{
+    case, count_all, current_user, json_get_text, json_typeof, param, row_number, sum, to_char,
+    true_, width_bucket, window,
+};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::events;
@@ -13,8 +16,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // `try_into_cte` infers exposed fields from explicit field projections, so
     // common CTEs do not repeat explicit field metadata.
     let active_users = select(users::table())
-        .column(users::ID)
-        .column(users::EMAIL)
+        .columns((users::ID, users::EMAIL))
         .filter(users::ACTIVE.eq(true))
         .try_into_cte("active_users")?
         .not_materialized();
@@ -91,6 +93,23 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert!(built.sql.contains("CASE WHEN"));
     assert!(built.sql.ends_with("FETCH FIRST $15 ROWS WITH TIES"));
 
+    // A compact helper showcase for common reporting expressions that would
+    // otherwise become small raw SQL fragments.
+    let helper_showcase = select(orders::table())
+        .item(to_char(orders::CREATED_AT, "YYYY-MM").alias("order_month"))
+        .item(width_bucket(orders::TOTAL_CENTS, 0_i64, 100_000_i64, 10_i32).alias("amount_bucket"))
+        .item(json_typeof(orders::METADATA).alias("metadata_kind"))
+        .item(current_user().alias("current_user"))
+        .limit(1)
+        .build()?;
+
+    assert_eq!(
+        helper_showcase.sql,
+        "SELECT to_char(\"created_at\", $1) AS \"order_month\", width_bucket(\"total_cents\", $2, $3, $4) AS \"amount_bucket\", json_typeof(\"metadata\") AS \"metadata_kind\", CURRENT_USER AS \"current_user\" FROM \"sample\".\"orders\" LIMIT $5"
+    );
+    assert_eq!(helper_showcase.params.len(), 5);
+
     println!("{}", built.sql);
+    println!("{}", helper_showcase.sql);
     Ok(())
 }

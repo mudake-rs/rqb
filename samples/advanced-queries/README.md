@@ -12,6 +12,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - CTEs, aliases, lateral joins, JSON aggregation, windows, CASE, `GROUP BY`,
   `HAVING`, and `FETCH WITH TIES` compose in one query.
 - `case()` reads like SQL without exposing raw AST construction.
+- Reporting helpers such as `to_char`, `width_bucket`, `json_typeof`, and
+  `current_user` keep common dashboard expressions out of raw SQL.
 - `rqb::field!` gives computed columns metadata for later projection, grouping,
   and ordering.
 - The sample is intentionally dense: use it as a capability stress test, not as

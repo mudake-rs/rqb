@@ -69,6 +69,14 @@ impl Insert {
         self
     }
 
+    /// Adds multiple target columns for `INSERT ... SELECT`.
+    pub fn columns(mut self, fields: impl IntoFieldMetas) -> Self {
+        for field in fields.into_field_metas() {
+            push_column(&mut self.columns, field);
+        }
+        self
+    }
+
     /// Uses a select statement as the insert source.
     pub fn from_select(mut self, select: Select) -> Self {
         self.source = Some(Box::new(select));

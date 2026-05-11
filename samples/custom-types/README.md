@@ -13,8 +13,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   accepted.
 - Custom operators such as pgvector distance stay parameterized through
   `ValueExpr::op(...)`.
-- Raw-only `tsvector` metadata can participate in full-text `@@` predicates and
-  ranking helpers.
+- Raw-only `tsvector` metadata can participate in full-text `@@` predicates,
+  phrase queries, and ranking helpers.
 - Unsupported types stay hidden from JSON search unless a typed JSON shape is
   explicitly added later.
 

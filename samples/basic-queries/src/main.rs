@@ -31,8 +31,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Multiple filters compose with AND. `and([...])` is the explicit helper
     // when a nested predicate group reads better than a chain of `.filter(...)`.
     let composed = select(users::table())
-        .column(users::ID)
-        .column(users::EMAIL)
+        .columns((users::ID, users::EMAIL))
         .filter(and([
             users::STATUS.in_list(["active", "invited"]),
             users::DISPLAY_NAME.is_not_null(),
@@ -53,8 +52,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // logic without raw SQL: active users whose status is active, or invited
     // users that already have a display name.
     let nested = select(users::table())
-        .column(users::ID)
-        .column(users::EMAIL)
+        .columns((users::ID, users::EMAIL))
         .filter(and([
             users::ACTIVE.eq(true),
             or([

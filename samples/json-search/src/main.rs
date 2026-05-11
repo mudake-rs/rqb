@@ -14,7 +14,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 { "field": "last_event_at", "operator": "isNotNull" }
             ]
         },
-        "sort": [{ "field": "created_at", "dir": "desc" }],
+        "sort": [
+            { "field": "created_at", "dir": "desc" },
+            { "field": "total_cents", "dir": "asc" }
+        ],
         "limit": 20,
         "offset": 0
     }))?;
@@ -22,16 +25,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // JSON search is only the client-controlled part. The Rust query still owns
     // the source, projection, and organization filter.
     let merged = select(orders::view())
-        .column(orders::ID)
-        .column(orders::STATUS)
-        .column(orders::TOTAL_CENTS)
+        .columns((orders::ID, orders::STATUS, orders::TOTAL_CENTS))
         .filter(orders::ORGANIZATION_ID.eq(current_org))
         .request(merged_request)?
         .build()?;
 
     assert_eq!(
         merged.sql,
-        "SELECT \"id\", \"status\", \"total_cents\" FROM \"sample\".\"order_search_view\" WHERE (\"organization_id\" = $1 AND \"status\" IN ($2, $3) AND \"total_cents\" BETWEEN $4 AND $5 AND \"user_email\" ILIKE $6 ESCAPE '\\' AND \"last_event_at\" IS NOT NULL) ORDER BY \"created_at\" DESC LIMIT $7 OFFSET $8"
+        "SELECT \"id\", \"status\", \"total_cents\" FROM \"sample\".\"order_search_view\" WHERE (\"organization_id\" = $1 AND \"status\" IN ($2, $3) AND \"total_cents\" BETWEEN $4 AND $5 AND \"user_email\" ILIKE $6 ESCAPE '\\' AND \"last_event_at\" IS NOT NULL) ORDER BY \"created_at\" DESC, \"total_cents\" ASC LIMIT $7 OFFSET $8"
     );
     assert_eq!(merged.params.len(), 8);
 

@@ -1,4 +1,6 @@
-use rqb::dsl::{count_all, exists, generate_series_step_source, scalar_subquery, true_};
+use rqb::dsl::{
+    array, count_all, exists, generate_series_step_source, scalar_subquery, true_, unnest_source,
+};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::order_items as items;
@@ -10,6 +12,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let o = orders::alias("o");
     let item_count = rqb::field!("item_count": int8 => i64, ordered);
     let n = rqb::field!("n": int4 => i32, ordered);
+    let tag = rqb::field!("tag": text => String, equality);
 
     // Subqueries are still server-owned query shapes. JSON requests cannot
     // introduce EXISTS, IN-subquery, joins, or raw SQL.
@@ -61,6 +64,18 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(generated_series.params.len(), 3);
 
+    // `unnest_source` is the same source pattern for array-valued inputs.
+    let tag_rows = unnest_source(array(["paid", "vip"]), "tag_rows", tag);
+    let unnested_tags = select(tag_rows)
+        .filter(tag.at("tag_rows").eq("paid"))
+        .build()?;
+
+    assert_eq!(
+        unnested_tags.sql,
+        "SELECT \"tag_rows\".\"tag\" FROM unnest(ARRAY[$1, $2]) AS \"tag_rows\" (\"tag\") WHERE \"tag_rows\".\"tag\" = $3"
+    );
+    assert_eq!(unnested_tags.params.len(), 3);
+
     // Computed subquery projections need explicit metadata because there is no
     // generated table field for `count(*) AS item_count`.
     let item_counts = subquery(
@@ -71,9 +86,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         item_count,
     );
     let lateral = select(&o)
-        .column(o.id())
+        .columns((o.id(), item_count.at("item_counts")))
         .left_join_lateral(item_counts, true_())
-        .column(item_count.at("item_counts"))
         .build()?;
 
     assert_eq!(
@@ -151,6 +165,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("{}", paid_users.sql);
     println!("{}", recursive.sql);
     println!("{}", generated_series.sql);
+    println!("{}", unnested_tags.sql);
     println!("{}", lateral.sql);
     println!("{}", retention_delete.sql);
     println!("{}", raw_source_query.sql);

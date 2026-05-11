@@ -13,7 +13,7 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `.filter_if(...)` and `.filter_option(...)` keep optional filters readable.
 - `.or_filter(...)` and `.or_filter_option(...)` add fallback OR branches
   without hand-building a boolean tree.
-- `.column(...)` narrows projection without string column names.
+- `.columns((...))` narrows projection without string column names.
 - `.order_asc_nulls_last(...)`, `.limit(...)`, and `.offset(...)` stay in the
   typed builder.
 

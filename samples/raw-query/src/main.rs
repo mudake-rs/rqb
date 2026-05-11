@@ -22,8 +22,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         (orders::ID, orders::TOTAL_CENTS),
     );
     let mixed = select(raw_orders)
-        .column(orders::ID.at("recent"))
-        .column(orders::TOTAL_CENTS.at("recent"))
+        .columns((orders::ID.at("recent"), orders::TOTAL_CENTS.at("recent")))
         .filter(raw_predicate("total_cents > ?", [Param::typed(1_000_i64)]))
         .build()?;
 

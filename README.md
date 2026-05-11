@@ -106,8 +106,7 @@ struct UserRow {
 }
 
 let rows = select(schema::users::table())
-    .column(schema::users::ID)
-    .column(schema::users::EMAIL)
+    .columns((schema::users::ID, schema::users::EMAIL))
     .filter(schema::users::STATUS.eq("active"))
     .fetch_all_as::<UserRow>(&pool)
     .await?;
@@ -134,8 +133,7 @@ use rqb::dsl::{exists, sum};
 use rqb::prelude::*;
 
 let paid_orders = select(schema::orders::table())
-    .column(schema::orders::USER_ID)
-    .column(schema::orders::TOTAL_CENTS)
+    .columns((schema::orders::USER_ID, schema::orders::TOTAL_CENTS))
     .filter(schema::orders::STATUS.eq("paid"))
     .try_into_cte("paid_orders")?;
 
@@ -161,7 +159,7 @@ Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `FILTER`, window functions, array/jsonb/range predicates, conditional
 `filter_if(...)` / `filter_option(...)` / `or_filter_option(...)` /
 `set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
-comparisons for cursor pagination, `insert(...).from_select(...)`,
+comparisons for cursor pagination, `insert(...).columns((...)).from_select(...)`,
 `values_source(...)`, `generate_series_source(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated
@@ -210,7 +208,7 @@ Common helper families in the flat catalog:
 | Math | `round`, `sqrt`, `pow`, `random_between`, `width_bucket` |
 | Range | `range_lower`, `range_upper`, `isempty`, `lower_inc` |
 | Scalar expressions | `case`, `coalesce`, `greatest`, `current_user`, `scalar_subquery` |
-| Set-returning sources | `generate_series_source`, `generate_subscripts_source`, `regexp_split_to_table_source`, `values_source` |
+| Set-returning sources | `generate_series_source`, `unnest_source`, `json_each_source`, `regexp_split_to_table_source`, `values_source` |
 | Text | `lower`, `format`, `translate`, `repeat`, `octet_length`, `encode` |
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
 | Window functions | `window`, `row_number`, `rank`, `lag`, `preceding`, `unbounded_preceding` |

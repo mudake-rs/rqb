@@ -1,4 +1,4 @@
-use rqb::dsl::{param, plainto_tsquery, ts_rank};
+use rqb::dsl::{param, phraseto_tsquery, ts_rank};
 use rqb::prelude::*;
 use serde_json::Value;
 use uuid::Uuid;
@@ -45,7 +45,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let query_text = "rust postgres";
     let search_index = ValueExpr::from(vector_documents::SEARCH_INDEX_META);
-    let ts_query = plainto_tsquery(query_text);
+    let ts_query = phraseto_tsquery(query_text);
     let full_text = select(vector_documents::table())
         // `.item(...)` starts an explicit projection; default fields are not
         // selected unless they are added with `.column(...)`.
@@ -57,7 +57,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(
         full_text.sql,
-        "SELECT \"id\", ts_rank(\"search_index\", plainto_tsquery($1)) AS \"rank\" FROM \"sample\".\"vector_documents\" WHERE \"search_index\" @@ plainto_tsquery($2) ORDER BY ts_rank(\"search_index\", plainto_tsquery($3)) DESC"
+        "SELECT \"id\", ts_rank(\"search_index\", phraseto_tsquery($1)) AS \"rank\" FROM \"sample\".\"vector_documents\" WHERE \"search_index\" @@ phraseto_tsquery($2) ORDER BY ts_rank(\"search_index\", phraseto_tsquery($3)) DESC"
     );
     assert_eq!(full_text.params.len(), 3);
 

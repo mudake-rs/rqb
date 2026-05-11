@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use rqb::dsl::param;
+use rqb::dsl::{isempty, range_lower, to_char};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::invoices;
@@ -105,13 +105,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // `INSERT ... SELECT` stays typed on both sides and validates target column
     // count against the select projection before rendering SQL.
     let seed_open_orders_sql = insert(orders::table())
-        .column(orders::ID)
-        .column(orders::USER_ID)
-        .column(orders::STATUS)
-        .column(orders::TOTAL_CENTS)
+        .columns((
+            orders::ID,
+            orders::USER_ID,
+            orders::STATUS,
+            orders::TOTAL_CENTS,
+        ))
         .from_select(
             select(users::table())
-                .expr(param(Uuid::nil()))
+                .expr(Uuid::nil())
                 .column(users::ID)
                 .expr("open")
                 .expr(1000_i64)
@@ -165,6 +167,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         excluded_upsert_sql.sql,
         "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = EXCLUDED.\"status\" RETURNING \"id\""
     );
+
+    // Formatting and range helpers stay in the typed expression layer; no raw
+    // SQL is needed for common report columns.
+    let invoice_report_sql = select(invoices::table())
+        .columns((invoices::ID, invoices::DUE_ON))
+        .item(to_char(invoices::DUE_ON, "YYYY-MM-DD").alias("due_day"))
+        .item(range_lower(invoices::SERVICE_DAYS).alias("service_start"))
+        .filter(isempty(invoices::SERVICE_DAYS))
+        .build()?;
+
+    assert_eq!(
+        invoice_report_sql.sql,
+        "SELECT \"id\", \"due_on\", to_char(\"due_on\", $1) AS \"due_day\", lower(\"service_days\") AS \"service_start\" FROM \"sample\".\"invoices\" WHERE isempty(\"service_days\") IS TRUE"
+    );
+    assert_eq!(invoice_report_sql.params.len(), 1);
     assert_eq!(
         upsert_user_sql.sql,
         "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") WHERE \"active\" = $5 DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = $6 WHERE \"active\" = $7 RETURNING \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\""
@@ -181,6 +198,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("{}", insert_sql.sql);
     println!("{}", conditional_update_sql.sql);
     println!("{}", excluded_upsert_sql.sql);
+    println!("{}", invoice_report_sql.sql);
     println!("{}", upsert_user_sql.sql);
     Ok(())
 }

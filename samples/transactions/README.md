@@ -13,8 +13,9 @@ transaction flows without opening a database connection.
   pool, connection, or transaction connection.
 - The focused sample is compile-checked without a database, but the transaction
   function contains the real `.await?` flow used by applications.
-- Explicit `pool.begin().await?` remains available when you need savepoints,
-  custom isolation setup, or transaction ownership outside closure scope.
+- Explicit `pool.begin().await?` remains available when closure scope is not
+  the right fit, for example when transaction ownership crosses helper
+  boundaries or sqlx-native transaction controls are needed.
 
 Run with:
 

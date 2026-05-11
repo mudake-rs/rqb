@@ -20,8 +20,10 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `do_update_excluded((...))` updates several fields from `EXCLUDED` without
   repeating per-field `.set_excluded()` calls.
 - Constraint conflict targets use `on_conflict_constraint(...).do_nothing()`.
-- `insert(...).from_select(...)` validates target column count against the
-  server-owned select projection.
+- `insert(...).columns((...)).from_select(...)` validates target column count
+  against the server-owned select projection.
+- Formatting and range helpers such as `to_char`, `range_lower`, and `isempty`
+  build common report columns without raw SQL.
 - Numeric, temporal, JSONB, and interval-shaped values stay on the sqlx encode
   path.
 

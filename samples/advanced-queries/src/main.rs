@@ -43,13 +43,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .join(&o, au.id().eq_field(o.user_id()))
         .left_join_lateral(latest_event, true_())
         .column(au.email())
-        .agg(sum(o.total_cents()).alias("gross_cents"))
-        .agg(
+        .item(sum(o.total_cents()).alias("gross_cents"))
+        .item(
             count_all()
-                .filter(o.status().eq("paid"))
+                .aggregate_filter(o.status().eq("paid"))
                 .alias("paid_count"),
         )
-        .agg(
+        .item(
             // Metadata-backed fields become JSON keys automatically; computed
             // values keep an explicit key.
             jsonb_agg_object![
@@ -57,7 +57,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 o.status(),
                 ("source", json_get_text(o.metadata(), "source")),
             ]
-            .order_desc(o.created_at())
+            .aggregate_order_desc(o.created_at())
             .alias("orders"),
         )
         .item(
@@ -72,7 +72,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .item(order_size.alias("order_size"))
         .item(last_event_at.at("latest_event").alias("last_event_at"))
         .filter(o.status().in_list(["paid", "refunded"]))
-        .filter(o.metadata().key_exists("source"))
+        .filter(o.metadata().has_key("source"))
         .group_by(au.email())
         .group_by(o.id())
         .group_by(o.user_id())

@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Structured metadata extracted from a Postgres database error.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DbErrorInfo {
     /// Schema name reported by Postgres.
     pub schema: Option<String>,
@@ -72,151 +73,282 @@ impl From<PgErrorPosition<'_>> for DbErrorPosition {
     }
 }
 
+/// Payload for Postgres constraint-class errors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ConstraintError {
+    /// Constraint name when Postgres reported it.
+    pub constraint: Option<String>,
+    /// Postgres detail string.
+    pub detail: Option<String>,
+    /// Additional structured database error metadata.
+    pub info: DbErrorInfo,
+}
+
+/// Payload for Postgres column-class errors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ColumnError {
+    /// Column name when Postgres reported it.
+    pub column: Option<String>,
+    /// Additional structured database error metadata.
+    pub info: DbErrorInfo,
+}
+
+/// Payload for Postgres failures without a dedicated constraint or column shape.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PgFailure {
+    /// Postgres primary error message.
+    pub message: String,
+    /// Postgres detail string.
+    pub detail: Option<String>,
+    /// Postgres hint string.
+    pub hint: Option<String>,
+    /// Additional structured database error metadata.
+    pub info: DbErrorInfo,
+}
+
+/// Payload for mapped or unmapped Postgres database failures.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DatabaseFailure {
+    /// SQLSTATE error code.
+    pub code: String,
+    /// Database primary error message.
+    pub message: String,
+    /// Database detail string.
+    pub detail: Option<String>,
+    /// Database hint string.
+    pub hint: Option<String>,
+    /// Constraint name when available.
+    pub constraint: Option<String>,
+    /// Table name when available.
+    pub table: Option<String>,
+    /// Column name when available.
+    pub column: Option<String>,
+    /// Additional structured database error metadata.
+    pub info: DbErrorInfo,
+}
+
+/// Payload for field/operator validation failures.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OperatorError {
+    /// Field API name.
+    pub field: String,
+    /// Operator name.
+    pub operator: String,
+}
+
+/// Payload for JSON search value validation failures.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SearchValueError {
+    /// Field name from the JSON request.
+    pub field: String,
+    /// Human-readable expected value kind.
+    pub expected: &'static str,
+}
+
+/// Payload for write-target validation failures.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct WriteTargetError {
+    /// Statement kind.
+    pub statement: &'static str,
+    /// Source kind that was used as the write target.
+    pub source_kind: &'static str,
+}
+
+/// Payload for CTE shape validation failures.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CteShapeError {
+    /// CTE name.
+    pub name: String,
+    /// Validation message.
+    pub message: &'static str,
+}
+
+impl ConstraintError {
+    /// Creates a constraint error payload for tests or adapters.
+    pub fn new(constraint: Option<String>, detail: Option<String>, info: DbErrorInfo) -> Self {
+        Self {
+            constraint,
+            detail,
+            info,
+        }
+    }
+}
+
+impl ColumnError {
+    /// Creates a column error payload for tests or adapters.
+    pub fn new(column: Option<String>, info: DbErrorInfo) -> Self {
+        Self { column, info }
+    }
+}
+
+impl PgFailure {
+    /// Creates a generic Postgres failure payload for tests or adapters.
+    pub fn new(
+        message: impl Into<String>,
+        detail: Option<String>,
+        hint: Option<String>,
+        info: DbErrorInfo,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            detail,
+            hint,
+            info,
+        }
+    }
+}
+
+impl DatabaseFailure {
+    /// Creates a database failure payload for tests or adapters.
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            detail: None,
+            hint: None,
+            constraint: None,
+            table: None,
+            column: None,
+            info: DbErrorInfo::default(),
+        }
+    }
+
+    /// Sets the Postgres detail string.
+    pub fn detail(mut self, detail: Option<String>) -> Self {
+        self.detail = detail;
+        self
+    }
+
+    /// Sets the Postgres hint string.
+    pub fn hint(mut self, hint: Option<String>) -> Self {
+        self.hint = hint;
+        self
+    }
+
+    /// Sets the reported constraint name.
+    pub fn constraint(mut self, constraint: Option<String>) -> Self {
+        self.constraint = constraint;
+        self
+    }
+
+    /// Sets the reported table name.
+    pub fn table(mut self, table: Option<String>) -> Self {
+        self.table = table;
+        self
+    }
+
+    /// Sets the reported column name.
+    pub fn column(mut self, column: Option<String>) -> Self {
+        self.column = column;
+        self
+    }
+
+    /// Sets structured database error metadata.
+    pub fn info(mut self, info: DbErrorInfo) -> Self {
+        self.info = info;
+        self
+    }
+}
+
+impl OperatorError {
+    /// Creates a field/operator validation payload.
+    pub fn new(field: impl Into<String>, operator: impl Into<String>) -> Self {
+        Self {
+            field: field.into(),
+            operator: operator.into(),
+        }
+    }
+}
+
+impl SearchValueError {
+    /// Creates a JSON search value validation payload.
+    pub fn new(field: impl Into<String>, expected: &'static str) -> Self {
+        Self {
+            field: field.into(),
+            expected,
+        }
+    }
+}
+
+impl WriteTargetError {
+    /// Creates a write-target validation payload.
+    pub fn new(statement: &'static str, source_kind: &'static str) -> Self {
+        Self {
+            statement,
+            source_kind,
+        }
+    }
+}
+
+impl CteShapeError {
+    /// Creates a CTE shape validation payload.
+    pub fn new(name: impl Into<String>, message: &'static str) -> Self {
+        Self {
+            name: name.into(),
+            message,
+        }
+    }
+}
+
 /// Error type returned by rqb builders and sqlx execution helpers.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// A `fetch_one`-style operation did not return a row.
     #[error("query returned no rows")]
     NotFound,
 
     /// Postgres unique constraint violation (`23505`).
-    #[error("unique violation{}", constraint_suffix(.constraint))]
-    UniqueViolation {
-        /// Constraint name when Postgres reported it.
-        constraint: Option<String>,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("unique violation{}", constraint_suffix(&.0.constraint))]
+    UniqueViolation(Box<ConstraintError>),
 
     /// Postgres foreign key violation (`23503`).
-    #[error("foreign key violation{}", constraint_suffix(.constraint))]
-    ForeignKeyViolation {
-        /// Constraint name when Postgres reported it.
-        constraint: Option<String>,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("foreign key violation{}", constraint_suffix(&.0.constraint))]
+    ForeignKeyViolation(Box<ConstraintError>),
 
     /// Postgres restrict violation (`23001`).
-    #[error("restrict violation{}", constraint_suffix(.constraint))]
-    RestrictViolation {
-        /// Constraint name when Postgres reported it.
-        constraint: Option<String>,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("restrict violation{}", constraint_suffix(&.0.constraint))]
+    RestrictViolation(Box<ConstraintError>),
 
     /// Postgres not-null violation (`23502`).
-    #[error("not null violation{}", column_suffix(.column))]
-    NotNullViolation {
-        /// Column name when Postgres reported it.
-        column: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("not null violation{}", column_suffix(&.0.column))]
+    NotNullViolation(Box<ColumnError>),
 
     /// Postgres check constraint violation (`23514`).
-    #[error("check violation{}", constraint_suffix(.constraint))]
-    CheckViolation {
-        /// Constraint name when Postgres reported it.
-        constraint: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("check violation{}", constraint_suffix(&.0.constraint))]
+    CheckViolation(Box<ConstraintError>),
 
     /// Postgres exclusion constraint violation (`23P01`).
-    #[error("exclusion violation{}", constraint_suffix(.constraint))]
-    ExclusionViolation {
-        /// Constraint name when Postgres reported it.
-        constraint: Option<String>,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("exclusion violation{}", constraint_suffix(&.0.constraint))]
+    ExclusionViolation(Box<ConstraintError>),
 
     /// Postgres serialization failure (`40001`).
-    #[error("serialization failure: {message}")]
-    SerializationFailure {
-        /// Postgres primary error message.
-        message: String,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Postgres hint string.
-        hint: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("serialization failure: {}", .0.message)]
+    SerializationFailure(Box<PgFailure>),
 
     /// Postgres deadlock detected (`40P01`).
-    #[error("deadlock detected: {message}")]
-    DeadlockDetected {
-        /// Postgres primary error message.
-        message: String,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Postgres hint string.
-        hint: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("deadlock detected: {}", .0.message)]
+    DeadlockDetected(Box<PgFailure>),
 
     /// Postgres query cancellation (`57014`).
-    #[error("query canceled: {message}")]
-    QueryCanceled {
-        /// Postgres primary error message.
-        message: String,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Postgres hint string.
-        hint: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("query canceled: {}", .0.message)]
+    QueryCanceled(Box<PgFailure>),
 
     /// Postgres insufficient privilege error (`42501`).
-    #[error("insufficient privilege: {message}")]
-    InsufficientPrivilege {
-        /// Postgres primary error message.
-        message: String,
-        /// Postgres detail string.
-        detail: Option<String>,
-        /// Postgres hint string.
-        hint: Option<String>,
-        /// Table name when Postgres reported it.
-        table: Option<String>,
-        /// Column name when Postgres reported it.
-        column: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("insufficient privilege: {}", .0.message)]
+    InsufficientPrivilege(Box<DatabaseFailure>),
 
     /// A database error that is not mapped to a specialized variant.
-    #[error("database error ({code}): {message}")]
-    Database {
-        /// SQLSTATE error code.
-        code: String,
-        /// Database primary error message.
-        message: String,
-        /// Database detail string.
-        detail: Option<String>,
-        /// Database hint string.
-        hint: Option<String>,
-        /// Constraint name when available.
-        constraint: Option<String>,
-        /// Table name when available.
-        table: Option<String>,
-        /// Column name when available.
-        column: Option<String>,
-        /// Additional structured database error metadata.
-        info: DbErrorInfo,
-    },
+    #[error("database error ({}): {}", .0.code, .0.message)]
+    Database(Box<DatabaseFailure>),
 
     /// Connection-level failure.
     #[error("connection error: {0}")]
@@ -224,7 +356,7 @@ pub enum Error {
 
     /// Unclassified sqlx error.
     #[error("sqlx error: {0}")]
-    Sqlx(sqlx::Error),
+    Sqlx(Box<sqlx::Error>),
 
     /// A transaction body failed and rollback also failed.
     #[error("transaction rollback failed after error: {error}; rollback error: {rollback}")]
@@ -249,12 +381,14 @@ pub enum Error {
     },
 
     /// A field was used with an operator it does not support.
-    #[error("operator `{operator}` is not supported for field `{field}`")]
-    InvalidOperator {
-        /// Field API name.
-        field: String,
-        /// Operator name.
-        operator: String,
+    #[error("operator `{}` is not supported for field `{}`", .0.operator, .0.field)]
+    InvalidOperator(Box<OperatorError>),
+
+    /// An aggregate-local modifier was applied to a non-aggregate expression.
+    #[error("aggregate modifier `{modifier}` can only be applied to aggregate expressions")]
+    InvalidAggregateModifier {
+        /// Modifier method name.
+        modifier: &'static str,
     },
 
     /// A field without ordering support was used for sorting.
@@ -279,22 +413,12 @@ pub enum Error {
     },
 
     /// JSON search used an unsupported operator for a field.
-    #[error("operator `{operator}` is not supported for search field `{field}`")]
-    InvalidSearchOperator {
-        /// Field name from the JSON request.
-        field: String,
-        /// Operator name from the JSON request.
-        operator: String,
-    },
+    #[error("operator `{}` is not supported for search field `{}`", .0.operator, .0.field)]
+    InvalidSearchOperator(Box<OperatorError>),
 
     /// JSON search value did not match the field's expected JSON shape.
-    #[error("invalid JSON value for search field `{field}`; expected {expected}")]
-    InvalidSearchValue {
-        /// Field name from the JSON request.
-        field: String,
-        /// Human-readable expected value kind.
-        expected: &'static str,
-    },
+    #[error("invalid JSON value for search field `{}`; expected {}", .0.field, .0.expected)]
+    InvalidSearchValue(Box<SearchValueError>),
 
     /// JSON search used an empty `and` or `or` group.
     #[error("empty search logical expression `{logical}`")]
@@ -320,13 +444,8 @@ pub enum Error {
     },
 
     /// A write statement targeted a source kind that cannot be written to.
-    #[error("{statement} target must be a table or view source, got {source_kind}")]
-    InvalidWriteTarget {
-        /// Statement kind.
-        statement: &'static str,
-        /// Source kind that was used as the write target.
-        source_kind: &'static str,
-    },
+    #[error("{} target must be a table or view source, got {}", .0.statement, .0.source_kind)]
+    InvalidWriteTarget(Box<WriteTargetError>),
 
     /// A write statement had no assignments.
     #[error("{statement} statement requires at least one assignment")]
@@ -364,13 +483,8 @@ pub enum Error {
     },
 
     /// CTE definition or exposed field list was not valid.
-    #[error("invalid CTE `{name}`: {message}")]
-    InvalidCteShape {
-        /// CTE name.
-        name: String,
-        /// Validation message.
-        message: &'static str,
-    },
+    #[error("invalid CTE `{}`: {}", .0.name, .0.message)]
+    InvalidCteShape(Box<CteShapeError>),
 
     /// A delete statement was built without a filter.
     #[error("delete without filter is not allowed")]
@@ -403,12 +517,50 @@ impl From<sqlx::Error> for Error {
         match error {
             sqlx::Error::RowNotFound => Self::NotFound,
             sqlx::Error::Database(db) => Self::from_sqlx_database_error(&*db),
-            other => Self::Sqlx(other),
+            other => Self::Sqlx(Box::new(other)),
         }
     }
 }
 
 impl Error {
+    pub(crate) fn invalid_operator(field: impl Into<String>, operator: impl Into<String>) -> Self {
+        Self::InvalidOperator(Box::new(OperatorError {
+            field: field.into(),
+            operator: operator.into(),
+        }))
+    }
+
+    pub(crate) fn invalid_search_operator(
+        field: impl Into<String>,
+        operator: impl Into<String>,
+    ) -> Self {
+        Self::InvalidSearchOperator(Box::new(OperatorError {
+            field: field.into(),
+            operator: operator.into(),
+        }))
+    }
+
+    pub(crate) fn invalid_search_value(field: impl Into<String>, expected: &'static str) -> Self {
+        Self::InvalidSearchValue(Box::new(SearchValueError {
+            field: field.into(),
+            expected,
+        }))
+    }
+
+    pub(crate) fn invalid_write_target(statement: &'static str, source_kind: &'static str) -> Self {
+        Self::InvalidWriteTarget(Box::new(WriteTargetError {
+            statement,
+            source_kind,
+        }))
+    }
+
+    pub(crate) fn invalid_cte_shape(name: impl Into<String>, message: &'static str) -> Self {
+        Self::InvalidCteShape(Box::new(CteShapeError {
+            name: name.into(),
+            message,
+        }))
+    }
+
     fn from_sqlx_database_error(db: &(dyn DatabaseError + 'static)) -> Self {
         let pg = db.try_downcast_ref::<PgDatabaseError>();
         let code = db
@@ -424,55 +576,51 @@ impl Error {
         let info = DbErrorInfo::from_sqlx_database_error(db);
 
         match code.as_str() {
-            "23505" => Self::UniqueViolation {
+            "23505" => Self::UniqueViolation(Box::new(ConstraintError {
                 constraint,
                 detail,
                 info,
-            },
-            "23503" => Self::ForeignKeyViolation {
+            })),
+            "23503" => Self::ForeignKeyViolation(Box::new(ConstraintError {
                 constraint,
                 detail,
                 info,
-            },
-            "23001" => Self::RestrictViolation {
+            })),
+            "23001" => Self::RestrictViolation(Box::new(ConstraintError {
                 constraint,
                 detail,
                 info,
-            },
-            "23502" => Self::NotNullViolation { column, info },
-            "23514" => Self::CheckViolation { constraint, info },
-            "23P01" => Self::ExclusionViolation {
+            })),
+            "23502" => Self::NotNullViolation(Box::new(ColumnError { column, info })),
+            "23514" => Self::CheckViolation(Box::new(ConstraintError {
                 constraint,
                 detail,
                 info,
-            },
-            "40001" => Self::SerializationFailure {
+            })),
+            "23P01" => Self::ExclusionViolation(Box::new(ConstraintError {
+                constraint,
+                detail,
+                info,
+            })),
+            "40001" => Self::SerializationFailure(Box::new(PgFailure {
                 message,
                 detail,
                 hint,
                 info,
-            },
-            "40P01" => Self::DeadlockDetected {
+            })),
+            "40P01" => Self::DeadlockDetected(Box::new(PgFailure {
                 message,
                 detail,
                 hint,
                 info,
-            },
-            "57014" => Self::QueryCanceled {
+            })),
+            "57014" => Self::QueryCanceled(Box::new(PgFailure {
                 message,
                 detail,
                 hint,
                 info,
-            },
-            "42501" => Self::InsufficientPrivilege {
-                message,
-                detail,
-                hint,
-                table,
-                column,
-                info,
-            },
-            _ => Self::Database {
+            })),
+            "42501" => Self::InsufficientPrivilege(Box::new(DatabaseFailure {
                 code,
                 message,
                 detail,
@@ -481,7 +629,17 @@ impl Error {
                 table,
                 column,
                 info,
-            },
+            })),
+            _ => Self::Database(Box::new(DatabaseFailure {
+                code,
+                message,
+                detail,
+                hint,
+                constraint,
+                table,
+                column,
+                info,
+            })),
         }
     }
 
@@ -489,7 +647,7 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Self::SerializationFailure { .. } | Self::DeadlockDetected { .. }
+            Self::SerializationFailure(_) | Self::DeadlockDetected(_)
         ) || self.is_connection()
     }
 
@@ -501,17 +659,17 @@ impl Error {
     /// Returns the SQLSTATE code when this error maps to one.
     pub fn code(&self) -> Option<&str> {
         match self {
-            Self::UniqueViolation { .. } => Some("23505"),
-            Self::ForeignKeyViolation { .. } => Some("23503"),
-            Self::RestrictViolation { .. } => Some("23001"),
-            Self::NotNullViolation { .. } => Some("23502"),
-            Self::CheckViolation { .. } => Some("23514"),
-            Self::ExclusionViolation { .. } => Some("23P01"),
-            Self::SerializationFailure { .. } => Some("40001"),
-            Self::DeadlockDetected { .. } => Some("40P01"),
-            Self::InsufficientPrivilege { .. } => Some("42501"),
-            Self::QueryCanceled { .. } => Some("57014"),
-            Self::Database { code, .. } => Some(code),
+            Self::UniqueViolation(_) => Some("23505"),
+            Self::ForeignKeyViolation(_) => Some("23503"),
+            Self::RestrictViolation(_) => Some("23001"),
+            Self::NotNullViolation(_) => Some("23502"),
+            Self::CheckViolation(_) => Some("23514"),
+            Self::ExclusionViolation(_) => Some("23P01"),
+            Self::SerializationFailure(_) => Some("40001"),
+            Self::DeadlockDetected(_) => Some("40P01"),
+            Self::InsufficientPrivilege(_) => Some("42501"),
+            Self::QueryCanceled(_) => Some("57014"),
+            Self::Database(err) => Some(&err.code),
             _ => None,
         }
     }
@@ -519,15 +677,16 @@ impl Error {
     /// Returns the associated constraint name when available.
     pub fn constraint_name(&self) -> Option<&str> {
         match self {
-            Self::UniqueViolation { constraint, .. }
-            | Self::ForeignKeyViolation { constraint, .. }
-            | Self::RestrictViolation { constraint, .. }
-            | Self::CheckViolation { constraint, .. }
-            | Self::ExclusionViolation { constraint, .. }
-            | Self::Database { constraint, .. } => constraint.as_deref().or_else(|| {
-                self.db_error_info()
-                    .and_then(|info| info.constraint.as_deref())
-            }),
+            Self::UniqueViolation(err)
+            | Self::ForeignKeyViolation(err)
+            | Self::RestrictViolation(err)
+            | Self::CheckViolation(err)
+            | Self::ExclusionViolation(err) => {
+                err.constraint.as_deref().or(err.info.constraint.as_deref())
+            }
+            Self::InsufficientPrivilege(err) | Self::Database(err) => {
+                err.constraint.as_deref().or(err.info.constraint.as_deref())
+            }
             _ => self
                 .db_error_info()
                 .and_then(|info| info.constraint.as_deref()),
@@ -537,9 +696,9 @@ impl Error {
     /// Returns the associated table name when available.
     pub fn table_name(&self) -> Option<&str> {
         match self {
-            Self::InsufficientPrivilege { table, .. } | Self::Database { table, .. } => table
-                .as_deref()
-                .or_else(|| self.db_error_info().and_then(|info| info.table.as_deref())),
+            Self::InsufficientPrivilege(err) | Self::Database(err) => {
+                err.table.as_deref().or(err.info.table.as_deref())
+            }
             _ => self.db_error_info().and_then(|info| info.table.as_deref()),
         }
     }
@@ -547,11 +706,10 @@ impl Error {
     /// Returns the associated column name when available.
     pub fn column_name(&self) -> Option<&str> {
         match self {
-            Self::NotNullViolation { column, .. }
-            | Self::InsufficientPrivilege { column, .. }
-            | Self::Database { column, .. } => column
-                .as_deref()
-                .or_else(|| self.db_error_info().and_then(|info| info.column.as_deref())),
+            Self::NotNullViolation(err) => err.column.as_deref().or(err.info.column.as_deref()),
+            Self::InsufficientPrivilege(err) | Self::Database(err) => {
+                err.column.as_deref().or(err.info.column.as_deref())
+            }
             _ => self.db_error_info().and_then(|info| info.column.as_deref()),
         }
     }
@@ -559,15 +717,15 @@ impl Error {
     /// Returns the database detail message when available.
     pub fn detail(&self) -> Option<&str> {
         match self {
-            Self::UniqueViolation { detail, .. }
-            | Self::ForeignKeyViolation { detail, .. }
-            | Self::RestrictViolation { detail, .. }
-            | Self::ExclusionViolation { detail, .. }
-            | Self::SerializationFailure { detail, .. }
-            | Self::DeadlockDetected { detail, .. }
-            | Self::InsufficientPrivilege { detail, .. }
-            | Self::QueryCanceled { detail, .. }
-            | Self::Database { detail, .. } => detail.as_deref(),
+            Self::UniqueViolation(err)
+            | Self::ForeignKeyViolation(err)
+            | Self::RestrictViolation(err)
+            | Self::CheckViolation(err)
+            | Self::ExclusionViolation(err) => err.detail.as_deref(),
+            Self::SerializationFailure(err)
+            | Self::DeadlockDetected(err)
+            | Self::QueryCanceled(err) => err.detail.as_deref(),
+            Self::InsufficientPrivilege(err) | Self::Database(err) => err.detail.as_deref(),
             _ => None,
         }
     }
@@ -575,11 +733,10 @@ impl Error {
     /// Returns the database hint message when available.
     pub fn hint(&self) -> Option<&str> {
         match self {
-            Self::SerializationFailure { hint, .. }
-            | Self::DeadlockDetected { hint, .. }
-            | Self::InsufficientPrivilege { hint, .. }
-            | Self::QueryCanceled { hint, .. }
-            | Self::Database { hint, .. } => hint.as_deref(),
+            Self::SerializationFailure(err)
+            | Self::DeadlockDetected(err)
+            | Self::QueryCanceled(err) => err.hint.as_deref(),
+            Self::InsufficientPrivilege(err) | Self::Database(err) => err.hint.as_deref(),
             _ => None,
         }
     }
@@ -608,17 +765,16 @@ impl Error {
     /// Returns the full structured database error metadata when available.
     pub fn db_error_info(&self) -> Option<&DbErrorInfo> {
         match self {
-            Self::UniqueViolation { info, .. }
-            | Self::ForeignKeyViolation { info, .. }
-            | Self::RestrictViolation { info, .. }
-            | Self::NotNullViolation { info, .. }
-            | Self::CheckViolation { info, .. }
-            | Self::ExclusionViolation { info, .. }
-            | Self::SerializationFailure { info, .. }
-            | Self::DeadlockDetected { info, .. }
-            | Self::QueryCanceled { info, .. }
-            | Self::InsufficientPrivilege { info, .. }
-            | Self::Database { info, .. } => Some(info),
+            Self::UniqueViolation(err)
+            | Self::ForeignKeyViolation(err)
+            | Self::RestrictViolation(err)
+            | Self::CheckViolation(err)
+            | Self::ExclusionViolation(err) => Some(&err.info),
+            Self::NotNullViolation(err) => Some(&err.info),
+            Self::SerializationFailure(err)
+            | Self::DeadlockDetected(err)
+            | Self::QueryCanceled(err) => Some(&err.info),
+            Self::InsufficientPrivilege(err) | Self::Database(err) => Some(&err.info),
             _ => None,
         }
     }
@@ -626,11 +782,19 @@ impl Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{DbErrorInfo, DbErrorPosition, Error};
+    use super::{
+        ColumnError, ConstraintError, DatabaseFailure, DbErrorInfo, DbErrorPosition, Error,
+        PgFailure,
+    };
+
+    #[test]
+    fn error_size_stays_small_for_application_results() {
+        assert!(std::mem::size_of::<Error>() <= 32);
+    }
 
     #[test]
     fn structured_error_helpers_expose_constraint_table_column_and_code() {
-        let error = Error::Database {
+        let error = Error::Database(Box::new(DatabaseFailure {
             code: "23505".to_owned(),
             message: "duplicate key value violates unique constraint".to_owned(),
             detail: Some("Key (email)=(ada@example.com) already exists.".to_owned()),
@@ -645,7 +809,7 @@ mod tests {
                 position: Some(DbErrorPosition::Original(42)),
                 ..DbErrorInfo::default()
             },
-        };
+        }));
 
         assert_eq!(error.code(), Some("23505"));
         assert_eq!(error.constraint_name(), Some("users_email_key"));
@@ -664,7 +828,7 @@ mod tests {
 
     #[test]
     fn specialized_error_helpers_fall_back_to_db_error_info() {
-        let error = Error::UniqueViolation {
+        let error = Error::UniqueViolation(Box::new(ConstraintError {
             constraint: None,
             detail: None,
             info: DbErrorInfo {
@@ -673,7 +837,7 @@ mod tests {
                 column: Some("email".to_owned()),
                 ..DbErrorInfo::default()
             },
-        };
+        }));
 
         assert_eq!(error.code(), Some("23505"));
         assert_eq!(error.constraint_name(), Some("users_email_key"));
@@ -684,31 +848,38 @@ mod tests {
     #[test]
     fn retryable_errors_are_serialization_deadlock_or_connection_only() {
         assert!(
-            Error::SerializationFailure {
+            Error::SerializationFailure(Box::new(PgFailure {
                 message: "could not serialize access".to_owned(),
                 detail: None,
                 hint: None,
                 info: DbErrorInfo::default(),
-            }
+            }))
             .is_retryable()
         );
         assert!(
-            Error::DeadlockDetected {
+            Error::DeadlockDetected(Box::new(PgFailure {
                 message: "deadlock detected".to_owned(),
                 detail: None,
                 hint: None,
                 info: DbErrorInfo::default(),
-            }
+            }))
             .is_retryable()
         );
         assert!(Error::Connection("connection closed".to_owned()).is_retryable());
         assert!(
-            !Error::QueryCanceled {
+            !Error::QueryCanceled(Box::new(PgFailure {
                 message: "canceling statement due to user request".to_owned(),
                 detail: None,
                 hint: None,
                 info: DbErrorInfo::default(),
-            }
+            }))
+            .is_retryable()
+        );
+        assert!(
+            !Error::NotNullViolation(Box::new(ColumnError {
+                column: Some("email".to_owned()),
+                info: DbErrorInfo::default(),
+            }))
             .is_retryable()
         );
     }

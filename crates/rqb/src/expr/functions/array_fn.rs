@@ -32,6 +32,11 @@ pub fn array_ndims(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("array_ndims", [expr])
 }
 
+/// Builds `trim_array(expr, n)`.
+pub fn trim_array(array: impl Into<ValueExpr>, n: impl Into<ValueExpr>) -> ValueExpr {
+    function("trim_array", [array.into(), n.into()])
+}
+
 /// Builds `unnest(expr)`.
 pub fn unnest(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("unnest", [expr])

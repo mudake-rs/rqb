@@ -15,9 +15,7 @@ use crate::types::{
 
 const DEFAULT_PAGE_LIMIT: u32 = 100;
 
-// Stream items carry boxed rqb errors so each yielded item stays pointer-sized
-// instead of embedding the full structured error enum in the stream state.
-type StreamResult<T> = std::result::Result<T, Box<rqb::Error>>;
+type StreamResult<T> = std::result::Result<T, rqb::Error>;
 
 pub async fn checkout(pool: &PgPool, input: CreateOrder) -> rqb::Result<CheckoutResponse> {
     tx!(pool, |conn| {
@@ -146,7 +144,7 @@ pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Page<Ord
     // same trusted query shape is used for the page items and the count.
     let mut query = select(order_search_view::view())
         .filter(order_search_view::STATUS.ne("canceled"))
-        .request(request)?;
+        .apply_search(request)?;
 
     if !has_limit {
         query = query.limit(limit);
@@ -167,7 +165,7 @@ pub fn export_csv_stream(
     pool: PgPool,
     user_id: Uuid,
 ) -> StreamResult<impl Stream<Item = StreamResult<String>> + Send + 'static> {
-    let built = select(orders::table())
+    let mut rows = select(orders::table())
         .columns((
             orders::ID,
             orders::USER_ID,
@@ -177,18 +175,14 @@ pub fn export_csv_stream(
         ))
         .filter(orders::USER_ID.eq(user_id))
         .order_asc(orders::CREATED_AT)
-        .build()
-        .map_err(Box::new)?;
+        .fetch_stream_pool_as::<OrderExportRow>(pool)?;
 
     Ok(try_stream! {
         yield String::from("id,user_id,status,total_cents,created_at\n");
 
-        // The stream owns the pool clone and the built query, so axum can keep
-        // pulling chunks after the handler has returned the response headers.
-        let mut rows = built
-            .fetch_stream_as::<OrderExportRow>(&pool)
-            .map_err(Box::new)?;
-        while let Some(row) = rows.try_next().await.map_err(Box::new)? {
+        // The rqb stream owns the pool handle and built query, so axum can keep
+        // pulling chunks after the handler returns response headers.
+        while let Some(row) = rows.try_next().await? {
             yield format!(
                 "{},{},{},{},{}\n",
                 row.id, row.user_id, row.status, row.total_cents, row.created_at
@@ -202,7 +196,7 @@ pub async fn summary<'e>(db: impl PgExecutor<'e>) -> rqb::Result<Vec<UserOrderSu
     let o = orders::alias("o");
     let e = events::alias("e");
     let orders_json = jsonb_agg_object![o.id(), o.status(), o.total_cents()]
-        .filter(o.id().is_not_null())
+        .aggregate_filter(o.id().is_not_null())
         .alias("orders");
 
     // The CTE exposes exactly the projected fields. `source().alias("u")`
@@ -218,13 +212,13 @@ pub async fn summary<'e>(db: impl PgExecutor<'e>) -> rqb::Result<Vec<UserOrderSu
         .left_join(&o, u.id().eq_field(o.user_id()))
         .left_join(&e, e.order_id().eq_field(o.id()))
         .column(u.email().alias("email"))
-        .agg(
+        .item(
             count_all()
-                .filter(o.id().is_not_null())
+                .aggregate_filter(o.id().is_not_null())
                 .alias("order_count"),
         )
-        .agg(orders_json)
-        .agg(max(e.created_at()).alias("last_event_at"))
+        .item(orders_json)
+        .item(max(e.created_at()).alias("last_event_at"))
         .group_by(u.email())
         .fetch_all_as::<UserOrderSummaryRow>(db)
         .await

@@ -176,6 +176,7 @@ pub enum FrameExclude {
 /// Window frame specification.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct WindowFrame {
     /// Frame unit.
     pub kind: WindowFrameKind,
@@ -190,6 +191,7 @@ pub struct WindowFrame {
 /// Window specification used by `OVER (...)`.
 #[derive(Clone, Debug, Default)]
 #[must_use]
+#[non_exhaustive]
 pub struct WindowSpec {
     /// Partition expressions.
     pub partition_by: Vec<ValueExpr>,
@@ -227,6 +229,7 @@ pub struct CaseBuilder {
 /// Boolean expression AST.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum BoolExpr {
     /// Boolean constant.
     Constant(bool),
@@ -364,6 +367,7 @@ pub enum BoolExpr {
 /// SQL value expression AST.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum ValueExpr {
     /// Field reference.
     Field {
@@ -376,6 +380,8 @@ pub enum ValueExpr {
     Excluded(Meta),
     /// Bind parameter.
     Param(Param),
+    /// SQL `NULL` literal.
+    Null,
     /// SQL keyword expression such as `CURRENT_DATE`.
     Keyword(&'static str),
     /// Function call.
@@ -477,4 +483,11 @@ pub enum ValueExpr {
     },
     /// Scalar subquery expression.
     Subquery(Box<crate::Stmt>),
+    /// Invalid aggregate-local modifier use retained for validation.
+    InvalidAggregateModifier {
+        /// Expression the modifier was applied to.
+        expr: Box<ValueExpr>,
+        /// Modifier method name.
+        modifier: &'static str,
+    },
 }

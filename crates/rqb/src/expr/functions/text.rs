@@ -143,13 +143,8 @@ pub fn decode(text: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> Value
 }
 
 /// Builds `starts_with(text, prefix)`.
-pub fn text_starts_with(text: impl Into<ValueExpr>, prefix: impl Into<ValueExpr>) -> BoolExpr {
-    function("starts_with", [text.into(), prefix.into()]).is_true()
-}
-
-/// Alias for [`text_starts_with`].
 pub fn starts_with(text: impl Into<ValueExpr>, prefix: impl Into<ValueExpr>) -> BoolExpr {
-    text_starts_with(text, prefix)
+    function("starts_with", [text.into(), prefix.into()]).is_true()
 }
 
 /// Builds `trim(expr)`.

@@ -1,7 +1,8 @@
+use async_stream::try_stream;
 use futures_core::stream::BoxStream;
 use futures_util::{StreamExt, TryStreamExt};
 use sqlx::postgres::PgRow;
-use sqlx::{Decode, FromRow, PgExecutor, Postgres, Type};
+use sqlx::{Decode, FromRow, PgExecutor, PgPool, Postgres, Type};
 
 use crate::Result;
 use crate::{
@@ -54,6 +55,29 @@ impl BuiltQuery {
             .boxed())
     }
 
+    /// Streams raw sqlx `PgRow` values from an owned pool-backed query.
+    ///
+    /// The returned stream owns this built query and a cloneable [`PgPool`]
+    /// handle, so it can outlive the call frame that created it.
+    pub fn fetch_stream_pool(self, pool: PgPool) -> Result<BoxStream<'static, Result<PgRow>>> {
+        let Self {
+            sql,
+            params,
+            cacheable,
+        } = self;
+        let arguments = params.arguments()?;
+
+        Ok(try_stream! {
+            let mut rows = sqlx::query_with(&sql, arguments)
+                .persistent(cacheable)
+                .fetch(&pool);
+            while let Some(row) = rows.try_next().await.map_err(crate::Error::from)? {
+                yield row;
+            }
+        }
+        .boxed())
+    }
+
     /// Fetches exactly one raw sqlx `PgRow`.
     pub async fn fetch_one<'e>(&self, executor: impl PgExecutor<'e>) -> Result<PgRow> {
         sqlx::query_with(&self.sql, self.arguments()?)
@@ -101,6 +125,32 @@ impl BuiltQuery {
             .fetch(executor)
             .map_err(Into::into)
             .boxed())
+    }
+
+    /// Streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
+    ///
+    /// The returned stream owns this built query and a cloneable [`PgPool`]
+    /// handle, so it can outlive the call frame that created it.
+    pub fn fetch_stream_pool_as<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'static,
+    {
+        let Self {
+            sql,
+            params,
+            cacheable,
+        } = self;
+        let arguments = params.arguments()?;
+
+        Ok(try_stream! {
+            let mut rows = sqlx::query_as_with::<_, T, _>(&sql, arguments)
+                .persistent(cacheable)
+                .fetch(&pool);
+            while let Some(row) = rows.try_next().await.map_err(crate::Error::from)? {
+                yield row;
+            }
+        }
+        .boxed())
     }
 
     /// Fetches exactly one row into a `sqlx::FromRow` type.
@@ -159,6 +209,32 @@ impl BuiltQuery {
         )
     }
 
+    /// Streams rows as a single decoded scalar column from an owned pool-backed query.
+    ///
+    /// The returned stream owns this built query and a cloneable [`PgPool`]
+    /// handle, so it can outlive the call frame that created it.
+    pub fn fetch_stream_pool_scalar<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
+    where
+        T: ScalarValue + 'static,
+    {
+        let Self {
+            sql,
+            params,
+            cacheable,
+        } = self;
+        let arguments = params.arguments()?;
+
+        Ok(try_stream! {
+            let mut rows = sqlx::query_scalar_with::<_, T, _>(&sql, arguments)
+                .persistent(cacheable)
+                .fetch(&pool);
+            while let Some(row) = rows.try_next().await.map_err(crate::Error::from)? {
+                yield row;
+            }
+        }
+        .boxed())
+    }
+
     /// Fetches exactly one decoded scalar value.
     pub async fn fetch_one_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<T>
     where
@@ -208,6 +284,11 @@ impl Stmt {
         self.build()?.fetch_optional(executor).await
     }
 
+    /// Builds the statement and streams raw rows from an owned pool-backed query.
+    pub fn fetch_stream_pool(self, pool: PgPool) -> Result<BoxStream<'static, Result<PgRow>>> {
+        self.build()?.fetch_stream_pool(pool)
+    }
+
     /// Builds the statement and fetches all rows into a `sqlx::FromRow` type.
     pub async fn fetch_all_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
     where
@@ -230,6 +311,14 @@ impl Stmt {
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
     {
         self.build()?.fetch_optional_as(executor).await
+    }
+
+    /// Builds the statement and streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
+    pub fn fetch_stream_pool_as<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'static,
+    {
+        self.build()?.fetch_stream_pool_as(pool)
     }
 
     /// Builds the statement and fetches all rows as a single scalar column.
@@ -257,6 +346,14 @@ impl Stmt {
         T: ScalarValue,
     {
         self.build()?.fetch_optional_scalar(executor).await
+    }
+
+    /// Builds the statement and streams scalar values from an owned pool-backed query.
+    pub fn fetch_stream_pool_scalar<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
+    where
+        T: ScalarValue + 'static,
+    {
+        self.build()?.fetch_stream_pool_scalar(pool)
     }
 }
 
@@ -305,6 +402,14 @@ macro_rules! impl_statement_execute {
                 self.build()?.fetch_optional(executor).await
             }
 
+            /// Builds the statement and streams raw rows from an owned pool-backed query.
+            pub fn fetch_stream_pool(
+                self,
+                pool: PgPool,
+            ) -> Result<BoxStream<'static, Result<PgRow>>> {
+                self.build()?.fetch_stream_pool(pool)
+            }
+
             /// Builds the statement and fetches all rows into a `sqlx::FromRow` type.
             pub async fn fetch_all_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
             where
@@ -332,6 +437,17 @@ macro_rules! impl_statement_execute {
                 self.build()?.fetch_optional_as(executor).await
             }
 
+            /// Builds the statement and streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
+            pub fn fetch_stream_pool_as<T>(
+                self,
+                pool: PgPool,
+            ) -> Result<BoxStream<'static, Result<T>>>
+            where
+                T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'static,
+            {
+                self.build()?.fetch_stream_pool_as(pool)
+            }
+
             /// Builds the statement and fetches all rows as a single scalar column.
             pub async fn fetch_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
             where
@@ -357,6 +473,17 @@ macro_rules! impl_statement_execute {
                 T: ScalarValue,
             {
                 self.build()?.fetch_optional_scalar(executor).await
+            }
+
+            /// Builds the statement and streams scalar values from an owned pool-backed query.
+            pub fn fetch_stream_pool_scalar<T>(
+                self,
+                pool: PgPool,
+            ) -> Result<BoxStream<'static, Result<T>>>
+            where
+                T: ScalarValue + 'static,
+            {
+                self.build()?.fetch_stream_pool_scalar(pool)
             }
         }
     };

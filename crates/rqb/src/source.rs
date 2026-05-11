@@ -4,6 +4,7 @@ use crate::{Result, raw};
 /// Relation-like object that can appear in a `FROM`, `JOIN`, `UPDATE`, or write target.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum Source {
     /// Database table from static schema metadata.
     Table {
@@ -76,6 +77,26 @@ pub enum Source {
     },
 }
 
+/// Table-valued function source before it is converted into a general [`Source`].
+///
+/// This wrapper keeps `WITH ORDINALITY` available only for sources where
+/// PostgreSQL supports it.
+#[derive(Clone, Debug)]
+#[must_use]
+#[non_exhaustive]
+pub struct FunctionSource {
+    /// Function name rendered as SQL.
+    pub name: &'static str,
+    /// Function arguments.
+    pub args: Vec<ValueExpr>,
+    /// Required SQL alias.
+    pub alias: String,
+    /// Exposed fields.
+    pub fields: Vec<Meta>,
+    /// Whether to render `WITH ORDINALITY`.
+    pub ordinality: bool,
+}
+
 /// PostgreSQL CTE materialization hint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CteMaterialization {
@@ -98,6 +119,7 @@ impl CteMaterialization {
 /// Common table expression definition.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Cte {
     /// CTE name.
     pub name: String,
@@ -140,6 +162,7 @@ pub enum JoinKind {
 /// Join clause attached to a select statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Join {
     /// Join kind.
     pub kind: JoinKind,
@@ -228,16 +251,13 @@ pub fn raw_source(
 }
 
 /// Creates a table-valued function source with explicit exposed fields.
-///
-/// Use `Source::with_ordinality()` when the function should expose PostgreSQL
-/// `WITH ORDINALITY`.
 pub fn function_source(
     name: &'static str,
     args: impl Into<Vec<ValueExpr>>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
-    Source::Function {
+) -> FunctionSource {
+    FunctionSource {
         name,
         args: args.into(),
         alias: alias.into(),
@@ -252,7 +272,7 @@ pub fn generate_series_source(
     stop: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source(
         "generate_series",
         vec![start.into(), stop.into()],
@@ -268,7 +288,7 @@ pub fn generate_series_step_source(
     step: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source(
         "generate_series",
         vec![start.into(), stop.into(), step.into()],
@@ -282,7 +302,7 @@ pub fn unnest_source(
     array: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("unnest", vec![array.into()], alias, fields)
 }
 
@@ -292,7 +312,7 @@ pub fn generate_subscripts_source(
     dim: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source(
         "generate_subscripts",
         vec![array.into(), dim.into()],
@@ -307,7 +327,7 @@ pub fn regexp_split_to_table_source(
     pattern: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source(
         "regexp_split_to_table",
         vec![text.into(), pattern.into()],
@@ -321,7 +341,7 @@ pub fn json_object_keys_source(
     value: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("json_object_keys", vec![value.into()], alias, fields)
 }
 
@@ -330,7 +350,7 @@ pub fn jsonb_object_keys_source(
     value: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("jsonb_object_keys", vec![value.into()], alias, fields)
 }
 
@@ -339,7 +359,7 @@ pub fn json_each_source(
     value: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("json_each", vec![value.into()], alias, fields)
 }
 
@@ -348,7 +368,7 @@ pub fn jsonb_each_source(
     value: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("jsonb_each", vec![value.into()], alias, fields)
 }
 
@@ -357,7 +377,7 @@ pub fn json_array_elements_source(
     value: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("json_array_elements", vec![value.into()], alias, fields)
 }
 
@@ -366,7 +386,7 @@ pub fn jsonb_array_elements_source(
     value: impl Into<ValueExpr>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
-) -> Source {
+) -> FunctionSource {
     function_source("jsonb_array_elements", vec![value.into()], alias, fields)
 }
 
@@ -622,25 +642,25 @@ impl Cte {
 
     pub(crate) fn validate(&self) -> Result<()> {
         if self.name.is_empty() {
-            return Err(crate::Error::InvalidCteShape {
-                name: self.name.clone(),
-                message: "CTE name cannot be empty",
-            });
+            return Err(crate::Error::invalid_cte_shape(
+                self.name.clone(),
+                "CTE name cannot be empty",
+            ));
         }
         if let Some(count) = self.stmt.projection_count()
             && !self.fields.is_empty()
             && count != self.fields.len()
         {
-            return Err(crate::Error::InvalidCteShape {
-                name: self.name.clone(),
-                message: "field count must match SELECT projection count",
-            });
+            return Err(crate::Error::invalid_cte_shape(
+                self.name.clone(),
+                "field count must match SELECT projection count",
+            ));
         }
         if !self.columns.is_empty() && self.columns.len() != self.fields.len() {
-            return Err(crate::Error::InvalidCteShape {
-                name: self.name.clone(),
-                message: "column alias count must match exposed field count",
-            });
+            return Err(crate::Error::invalid_cte_shape(
+                self.name.clone(),
+                "column alias count must match exposed field count",
+            ));
         }
         self.stmt.validate()
     }
@@ -653,6 +673,29 @@ impl Cte {
 impl From<&Cte> for Source {
     fn from(cte: &Cte) -> Self {
         cte.source()
+    }
+}
+
+impl FunctionSource {
+    /// Enables PostgreSQL `WITH ORDINALITY`.
+    ///
+    /// The ordinality column remains explicit metadata: include it in the
+    /// `fields` argument when callers need to project it through rqb.
+    pub fn with_ordinality(mut self) -> Self {
+        self.ordinality = true;
+        self
+    }
+}
+
+impl From<FunctionSource> for Source {
+    fn from(source: FunctionSource) -> Self {
+        Self::Function {
+            name: source.name,
+            args: source.args,
+            alias: source.alias,
+            fields: source.fields,
+            ordinality: source.ordinality,
+        }
     }
 }
 
@@ -686,14 +729,6 @@ impl Source {
             | Self::Raw { alias: current, .. }
             | Self::Function { alias: current, .. }
             | Self::Values { alias: current, .. } => *current = alias,
-        }
-        self
-    }
-
-    /// Enables `WITH ORDINALITY` for a table-valued function source.
-    pub fn with_ordinality(mut self) -> Self {
-        if let Self::Function { ordinality, .. } = &mut self {
-            *ordinality = true;
         }
         self
     }
@@ -908,8 +943,7 @@ mod tests {
 
         assert!(matches!(
             cte.validate().unwrap_err(),
-            crate::Error::InvalidCteShape { name, message }
-                if name == "bad_ids" && message == "field count must match SELECT projection count"
+            crate::Error::InvalidCteShape(err) if err.name == "bad_ids" && err.message == "field count must match SELECT projection count"
         ));
     }
 
@@ -955,7 +989,8 @@ mod tests {
                 if message == "raw source alias cannot be empty"
         ));
 
-        let function = function_source("generate_series", Vec::new(), "", vec![ID_META]);
+        let function: Source =
+            function_source("generate_series", Vec::new(), "", vec![ID_META]).into();
         assert!(matches!(
             function.validate().unwrap_err(),
             crate::Error::InvalidSelectShape { message }
@@ -973,17 +1008,14 @@ mod tests {
     #[test]
     fn function_source_validates_arguments_and_ordinality_is_opt_in() {
         let source = generate_series_step_source(1_i32, 3_i32, 1_i32, "g", ID);
-        assert!(matches!(
-            &source,
-            Source::Function {
-                ordinality: false,
-                ..
-            }
-        ));
+        assert!(!source.ordinality);
 
         let with_ordinality = source.with_ordinality();
+        assert!(with_ordinality.ordinality);
+
+        let source: Source = with_ordinality.into();
         assert!(matches!(
-            with_ordinality,
+            source,
             Source::Function {
                 ordinality: true,
                 ..

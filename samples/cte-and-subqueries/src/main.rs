@@ -80,7 +80,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // generated table field for `count(*) AS item_count`.
     let item_counts = subquery(
         select(items::table())
-            .agg(count_all().alias("item_count"))
+            .item(count_all().alias("item_count"))
             .filter(items::ORDER_ID.eq_field(o.id())),
         "item_counts",
         item_count,

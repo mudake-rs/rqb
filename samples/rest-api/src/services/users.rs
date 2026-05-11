@@ -18,7 +18,7 @@ pub async fn search<'e>(
 ) -> rqb::Result<Vec<UserRow>> {
     select(users::table())
         .filter(users::ACTIVE.eq(true))
-        .request(request)?
+        .apply_search(request)?
         .fetch_all_as::<UserRow>(db)
         .await
 }

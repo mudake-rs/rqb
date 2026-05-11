@@ -30,6 +30,21 @@ impl Delete {
         self
     }
 
+    /// Adds a `WHERE` predicate, composing with existing predicates using `OR`.
+    ///
+    /// Use `filter(or([...]))` when only part of the current `WHERE` tree
+    /// should be OR-grouped.
+    pub fn or_filter(mut self, filter: BoolExpr) -> Self {
+        self.filter = Some(BoolExpr::or_option(self.filter, filter));
+        self
+    }
+
+    /// Replaces the entire `WHERE` predicate.
+    pub fn replace_filter(mut self, filter: BoolExpr) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
     /// Adds a `WHERE` predicate only when `condition` is true.
     pub fn filter_if(self, condition: bool, filter: BoolExpr) -> Self {
         if condition { self.filter(filter) } else { self }
@@ -39,6 +54,23 @@ impl Delete {
     pub fn filter_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> BoolExpr) -> Self {
         match value {
             Some(value) => self.filter(f(value)),
+            None => self,
+        }
+    }
+
+    /// Adds an OR-composed `WHERE` predicate only when `condition` is true.
+    pub fn or_filter_if(self, condition: bool, filter: BoolExpr) -> Self {
+        if condition {
+            self.or_filter(filter)
+        } else {
+            self
+        }
+    }
+
+    /// Adds an OR-composed `WHERE` predicate built from an optional value.
+    pub fn or_filter_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> BoolExpr) -> Self {
+        match value {
+            Some(value) => self.or_filter(f(value)),
             None => self,
         }
     }

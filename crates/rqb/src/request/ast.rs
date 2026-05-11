@@ -21,6 +21,7 @@ pub struct SearchRequest {
 
 /// Boolean filter tree accepted by [`SearchRequest`].
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub enum SearchFilter {
     /// Conjunction of nested filters.
     And(Vec<SearchFilter>),
@@ -48,6 +49,7 @@ pub struct SearchPredicate {
 /// Operators supported by the JSON search API.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub enum SearchOperator {
     /// Equality comparison.
     Equals,

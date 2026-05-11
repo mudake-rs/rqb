@@ -118,10 +118,11 @@ against `&PgPool`, `&mut PgConnection`, or a transaction connection.
 Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
 with `?` placeholders. `??` renders a literal question mark.
 
-Streaming is exposed on `BuiltQuery`: build once, keep the built query alive,
-then call `fetch_stream`, `fetch_stream_as::<T>()`, or
-`fetch_stream_scalar::<T>()`. This keeps the non-stream builders simple and
-makes ownership explicit for HTTP response streams.
+For HTTP response streams, pass a cloned pool handle into the owned streaming
+helpers: `fetch_stream_pool`, `fetch_stream_pool_as::<T>()`, or
+`fetch_stream_pool_scalar::<T>()`. The returned stream owns the built query and
+pool handle. `BuiltQuery::fetch_stream*` remains available when you build once
+and keep the built query alive yourself.
 
 ## Server-Owned SQL Shape
 
@@ -148,7 +149,7 @@ let rows = select(&u)
             .column(schema::orders::ID)
             .filter(schema::orders::USER_ID.eq_field(u.id())),
     ))
-    .agg(sum(schema::orders::TOTAL_CENTS.at("po")).alias("paid_total"))
+    .item(sum(schema::orders::TOTAL_CENTS.at("po")).alias("paid_total"))
     .group_by(u.id())
     .fetch_all_as::<UserRow>(&pool)
     .await?;
@@ -165,8 +166,8 @@ comparisons for cursor pagination, `insert(...).columns((...)).from_select(...)`
 `merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated
 against Postgres `WHEN` clause rules before rendering. REST-style pagination stays
 in application code; the REST sample shows `limit` / `offset` plus
-`Select::count()` for a matching count query, cursor pagination, and streaming
-CSV responses from `BuiltQuery::fetch_stream_as` into axum `Body::from_stream`.
+`Select::count()` for a matching count query, cursor pagination, and
+pool-owned streaming CSV responses into axum `Body::from_stream`.
 
 For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
 and `Select::try_into_source` infer it from explicit field projections.
@@ -200,14 +201,14 @@ Common helper families in the flat catalog:
 | Family | Examples |
 | --- | --- |
 | Boolean predicates | `and`, `or`, `not`, `exists`, `true_`, `false_` |
-| Aggregates | `count_all`, `sum`, `jsonb_agg_object`, `percentile_cont` |
-| Arrays | `array`, `array_length`, `array_position`, `unnest` |
+| Aggregates | `count_all`, `sum`, `sum_distinct`, `avg_distinct`, `jsonb_agg_object`, `percentile_cont` |
+| Arrays | `array`, `array_length`, `array_position`, `trim_array`, `unnest` |
 | Date and time | `now`, `date_trunc`, `date_bin`, `to_char`, `isfinite` |
 | Full-text search | `to_tsvector`, `phraseto_tsquery`, `ts_rank`, `ts_headline` |
 | JSON/JSONB | `json_build_object`, `jsonb_build_object`, `jsonb_pretty`, `array_to_json` |
 | Math | `round`, `sqrt`, `pow`, `random_between`, `width_bucket` |
-| Range | `range_lower`, `range_upper`, `isempty`, `lower_inc` |
-| Scalar expressions | `case`, `coalesce`, `greatest`, `current_user`, `scalar_subquery` |
+| Range | `range_lower`, `range_upper`, `range_merge`, `multirange_merge`, `isempty`, `lower_inc` |
+| Scalar expressions | `case`, `coalesce`, `null`, `greatest`, `current_user`, `scalar_subquery` |
 | Set-returning sources | `generate_series_source`, `unnest_source`, `json_each_source`, `regexp_split_to_table_source`, `values_source` |
 | Text | `lower`, `format`, `translate`, `repeat`, `octet_length`, `encode` |
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
@@ -238,7 +239,7 @@ Apply it to a trusted Rust query:
 ```rust
 let query = select(schema::order_search_view::view())
     .filter(schema::order_search_view::ORGANIZATION_ID.eq(current_org_id))
-    .request(search_request)?
+    .apply_search(search_request)?
     .build()?;
 ```
 
@@ -349,6 +350,19 @@ let changed = update(schema::users::table())
     .fetch_one_as::<LoginCountChange>(&pool)
     .await?;
 ```
+
+Use `set_null()` when an application intentionally writes SQL `NULL`:
+
+```rust
+update(schema::invoices::table())
+    .set(schema::invoices::PAID_AT.set_null())
+    .filter(schema::invoices::ID.eq(invoice_id))
+    .execute(&pool)
+    .await?;
+```
+
+rqb renders the assignment; PostgreSQL still enforces `NOT NULL` constraints at
+execution time.
 
 Conditional write helpers keep service code linear when a field depends on
 application state:

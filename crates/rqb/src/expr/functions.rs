@@ -17,19 +17,20 @@ mod uuid;
 
 pub use aggregate::{
     __jsonb_agg_object_from_pairs, __jsonb_object_pair, JsonbObjectItem, aggregate, any_value,
-    array_agg, array_agg_distinct, avg, bit_and, bit_or, bit_xor, bool_and, bool_or, count,
-    count_all, count_distinct, every, grouping, json_agg, json_agg_strict, json_object_agg,
+    array_agg, array_agg_distinct, avg, avg_distinct, bit_and, bit_or, bit_xor, bool_and, bool_or,
+    count, count_all, count_distinct, every, grouping, json_agg, json_agg_strict, json_object_agg,
     json_object_agg_strict, json_object_agg_unique, json_object_agg_unique_strict, jsonb_agg,
     jsonb_agg_object, jsonb_agg_strict, jsonb_object_agg, jsonb_object_agg_strict,
     jsonb_object_agg_unique, jsonb_object_agg_unique_strict, max, min, mode, ordered_set_aggregate,
     percentile_cont, percentile_disc, range_agg, range_intersect_agg, stddev, stddev_pop,
-    stddev_samp, string_agg, sum, var_pop, var_samp, variance,
+    stddev_samp, string_agg, sum, sum_distinct, var_pop, var_samp, variance,
 };
 pub use array_fn::{
     array_append, array_cat, array_dims, array_fill, array_fill_with_lower_bounds, array_length,
     array_lower, array_ndims, array_position, array_positions, array_prepend, array_remove,
     array_replace, array_reverse, array_sample, array_shuffle, array_sort, array_sort_desc,
-    array_sort_with, array_to_string, array_upper, cardinality, string_to_array, unnest,
+    array_sort_with, array_to_string, array_upper, cardinality, string_to_array, trim_array,
+    unnest,
 };
 pub use binary::{crc32, crc32c};
 pub use date::{
@@ -54,7 +55,10 @@ pub use math::{
     pi, pow, power, radians, random, random_between, round, sign, sqrt, trunc, width_bucket,
 };
 pub use merge::merge_action;
-pub use range::{isempty, lower_inc, lower_inf, range_lower, range_upper, upper_inc, upper_inf};
+pub use range::{
+    isempty, lower_inc, lower_inf, multirange_merge, range_lower, range_merge, range_upper,
+    upper_inc, upper_inf,
+};
 pub use scalar::{
     coalesce, current_database, current_schema, current_user, greatest, least, nullif,
     session_user, version,
@@ -63,8 +67,7 @@ pub use text::{
     ascii, btrim, casefold, char_length, chr, concat, concat_ws, decode, encode, format, initcap,
     left, length, lower, lpad, ltrim, md5, normalize, normalize_form, octet_length, regexp_matches,
     regexp_replace, regexp_split_to_array, repeat, replace, reverse, right, rpad, rtrim,
-    split_part, starts_with, strpos, substring, text_starts_with, translate, trim,
-    unicode_assigned, upper,
+    split_part, starts_with, strpos, substring, translate, trim, unicode_assigned, upper,
 };
 pub use uuid::{
     gen_random_uuid, uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7, uuidv7_shift,
@@ -76,6 +79,11 @@ where
     T: BindValue,
 {
     ValueExpr::Param(Param::typed(value))
+}
+
+/// Builds the SQL `NULL` literal.
+pub fn null() -> ValueExpr {
+    ValueExpr::Null
 }
 
 /// Builds a server-owned raw value expression with rqb `?` placeholders.

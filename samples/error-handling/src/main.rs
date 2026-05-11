@@ -8,27 +8,27 @@ use uuid::Uuid;
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Database errors are normalized into structured variants so API code can
     // match by meaning instead of parsing message text.
-    let unique = rqb::Error::UniqueViolation {
-        constraint: Some("app_users_email_key".to_owned()),
-        detail: Some("Key (email) already exists.".to_owned()),
-        info: rqb::DbErrorInfo::default(),
-    };
+    let unique = rqb::Error::UniqueViolation(Box::new(rqb::ConstraintError::new(
+        Some("app_users_email_key".to_owned()),
+        Some("Key (email) already exists.".to_owned()),
+        rqb::DbErrorInfo::default(),
+    )));
     assert_eq!(unique.code(), Some("23505"));
     assert_eq!(unique.constraint_name(), Some("app_users_email_key"));
 
-    let foreign_key = rqb::Error::ForeignKeyViolation {
-        constraint: Some("orders_user_fkey".to_owned()),
-        detail: None,
-        info: rqb::DbErrorInfo::default(),
-    };
+    let foreign_key = rqb::Error::ForeignKeyViolation(Box::new(rqb::ConstraintError::new(
+        Some("orders_user_fkey".to_owned()),
+        None,
+        rqb::DbErrorInfo::default(),
+    )));
     assert_eq!(foreign_key.code(), Some("23503"));
 
-    let retryable = rqb::Error::SerializationFailure {
-        message: "could not serialize access".to_owned(),
-        detail: None,
-        hint: None,
-        info: rqb::DbErrorInfo::default(),
-    };
+    let retryable = rqb::Error::SerializationFailure(Box::new(rqb::PgFailure::new(
+        "could not serialize access",
+        None,
+        None,
+        rqb::DbErrorInfo::default(),
+    )));
     assert!(retryable.is_retryable());
 
     let not_found = rqb::Error::from(sqlx::Error::RowNotFound);
@@ -43,15 +43,15 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         select(orders::table())
             .filter(orders::METADATA.gt(json!({ "tier": "gold" })))
             .build(),
-        Err(rqb::Error::InvalidOperator { field, operator })
-            if field == "metadata" && operator == "gt"
+        Err(rqb::Error::InvalidOperator(err))
+            if err.field == "metadata" && err.operator == "gt"
     ));
 
     let bad_cte = cte("bad", select(orders::table()).column(orders::ID), orders::ID)
         .columns(["id", "extra"]);
     assert!(matches!(
         select(bad_cte.source()).with(bad_cte).build(),
-        Err(rqb::Error::InvalidCteShape { name, .. }) if name == "bad"
+        Err(rqb::Error::InvalidCteShape(err)) if err.name == "bad"
     ));
 
     // The focused sample stays database-free. The future below is created only
@@ -76,10 +76,10 @@ async fn create_user_and_match_db_error<'e>(db: impl PgExecutor<'e>) -> rqb::Res
         .await
     {
         Ok(_) => Ok(()),
-        Err(rqb::Error::UniqueViolation { constraint, .. }) => {
+        Err(rqb::Error::UniqueViolation(err)) => {
             // Application code usually maps this to 409 Conflict; the optional
             // constraint name is useful for logs or field-specific API errors.
-            let _constraint = constraint;
+            let _constraint = err.constraint;
             Ok(())
         }
         Err(error) => Err(error),

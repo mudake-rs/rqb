@@ -16,6 +16,10 @@ impl Renderer {
                 self.push_param(param.clone());
                 Ok(())
             }
+            ValueExpr::Null => {
+                self.sql.push_str("NULL");
+                Ok(())
+            }
             ValueExpr::Keyword(keyword) => {
                 self.sql.push_str(keyword);
                 Ok(())
@@ -193,6 +197,9 @@ impl Renderer {
                 self.sql.push(')');
                 Ok(())
             }
+            ValueExpr::InvalidAggregateModifier { .. } => unreachable!(
+                "invalid aggregate modifiers must be rejected during validation before rendering"
+            ),
         }
     }
 

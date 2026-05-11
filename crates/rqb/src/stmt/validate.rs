@@ -238,10 +238,7 @@ fn validate_table_target(statement: &'static str, target: &Source) -> Result<()>
     if matches!(target, Source::Table { .. } | Source::View { .. }) {
         return Ok(());
     }
-    Err(Error::InvalidWriteTarget {
-        statement,
-        source_kind: target.kind(),
-    })
+    Err(Error::invalid_write_target(statement, target.kind()))
 }
 
 fn validate_fetch_shape(
@@ -379,10 +376,10 @@ fn validate_cte_names(ctes: &[Cte]) -> Result<()> {
     let mut seen = Vec::<&str>::new();
     for cte in ctes {
         if seen.contains(&cte.name.as_str()) {
-            return Err(Error::InvalidCteShape {
-                name: cte.name.clone(),
-                message: "duplicate CTE name",
-            });
+            return Err(Error::invalid_cte_shape(
+                cte.name.clone(),
+                "duplicate CTE name",
+            ));
         }
         seen.push(cte.name.as_str());
     }

@@ -60,6 +60,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(invoices::ID)
         .build()?;
 
+    // NULL writes are explicit assignments; rqb keeps nullability checks in
+    // Postgres because generated field metadata models SQL type, not optionality.
+    let clear_paid_sql = update(invoices::table())
+        .set(invoices::PAID_AT.set_null())
+        .filter(invoices::ID.eq(invoice_id))
+        .returning(invoices::ID)
+        .build()?;
+
     let delete_sql = delete_from(invoices::table())
         .filter(invoices::ID.eq(invoice_id))
         .returning(invoices::ID)
@@ -131,6 +139,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "UPDATE \"sample\".\"invoices\" SET \"paid_at\" = $1 WHERE \"id\" = $2 RETURNING \"id\""
     );
     assert_eq!(
+        clear_paid_sql.sql,
+        "UPDATE \"sample\".\"invoices\" SET \"paid_at\" = NULL WHERE \"id\" = $1 RETURNING \"id\""
+    );
+    assert_eq!(
         delete_sql.sql,
         "DELETE FROM \"sample\".\"invoices\" WHERE \"id\" = $1 RETURNING \"id\""
     );
@@ -196,6 +208,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("{}", insert_sql.sql);
+    println!("{}", clear_paid_sql.sql);
     println!("{}", conditional_update_sql.sql);
     println!("{}", excluded_upsert_sql.sql);
     println!("{}", invoice_report_sql.sql);

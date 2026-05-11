@@ -1,5 +1,6 @@
 /// JSON value kind accepted by a field in [`SearchRequest`](crate::SearchRequest).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum JsonKind {
     /// JSON string value.
     Text,
@@ -29,6 +30,7 @@ pub enum JsonKind {
 
 /// Operator capability flags for a field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct OpSet {
     /// Whether equality-style operators are valid.
     pub equality: bool,
@@ -64,6 +66,7 @@ impl OpSet {
 
 /// Field metadata used for validation, rendering, and JSON search exposure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Meta {
     /// API-facing field name used by JSON search.
     pub api: &'static str,

@@ -3,6 +3,7 @@ use super::*;
 /// Projection item in a `SELECT` or `RETURNING` list.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct SelectItem {
     /// Projected expression.
     pub expr: ValueExpr,
@@ -31,6 +32,7 @@ pub enum NullsPosition {
 /// One `ORDER BY` expression.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct OrderItem {
     /// Expression to order by.
     pub expr: ValueExpr,
@@ -43,6 +45,7 @@ pub struct OrderItem {
 /// One `GROUP BY` item.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum GroupByItem {
     /// Regular grouped expression.
     Expr(ValueExpr),
@@ -57,6 +60,7 @@ pub enum GroupByItem {
 /// SQL `FETCH FIRST` clause.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct FetchClause {
     /// Row count expression.
     pub count: ValueExpr,
@@ -92,6 +96,7 @@ pub enum LockWait {
 /// Row lock clause for a select statement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[must_use]
+#[non_exhaustive]
 pub struct RowLock {
     /// Lock mode.
     pub mode: LockMode,
@@ -104,6 +109,7 @@ pub struct RowLock {
 /// Field assignment used by insert, update, merge, and changesets.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Assignment {
     /// Target field metadata.
     pub field: Meta,
@@ -186,6 +192,7 @@ impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 /// Target of an `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum ConflictTarget {
     /// Conflict target by one or more columns.
     Columns {
@@ -201,6 +208,7 @@ pub enum ConflictTarget {
 /// Action performed for an `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum ConflictAction {
     /// Render `DO NOTHING`.
     DoNothing,
@@ -216,6 +224,7 @@ pub enum ConflictAction {
 /// Full `ON CONFLICT` clause.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct ConflictClause {
     /// Conflict target.
     pub target: ConflictTarget,
@@ -412,6 +421,7 @@ where
 /// Typed select statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Select {
     /// CTEs attached to this select.
     pub ctes: Vec<Cte>,
@@ -446,6 +456,7 @@ pub struct Select {
 /// Typed insert statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Insert {
     /// Target table or view.
     pub target: Source,
@@ -464,6 +475,7 @@ pub struct Insert {
 /// Typed update statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Update {
     /// CTEs attached to this update.
     pub ctes: Vec<Cte>,
@@ -482,6 +494,7 @@ pub struct Update {
 /// Typed delete statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Delete {
     /// CTEs attached to this delete.
     pub ctes: Vec<Cte>,
@@ -497,6 +510,7 @@ pub struct Delete {
 
 /// PostgreSQL `MERGE` match branch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MergeWhen {
     /// `WHEN MATCHED`.
     Matched,
@@ -509,6 +523,7 @@ pub enum MergeWhen {
 /// Action inside a PostgreSQL `MERGE` statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum MergeAction {
     /// `DO NOTHING`.
     DoNothing {
@@ -547,6 +562,7 @@ pub enum MergeAction {
 /// Typed PostgreSQL `MERGE` statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct Merge {
     /// CTEs attached to this merge.
     pub ctes: Vec<Cte>,
@@ -565,6 +581,7 @@ pub struct Merge {
 /// Server-owned raw SQL statement.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct RawStmt {
     /// Raw SQL text using rqb `?` placeholders.
     pub sql: String,
@@ -592,6 +609,7 @@ pub enum SetOperator {
 /// SQL set query with optional ordering and row limits.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct SetQuery {
     /// Left query.
     pub left: Box<Stmt>,
@@ -612,6 +630,7 @@ pub struct SetQuery {
 /// Any top-level query statement rqb can render.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub enum Stmt {
     /// Select statement.
     Select(Box<Select>),

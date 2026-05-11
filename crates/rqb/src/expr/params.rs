@@ -158,7 +158,8 @@ impl ValueExpr {
                 params: raw_params, ..
             } => params.extend(raw_params.iter().cloned()),
             Self::Subquery(stmt) => stmt.collect_params(params),
-            Self::Field { .. } | Self::Excluded(_) | Self::Keyword(_) => {}
+            Self::InvalidAggregateModifier { expr, .. } => expr.collect_params(params),
+            Self::Field { .. } | Self::Excluded(_) | Self::Null | Self::Keyword(_) => {}
         }
     }
 }

@@ -145,10 +145,7 @@ impl SearchOperator {
                 validate_search_capability(field_name, meta, self.as_name(), true)?;
                 let values = json_array(field_name, value, "two-element array")?;
                 let [low, high] = values.as_slice() else {
-                    return Err(Error::InvalidSearchValue {
-                        field: field_name.to_owned(),
-                        expected: "two-element array",
-                    });
+                    return Err(Error::invalid_search_value(field_name, "two-element array"));
                 };
                 Ok(BoolExpr::Between {
                     expr: field,
@@ -164,10 +161,9 @@ impl SearchOperator {
             | Self::EndsWith
             | Self::NotEndsWith => {
                 validate_search_like(field_name, meta, self.as_name())?;
-                let value = value.as_str().ok_or_else(|| Error::InvalidSearchValue {
-                    field: field_name.to_owned(),
-                    expected: "string",
-                })?;
+                let value = value
+                    .as_str()
+                    .ok_or_else(|| Error::invalid_search_value(field_name, "string"))?;
                 let (prefix, suffix) = match self {
                     Self::Contains | Self::NotContains => ("%", "%"),
                     Self::StartsWith | Self::NotStartsWith => ("", "%"),
@@ -192,10 +188,7 @@ impl SearchOperator {
                 let pattern = value
                     .as_str()
                     .map(|value| ValueExpr::Param(Param::typed(value.to_owned())))
-                    .ok_or_else(|| Error::InvalidSearchValue {
-                        field: field_name.to_owned(),
-                        expected: "string",
-                    })?;
+                    .ok_or_else(|| Error::invalid_search_value(field_name, "string"))?;
                 Ok(BoolExpr::Like {
                     expr: field,
                     pattern,
@@ -209,10 +202,7 @@ impl SearchOperator {
                 let pattern = value
                     .as_str()
                     .map(|value| ValueExpr::Param(Param::typed(value.to_owned())))
-                    .ok_or_else(|| Error::InvalidSearchValue {
-                        field: field_name.to_owned(),
-                        expected: "string",
-                    })?;
+                    .ok_or_else(|| Error::invalid_search_value(field_name, "string"))?;
                 Ok(BoolExpr::Regex {
                     expr: field,
                     pattern,
@@ -301,13 +291,17 @@ impl From<SortDirection> for OrderDirection {
 }
 
 impl Select {
-    /// Merges a JSON search request into this select.
-    pub fn request(self, request: SearchRequest) -> Result<Self> {
+    /// Applies a JSON search request.
+    ///
+    /// The request filter is AND-composed with existing server filters. Sort,
+    /// limit, and offset are request-controlled clauses, so request values
+    /// replace any existing builder values for those clauses.
+    pub fn apply_search(self, request: SearchRequest) -> Result<Self> {
         request.merge_in(self)
     }
 
-    /// Applies a JSON search request to this select, replacing existing request-controlled clauses.
-    pub fn replace_request(self, request: SearchRequest) -> Result<Self> {
+    /// Applies a JSON search request, replacing filter, sort, limit, and offset.
+    pub fn replace_search(self, request: SearchRequest) -> Result<Self> {
         request.replace_in(self)
     }
 }
@@ -346,18 +340,12 @@ fn validate_search_capability(
     if supported {
         return Ok(());
     }
-    Err(Error::InvalidSearchOperator {
-        field: field.to_owned(),
-        operator: operator.to_owned(),
-    })
+    Err(Error::invalid_search_operator(field, operator))
 }
 
 fn validate_search_like(field: &str, meta: Meta, operator: &'static str) -> Result<()> {
     if matches!(meta.pg, "text" | "varchar" | "bpchar" | "citext") {
         return Ok(());
     }
-    Err(Error::InvalidSearchOperator {
-        field: field.to_owned(),
-        operator: operator.to_owned(),
-    })
+    Err(Error::invalid_search_operator(field, operator))
 }

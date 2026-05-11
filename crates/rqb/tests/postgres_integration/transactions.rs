@@ -69,7 +69,7 @@ async fn tx_macro_rolls_back_when_db_error_escapes() {
     .await
     .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::UniqueViolation { .. }));
+    assert!(matches!(err, rqb::Error::UniqueViolation(_)));
 
     let found = rqb::select(products::table())
         .column(products::ID)

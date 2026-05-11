@@ -57,8 +57,12 @@ aggregate_fn!(/// Builds `count(DISTINCT expr)`.
     count_distinct => distinct "count");
 aggregate_fn!(/// Builds `sum(expr)`.
     sum => "sum");
+aggregate_fn!(/// Builds `sum(DISTINCT expr)`.
+    sum_distinct => distinct "sum");
 aggregate_fn!(/// Builds `avg(expr)`.
     avg => "avg");
+aggregate_fn!(/// Builds `avg(DISTINCT expr)`.
+    avg_distinct => distinct "avg");
 aggregate_fn!(/// Builds `min(expr)`.
     min => "min");
 aggregate_fn!(/// Builds `max(expr)`.

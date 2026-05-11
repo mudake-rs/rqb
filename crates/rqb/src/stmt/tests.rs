@@ -380,6 +380,88 @@ fn update_requires_assignments() {
 }
 
 #[test]
+fn update_or_filter_and_replace_filter_compose_where_predicates() {
+    let built = update(users())
+        .set(ID.set(1))
+        .filter(ID.gt(10))
+        .or_filter(ID.lt(3))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "UPDATE \"app_users\" SET \"id\" = $1 WHERE (\"id\" > $2 OR \"id\" < $3)"
+    );
+
+    let built = update(users())
+        .set(ID.set(1))
+        .filter(ID.gt(10))
+        .replace_filter(ID.eq(7))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "UPDATE \"app_users\" SET \"id\" = $1 WHERE \"id\" = $2"
+    );
+}
+
+#[test]
+fn update_or_filter_conditionals_skip_or_apply_predicates() {
+    let built = update(users())
+        .set(ID.set(1))
+        .filter(ID.gt(10))
+        .or_filter_if(false, ID.lt(3))
+        .or_filter_option(Some(7), |id| ID.eq(id))
+        .or_filter_option(None::<i32>, |id| ID.eq(id))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "UPDATE \"app_users\" SET \"id\" = $1 WHERE (\"id\" > $2 OR \"id\" = $3)"
+    );
+}
+
+#[test]
+fn delete_or_filter_and_replace_filter_compose_where_predicates() {
+    let built = delete_from(users())
+        .filter(ID.gt(10))
+        .or_filter(ID.lt(3))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "DELETE FROM \"app_users\" WHERE (\"id\" > $1 OR \"id\" < $2)"
+    );
+
+    let built = delete_from(users())
+        .filter(ID.gt(10))
+        .replace_filter(ID.eq(7))
+        .build()
+        .unwrap();
+
+    assert_eq!(built.sql, "DELETE FROM \"app_users\" WHERE \"id\" = $1");
+}
+
+#[test]
+fn delete_or_filter_conditionals_skip_or_apply_predicates() {
+    let built = delete_from(users())
+        .filter(ID.gt(10))
+        .or_filter_if(false, ID.lt(3))
+        .or_filter_option(Some(7), |id| ID.eq(id))
+        .or_filter_option(None::<i32>, |id| ID.eq(id))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "DELETE FROM \"app_users\" WHERE (\"id\" > $1 OR \"id\" = $2)"
+    );
+}
+
+#[test]
 fn write_targets_reject_subquery_sources() {
     let target = subquery(select(users()).column(ID), "u", ID);
 
@@ -387,10 +469,7 @@ fn write_targets_reject_subquery_sources() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidWriteTarget {
-            statement: "insert",
-            source_kind: "subquery",
-        }
+        crate::Error::InvalidWriteTarget(err) if err.statement == "insert" && err.source_kind == "subquery"
     ));
 }
 
@@ -417,8 +496,7 @@ fn update_and_delete_accept_empty_cte_lists_and_reject_duplicate_names() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidCteShape { name, message }
-            if name == "dupe" && message == "duplicate CTE name"
+        crate::Error::InvalidCteShape(err) if err.name == "dupe" && err.message == "duplicate CTE name"
     ));
 
     let first = cte("dupe", select(users()).column(ID), ID);
@@ -432,8 +510,7 @@ fn update_and_delete_accept_empty_cte_lists_and_reject_duplicate_names() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidCteShape { name, message }
-            if name == "dupe" && message == "duplicate CTE name"
+        crate::Error::InvalidCteShape(err) if err.name == "dupe" && err.message == "duplicate CTE name"
     ));
 }
 
@@ -513,8 +590,7 @@ fn duplicate_cte_names_are_rejected_before_rendering() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidCteShape { name, message }
-            if name == "dupe" && message == "duplicate CTE name"
+        crate::Error::InvalidCteShape(err) if err.name == "dupe" && err.message == "duplicate CTE name"
     ));
 }
 
@@ -671,10 +747,7 @@ fn merge_rejects_non_table_target() {
 
     assert!(matches!(
         merge.validate().unwrap_err(),
-        crate::Error::InvalidWriteTarget {
-            statement: "merge",
-            source_kind: "cte",
-        }
+        crate::Error::InvalidWriteTarget(err) if err.statement == "merge" && err.source_kind == "cte"
     ));
 }
 

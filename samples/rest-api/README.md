@@ -20,7 +20,7 @@ service code:
 - `GET /reports/orders-by-day` shows aggregate report code with `date_trunc`,
   `GROUP BY`, `sum`, and `count_all`.
 - `GET /orders/export.csv` streams Postgres rows into HTTP response chunks with
-  `BuiltQuery::fetch_stream_as` and `Body::from_stream`.
+  `fetch_stream_pool_as` and `Body::from_stream`.
 - `POST /orders/search` applies JSON `SearchRequest` only after the service has
   installed server-owned filters.
 

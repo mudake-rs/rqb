@@ -189,7 +189,7 @@ fn old_json_search_request(bencher: Bencher) {
 
     bencher.bench(|| {
         select(old_order_search())
-            .request(black_box(request.clone()))
+            .apply_search(black_box(request.clone()))
             .unwrap()
             .build()
             .unwrap()

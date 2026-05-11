@@ -12,6 +12,16 @@ pub fn range_upper(range: impl Into<ValueExpr>) -> ValueExpr {
     function("upper", [range])
 }
 
+/// Builds `range_merge(range_or_multirange)`.
+pub fn range_merge(range: impl Into<ValueExpr>) -> ValueExpr {
+    function("range_merge", [range])
+}
+
+/// Builds `multirange_merge(multirange)`.
+pub fn multirange_merge(multirange: impl Into<ValueExpr>) -> ValueExpr {
+    function("multirange_merge", [multirange])
+}
+
 /// Builds `isempty(range)`.
 pub fn isempty(range: impl Into<ValueExpr>) -> BoolExpr {
     function("isempty", [range]).is_true()

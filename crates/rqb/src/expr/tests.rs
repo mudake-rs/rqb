@@ -48,8 +48,8 @@ fn operator_validation_uses_meta_not_rust_type_traits() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "payload" && operator == "gt"
+        crate::Error::InvalidOperator(err)
+            if err.field == "payload" && err.operator == "gt"
     ));
 }
 
@@ -71,6 +71,48 @@ fn value_expr_is_separate_from_bool_expr() {
     };
 
     filter.validate().unwrap();
+}
+
+#[test]
+fn null_value_expr_validates_without_params() {
+    let expr = crate::null();
+    expr.validate().unwrap();
+
+    let mut params = Vec::new();
+    expr.collect_params(&mut params);
+
+    assert!(matches!(expr, ValueExpr::Null));
+    assert!(params.is_empty());
+}
+
+#[test]
+fn aggregate_modifiers_reject_non_aggregate_expressions() {
+    static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    const ID: Field<i32> = Field::new(&ID_META);
+    const EMAIL: Field<String> = Field::new(&EMAIL_META);
+
+    let filter_err = crate::lower(EMAIL)
+        .aggregate_filter(ID.gt(10))
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        filter_err,
+        crate::Error::InvalidAggregateModifier {
+            modifier: "aggregate_filter"
+        }
+    ));
+
+    let order_err = crate::lower(EMAIL)
+        .aggregate_order_desc(ID)
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        order_err,
+        crate::Error::InvalidAggregateModifier {
+            modifier: "aggregate_order_by"
+        }
+    ));
 }
 
 #[test]
@@ -193,8 +235,8 @@ fn meta_defaults_to_no_typed_operators() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "score" && operator == "eq"
+        crate::Error::InvalidOperator(err)
+            if err.field == "score" && err.operator == "eq"
     ));
 }
 
@@ -265,8 +307,8 @@ fn ordered_predicates_reject_equality_only_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "status" && operator == "gt"
+        crate::Error::InvalidOperator(err)
+            if err.field == "status" && err.operator == "gt"
     ));
 }
 
@@ -287,8 +329,8 @@ fn text_predicates_reject_non_text_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "id" && operator == "like"
+        crate::Error::InvalidOperator(err)
+            if err.field == "id" && err.operator == "like"
     ));
 }
 
@@ -308,8 +350,8 @@ fn jsonb_infix_predicates_reject_non_jsonb_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "id" && operator == "?"
+        crate::Error::InvalidOperator(err)
+            if err.field == "id" && err.operator == "?"
     ));
 }
 
@@ -327,8 +369,8 @@ fn array_predicates_reject_non_array_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "id" && operator == "array_empty"
+        crate::Error::InvalidOperator(err)
+            if err.field == "id" && err.operator == "array_empty"
     ));
 }
 
@@ -347,8 +389,8 @@ fn any_predicate_rejects_non_array_operands() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "id" && operator == "any"
+        crate::Error::InvalidOperator(err)
+            if err.field == "id" && err.operator == "any"
     ));
 }
 
@@ -368,8 +410,8 @@ fn range_infix_predicates_reject_plain_scalar_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "id" && operator == "&&"
+        crate::Error::InvalidOperator(err)
+            if err.field == "id" && err.operator == "&&"
     ));
 }
 
@@ -472,8 +514,8 @@ fn ordered_set_aggregate_requires_within_group_ordering() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidOperator { field, operator }
-            if field == "ordered_set_aggregate" && operator == "within_group"
+        crate::Error::InvalidOperator(err)
+            if err.field == "ordered_set_aggregate" && err.operator == "within_group"
     ));
 }
 

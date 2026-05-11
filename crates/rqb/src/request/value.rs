@@ -8,10 +8,9 @@ pub(super) fn json_array<'a>(
     value: &'a JsonValue,
     expected: &'static str,
 ) -> Result<&'a Vec<JsonValue>> {
-    value.as_array().ok_or_else(|| Error::InvalidSearchValue {
-        field: field.to_owned(),
-        expected,
-    })
+    value
+        .as_array()
+        .ok_or_else(|| Error::invalid_search_value(field, expected))
 }
 
 pub(super) fn json_param(field: &str, kind: JsonKind, value: &JsonValue) -> Result<Param> {
@@ -79,8 +78,5 @@ fn parse_naive_datetime(value: &str) -> Option<chrono::NaiveDateTime> {
 }
 
 fn invalid_value(field: &str, expected: &'static str) -> Error {
-    Error::InvalidSearchValue {
-        field: field.to_owned(),
-        expected,
-    }
+    Error::invalid_search_value(field, expected)
 }

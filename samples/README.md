@@ -66,8 +66,8 @@ focused samples stay small enough to read in one sitting.
 
 Sample comments call out the non-obvious pieces: default projections are
 metadata-driven, alias handles remove repeated `.at("alias")` calls, raw sources
-need exposed fields, REST pagination stays in application code, and `BuiltQuery`
-owns streaming SQL plus bind arguments for HTTP body streams.
+need exposed fields, REST pagination stays in application code, and pool-owned
+stream helpers keep HTTP body streams independent of the handler call frame.
 
 `samples/schema/src/lib.rs` is generated from `samples/schema.sql` by `rqb-cli`
 and imported by the runnable samples:

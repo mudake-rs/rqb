@@ -39,7 +39,7 @@ async fn unique_violation_maps_constraint_name() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::UniqueViolation { .. }));
+    assert!(matches!(err, rqb::Error::UniqueViolation(_)));
     assert_eq!(err.code(), Some("23505"));
     assert_eq!(err.constraint_name(), Some("products_sku_key"));
     assert!(!err.is_retryable());
@@ -61,7 +61,7 @@ async fn pk_violation_maps_to_unique_violation() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::UniqueViolation { .. }));
+    assert!(matches!(err, rqb::Error::UniqueViolation(_)));
     assert_eq!(err.constraint_name(), Some("products_pkey"));
 }
 
@@ -82,7 +82,7 @@ async fn foreign_key_violation_maps_constraint_name() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::ForeignKeyViolation { .. }));
+    assert!(matches!(err, rqb::Error::ForeignKeyViolation(_)));
     assert_eq!(err.code(), Some("23503"));
     assert_eq!(err.constraint_name(), Some("order_items_order_id_fkey"));
 }
@@ -102,7 +102,7 @@ async fn not_null_violation_maps_column_name() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::NotNullViolation { .. }));
+    assert!(matches!(err, rqb::Error::NotNullViolation(_)));
     assert_eq!(err.code(), Some("23502"));
     assert_eq!(err.column_name(), Some("name"));
 }
@@ -123,7 +123,7 @@ async fn check_violation_maps_constraint_name() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::CheckViolation { .. }));
+    assert!(matches!(err, rqb::Error::CheckViolation(_)));
     assert_eq!(err.code(), Some("23514"));
     assert_eq!(
         err.constraint_name(),
@@ -142,7 +142,7 @@ async fn referenced_parent_delete_reports_foreign_key_violation() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, rqb::Error::ForeignKeyViolation { .. }));
+    assert!(matches!(err, rqb::Error::ForeignKeyViolation(_)));
     assert_eq!(err.code(), Some("23503"));
     assert_eq!(
         err.constraint_name(),

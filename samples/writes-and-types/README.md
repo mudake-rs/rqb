@@ -12,6 +12,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `Changeset` maps PATCH DTOs to assignments and skips `None` fields.
 - `Field<T>::set(...)` binds values through sqlx-supported Postgres types;
   `set_many((...))` batches manual assignments without losing field metadata.
+- `Field<T>::set_null()` writes SQL `NULL` explicitly when application state
+  needs to clear a nullable column.
 - `set_if(...)` and `set_option(...)` keep conditional assignments in the
   builder chain.
 - `returning_all()` uses generated metadata for explicit `RETURNING` columns.

@@ -94,7 +94,7 @@ fn search_request_merges_filter_and_applies_sort_limit_offset() {
 
     let built = crate::select(source())
         .filter(ID.gt(10))
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -117,7 +117,7 @@ fn search_request_applies_multiple_sort_keys_in_client_order() {
     .unwrap();
 
     let built = crate::select(source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -138,7 +138,7 @@ fn search_request_qualifies_fields_when_root_source_is_aliased() {
     .unwrap();
 
     let built = crate::select(source().alias("o"))
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -167,7 +167,7 @@ fn search_request_supports_null_in_between_and_like() {
     .unwrap();
 
     let built = crate::select(source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -180,7 +180,7 @@ fn search_request_supports_null_in_between_and_like() {
 }
 
 #[test]
-fn replace_request_replaces_existing_filter() {
+fn replace_search_replaces_existing_filter() {
     let request: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "status", "operator": "equals", "value": "paid" }
     }))
@@ -188,7 +188,7 @@ fn replace_request_replaces_existing_filter() {
 
     let built = crate::select(source())
         .filter(ID.gt(10))
-        .replace_request(request)
+        .replace_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -200,7 +200,7 @@ fn replace_request_replaces_existing_filter() {
 }
 
 #[test]
-fn request_replaces_existing_sort_limit_and_offset() {
+fn apply_search_replaces_existing_sort_limit_and_offset() {
     let request: SearchRequest = serde_json::from_value(json!({
         "sort": [{ "field": "status", "dir": "asc" }],
         "limit": 5,
@@ -212,7 +212,7 @@ fn request_replaces_existing_sort_limit_and_offset() {
         .order_desc(ID)
         .limit(100)
         .offset(200)
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -231,7 +231,7 @@ fn hidden_search_field_is_rejected() {
     }))
     .unwrap();
 
-    let err = crate::select(source()).request(request).unwrap_err();
+    let err = crate::select(source()).apply_search(request).unwrap_err();
 
     assert!(matches!(
         err,
@@ -246,12 +246,11 @@ fn invalid_json_value_is_rejected_before_rendering() {
     }))
     .unwrap();
 
-    let err = crate::select(source()).request(request).unwrap_err();
+    let err = crate::select(source()).apply_search(request).unwrap_err();
 
     assert!(matches!(
         err,
-        crate::Error::InvalidSearchValue { field, expected: "boolean" }
-            if field == "active"
+        crate::Error::InvalidSearchValue(err) if err.field == "active" && err.expected == "boolean"
     ));
 }
 
@@ -302,11 +301,15 @@ fn empty_json_logical_groups_are_rejected() {
     .unwrap();
 
     assert!(matches!(
-        crate::select(source()).request(and_request).unwrap_err(),
+        crate::select(source())
+            .apply_search(and_request)
+            .unwrap_err(),
         crate::Error::EmptySearchLogical { logical: "and" }
     ));
     assert!(matches!(
-        crate::select(source()).request(or_request).unwrap_err(),
+        crate::select(source())
+            .apply_search(or_request)
+            .unwrap_err(),
         crate::Error::EmptySearchLogical { logical: "or" }
     ));
 }
@@ -321,7 +324,7 @@ fn not_filter_wraps_a_compiled_search_predicate() {
     .unwrap();
 
     let built = crate::select(source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -339,7 +342,7 @@ fn unknown_search_field_is_rejected_before_rendering() {
     }))
     .unwrap();
 
-    let err = crate::select(source()).request(request).unwrap_err();
+    let err = crate::select(source()).apply_search(request).unwrap_err();
 
     assert!(matches!(
         err,
@@ -354,7 +357,7 @@ fn sort_rejects_fields_without_ordering_capability() {
     }))
     .unwrap();
 
-    let err = crate::select(source()).request(request).unwrap_err();
+    let err = crate::select(source()).apply_search(request).unwrap_err();
 
     assert!(matches!(
         err,
@@ -375,7 +378,7 @@ fn empty_in_and_not_in_render_boolean_constants() {
     .unwrap();
 
     let built = crate::select(source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -394,14 +397,11 @@ fn between_requires_exactly_two_json_values() {
     }))
     .unwrap();
 
-    let err = crate::select(source()).request(request).unwrap_err();
+    let err = crate::select(source()).apply_search(request).unwrap_err();
 
     assert!(matches!(
         err,
-        crate::Error::InvalidSearchValue {
-            field,
-            expected: "two-element array",
-        } if field == "id"
+        crate::Error::InvalidSearchValue(err) if err.field == "id" && err.expected == "two-element array"
     ));
 }
 
@@ -427,7 +427,7 @@ fn json_value_kinds_compile_to_typed_params() {
     .unwrap();
 
     let built = crate::select(value_source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -456,7 +456,7 @@ fn additional_json_value_kinds_compile_to_typed_params() {
     .unwrap();
 
     let built = crate::select(extra_value_source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -484,29 +484,20 @@ fn invalid_json_value_kinds_are_rejected_with_field_specific_expectations() {
     .unwrap();
 
     assert!(matches!(
-        crate::select(source()).request(bad_int).unwrap_err(),
-        crate::Error::InvalidSearchValue {
-            field,
-            expected: "32-bit integer",
-        } if field == "id"
+        crate::select(source()).apply_search(bad_int).unwrap_err(),
+        crate::Error::InvalidSearchValue(err) if err.field == "id" && err.expected == "32-bit integer"
     ));
     assert!(matches!(
         crate::select(extra_value_source())
-            .request(bad_numeric)
+            .apply_search(bad_numeric)
             .unwrap_err(),
-        crate::Error::InvalidSearchValue {
-            field,
-            expected: "decimal string",
-        } if field == "amount"
+        crate::Error::InvalidSearchValue(err) if err.field == "amount" && err.expected == "decimal string"
     ));
     assert!(matches!(
         crate::select(extra_value_source())
-            .request(bad_date)
+            .apply_search(bad_date)
             .unwrap_err(),
-        crate::Error::InvalidSearchValue {
-            field,
-            expected: "date string",
-        } if field == "day"
+        crate::Error::InvalidSearchValue(err) if err.field == "day" && err.expected == "date string"
     ));
 }
 
@@ -529,7 +520,7 @@ fn negated_search_operators_render_negated_sql_forms() {
     .unwrap();
 
     let built = crate::select(source())
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();
@@ -548,14 +539,13 @@ fn malformed_uuid_json_value_is_rejected() {
     }))
     .unwrap();
 
-    let err = crate::select(value_source()).request(request).unwrap_err();
+    let err = crate::select(value_source())
+        .apply_search(request)
+        .unwrap_err();
 
     assert!(matches!(
         err,
-        crate::Error::InvalidSearchValue {
-            field,
-            expected: "UUID string",
-        } if field == "externalId"
+        crate::Error::InvalidSearchValue(err) if err.field == "externalId" && err.expected == "UUID string"
     ));
 }
 
@@ -566,13 +556,12 @@ fn timestamptz_json_value_requires_timezone() {
     }))
     .unwrap();
 
-    let err = crate::select(value_source()).request(request).unwrap_err();
+    let err = crate::select(value_source())
+        .apply_search(request)
+        .unwrap_err();
 
     assert!(matches!(
         err,
-        crate::Error::InvalidSearchValue {
-            field,
-            expected: "RFC3339 timestamp string",
-        } if field == "createdAt"
+        crate::Error::InvalidSearchValue(err) if err.field == "createdAt" && err.expected == "RFC3339 timestamp string"
     ));
 }

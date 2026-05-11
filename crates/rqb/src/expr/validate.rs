@@ -122,10 +122,10 @@ impl ValueExpr {
                     arg.validate()?;
                 }
                 if within_group.is_empty() {
-                    return Err(Error::InvalidOperator {
-                        field: "ordered_set_aggregate".to_owned(),
-                        operator: "within_group".to_owned(),
-                    });
+                    return Err(Error::invalid_operator(
+                        "ordered_set_aggregate",
+                        "within_group",
+                    ));
                 }
                 for item in within_group {
                     item.validate()?;
@@ -195,7 +195,15 @@ impl ValueExpr {
             Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
             Self::Subquery(stmt) => stmt
                 .validate_query_statement("scalar subquery must be SELECT, set, or raw statement"),
-            Self::Field { .. } | Self::Excluded(_) | Self::Param(_) | Self::Keyword(_) => Ok(()),
+            Self::InvalidAggregateModifier { expr, modifier } => {
+                expr.validate()?;
+                Err(Error::InvalidAggregateModifier { modifier })
+            }
+            Self::Field { .. }
+            | Self::Excluded(_)
+            | Self::Param(_)
+            | Self::Null
+            | Self::Keyword(_) => Ok(()),
         }
     }
 }
@@ -231,10 +239,7 @@ fn validate_compare(left: &ValueExpr, op: BoolOp) -> Result<()> {
     if supported {
         return Ok(());
     }
-    Err(Error::InvalidOperator {
-        field: meta.api.to_owned(),
-        operator: op.as_name().to_owned(),
-    })
+    Err(Error::invalid_operator(meta.api, op.as_name()))
 }
 
 fn validate_row_compare(left: &ValueExpr, right: &ValueExpr) -> Result<()> {
@@ -257,10 +262,7 @@ fn validate_equality_expr(expr: &ValueExpr, operator: &'static str) -> Result<()
     if meta.ops.equality {
         return Ok(());
     }
-    Err(Error::InvalidOperator {
-        field: meta.api.to_owned(),
-        operator: operator.to_owned(),
-    })
+    Err(Error::invalid_operator(meta.api, operator))
 }
 
 fn validate_ordered_expr(expr: &ValueExpr, operator: &'static str) -> Result<()> {
@@ -270,10 +272,7 @@ fn validate_ordered_expr(expr: &ValueExpr, operator: &'static str) -> Result<()>
     if meta.ops.ordering {
         return Ok(());
     }
-    Err(Error::InvalidOperator {
-        field: meta.api.to_owned(),
-        operator: operator.to_owned(),
-    })
+    Err(Error::invalid_operator(meta.api, operator))
 }
 
 fn validate_like_expr(expr: &ValueExpr) -> Result<()> {
@@ -283,10 +282,7 @@ fn validate_like_expr(expr: &ValueExpr) -> Result<()> {
     if matches!(meta.pg, "text" | "varchar" | "bpchar" | "citext") {
         return Ok(());
     }
-    Err(Error::InvalidOperator {
-        field: meta.api.to_owned(),
-        operator: "like".to_owned(),
-    })
+    Err(Error::invalid_operator(meta.api, "like"))
 }
 
 fn validate_infix_expr(expr: &ValueExpr, op: &'static str) -> Result<()> {
@@ -319,10 +315,7 @@ fn validate_infix_expr(expr: &ValueExpr, op: &'static str) -> Result<()> {
     if supported {
         return Ok(());
     }
-    Err(Error::InvalidOperator {
-        field: meta.api.to_owned(),
-        operator: op.to_owned(),
-    })
+    Err(Error::invalid_operator(meta.api, op))
 }
 
 fn validate_array_expr(expr: &ValueExpr, operator: &'static str) -> Result<()> {
@@ -332,8 +325,5 @@ fn validate_array_expr(expr: &ValueExpr, operator: &'static str) -> Result<()> {
     if meta.pg.ends_with("[]") {
         return Ok(());
     }
-    Err(Error::InvalidOperator {
-        field: meta.api.to_owned(),
-        operator: operator.to_owned(),
-    })
+    Err(Error::invalid_operator(meta.api, operator))
 }

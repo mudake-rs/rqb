@@ -26,8 +26,6 @@
 //! Complex expression helpers live in [`dsl`]. Core builder types and generated
 //! schema support are exported from [`prelude`].
 
-#![allow(clippy::result_large_err)]
-
 mod built;
 mod error;
 mod execute;
@@ -46,7 +44,10 @@ extern crate self as rqb;
 
 pub use built::BuiltQuery;
 pub use chrono;
-pub use error::{DbErrorInfo, DbErrorPosition, Error};
+pub use error::{
+    ColumnError, ConstraintError, CteShapeError, DatabaseFailure, DbErrorInfo, DbErrorPosition,
+    Error, OperatorError, PgFailure, SearchValueError, WriteTargetError,
+};
 pub use execute::ScalarValue;
 pub use expr::{
     __jsonb_agg_object_from_pairs, __jsonb_object_pair, BoolExpr, BoolOp, BooleanTest, CaseBuilder,
@@ -57,37 +58,37 @@ pub use expr::{
     array_fill_with_lower_bounds, array_length, array_lower, array_ndims, array_position,
     array_positions, array_prepend, array_remove, array_replace, array_reverse, array_sample,
     array_shuffle, array_sort, array_sort_desc, array_sort_with, array_to_json, array_to_string,
-    array_upper, ascii, avg, bit_and, bit_or, bit_xor, bool_and, bool_or, btrim, cardinality, case,
-    casefold, cbrt, ceil, char_length, chr, coalesce, concat, concat_op, concat_ws, count,
-    count_all, count_distinct, crc32, crc32c, cume_dist, current_database, current_date,
-    current_row, current_schema, current_timestamp, current_user, date_bin, date_trunc, decode,
-    degrees, dense_rank, div, encode, every, exists, exp, extract, factorial, false_, first_value,
-    floor, following, format, function, gamma, gcd, gen_random_uuid, greatest, grouping, groups,
-    initcap, isempty, isfinite, json, json_agg, json_agg_strict, json_array_length,
-    json_build_array, json_build_object, json_exists, json_get, json_get_text, json_object,
-    json_object_agg, json_object_agg_strict, json_object_agg_unique, json_object_agg_unique_strict,
-    json_path, json_path_text, json_query, json_scalar, json_serialize, json_typeof, json_value,
-    jsonb_agg, jsonb_agg_object, jsonb_agg_strict, jsonb_array_elements, jsonb_array_length,
-    jsonb_build_array, jsonb_build_object, jsonb_delete, jsonb_each, jsonb_insert, jsonb_object,
-    jsonb_object_agg, jsonb_object_agg_strict, jsonb_object_agg_unique,
-    jsonb_object_agg_unique_strict, jsonb_path_exists, jsonb_path_query, jsonb_pretty, jsonb_set,
-    jsonb_strip_nulls, jsonb_typeof, lag, last_value, lcm, lead, least, left, length, lgamma, ln,
-    log, lower, lower_inc, lower_inf, lpad, ltrim, make_date, make_time, make_timestamp,
-    make_timestamptz, max, md5, merge_action, min, mod_, mode, normalize, normalize_form, not,
-    not_similar_to, now, nth_value, ntile, nullif, octet_length, or, ordered_set_aggregate, param,
-    partition_by, percent_rank, percentile_cont, percentile_disc, phraseto_tsquery,
-    phraseto_tsquery_config, pi, plainto_tsquery, pow, power, preceding, radians, random,
-    random_between, range, range_agg, range_intersect_agg, range_lower, range_upper, rank,
-    raw_expr, raw_predicate, regexp_matches, regexp_replace, regexp_split_to_array, repeat,
-    replace, reverse, right, round, row, row_number, row_to_json, rows, rpad, rtrim,
-    scalar_subquery, session_user, sign, similar_to, slice, split_part, sqrt, starts_with, stddev,
-    stddev_pop, stddev_samp, string_agg, string_to_array, strpos, subscript, substring, sum,
-    text_starts_with, timezone, to_char, to_date, to_json, to_jsonb, to_number, to_timestamp,
-    to_tsquery, to_tsvector, to_tsvector_config, translate, trim, true_, trunc, ts_headline,
-    ts_match, ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding, unicode_assigned,
-    unnest, upper, upper_inc, upper_inf, uuid_extract_timestamp, uuid_extract_version, uuidv4,
-    uuidv7, uuidv7_shift, var_pop, var_samp, variance, version, websearch_to_tsquery, width_bucket,
-    window,
+    array_upper, ascii, avg, avg_distinct, bit_and, bit_or, bit_xor, bool_and, bool_or, btrim,
+    cardinality, case, casefold, cbrt, ceil, char_length, chr, coalesce, concat, concat_op,
+    concat_ws, count, count_all, count_distinct, crc32, crc32c, cume_dist, current_database,
+    current_date, current_row, current_schema, current_timestamp, current_user, date_bin,
+    date_trunc, decode, degrees, dense_rank, div, encode, every, exists, exp, extract, factorial,
+    false_, first_value, floor, following, format, function, gamma, gcd, gen_random_uuid, greatest,
+    grouping, groups, initcap, isempty, isfinite, json, json_agg, json_agg_strict,
+    json_array_length, json_build_array, json_build_object, json_exists, json_get, json_get_text,
+    json_object, json_object_agg, json_object_agg_strict, json_object_agg_unique,
+    json_object_agg_unique_strict, json_path, json_path_text, json_query, json_scalar,
+    json_serialize, json_typeof, json_value, jsonb_agg, jsonb_agg_object, jsonb_agg_strict,
+    jsonb_array_elements, jsonb_array_length, jsonb_build_array, jsonb_build_object, jsonb_delete,
+    jsonb_each, jsonb_insert, jsonb_object, jsonb_object_agg, jsonb_object_agg_strict,
+    jsonb_object_agg_unique, jsonb_object_agg_unique_strict, jsonb_path_exists, jsonb_path_query,
+    jsonb_pretty, jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag, last_value, lcm, lead, least,
+    left, length, lgamma, ln, log, lower, lower_inc, lower_inf, lpad, ltrim, make_date, make_time,
+    make_timestamp, make_timestamptz, max, md5, merge_action, min, mod_, mode, multirange_merge,
+    normalize, normalize_form, not, not_similar_to, now, nth_value, ntile, null, nullif,
+    octet_length, or, ordered_set_aggregate, param, partition_by, percent_rank, percentile_cont,
+    percentile_disc, phraseto_tsquery, phraseto_tsquery_config, pi, plainto_tsquery, pow, power,
+    preceding, radians, random, random_between, range, range_agg, range_intersect_agg, range_lower,
+    range_merge, range_upper, rank, raw_expr, raw_predicate, regexp_matches, regexp_replace,
+    regexp_split_to_array, repeat, replace, reverse, right, round, row, row_number, row_to_json,
+    rows, rpad, rtrim, scalar_subquery, session_user, sign, similar_to, slice, split_part, sqrt,
+    starts_with, stddev, stddev_pop, stddev_samp, string_agg, string_to_array, strpos, subscript,
+    substring, sum, sum_distinct, timezone, to_char, to_date, to_json, to_jsonb, to_number,
+    to_timestamp, to_tsquery, to_tsvector, to_tsvector_config, translate, trim, trim_array, true_,
+    trunc, ts_headline, ts_match, ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding,
+    unicode_assigned, unnest, upper, upper_inc, upper_inf, uuid_extract_timestamp,
+    uuid_extract_version, uuidv4, uuidv7, uuidv7_shift, var_pop, var_samp, variance, version,
+    websearch_to_tsquery, width_bucket, window,
 };
 pub use meta::{JsonKind, Meta, OpSet};
 pub use param::{BindValue, Param, Params};
@@ -98,11 +99,12 @@ pub use rqb_macros::{Changeset, Insertable, schema};
 pub use serde;
 pub use serde_json;
 pub use source::{
-    Cte, CteMaterialization, IntoFieldMetas, Join, JoinKind, Source, cte, cte_ref, function_source,
-    generate_series_source, generate_series_step_source, generate_subscripts_source,
-    json_array_elements_source, json_each_source, json_object_keys_source,
-    jsonb_array_elements_source, jsonb_each_source, jsonb_object_keys_source, raw_source,
-    regexp_split_to_table_source, subquery, table, unnest_source, values_source, view,
+    Cte, CteMaterialization, FunctionSource, IntoFieldMetas, Join, JoinKind, Source, cte, cte_ref,
+    function_source, generate_series_source, generate_series_step_source,
+    generate_subscripts_source, json_array_elements_source, json_each_source,
+    json_object_keys_source, jsonb_array_elements_source, jsonb_each_source,
+    jsonb_object_keys_source, raw_source, regexp_split_to_table_source, subquery, table,
+    unnest_source, values_source, view,
 };
 pub use sqlx;
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
@@ -190,42 +192,42 @@ pub mod dsl {
         array_cat, array_dims, array_fill, array_fill_with_lower_bounds, array_length, array_lower,
         array_ndims, array_position, array_positions, array_prepend, array_remove, array_replace,
         array_reverse, array_sample, array_shuffle, array_sort, array_sort_desc, array_sort_with,
-        array_to_json, array_to_string, array_upper, ascii, avg, bit_and, bit_or, bit_xor,
-        bool_and, bool_or, btrim, cardinality, case, casefold, cbrt, ceil, char_length, chr,
-        coalesce, concat, concat_op, concat_ws, count, count_all, count_distinct, crc32, crc32c,
-        cume_dist, current_database, current_date, current_row, current_schema, current_timestamp,
-        current_user, date_bin, date_trunc, decode, degrees, dense_rank, div, encode, every,
-        exists, exp, extract, factorial, false_, first_value, floor, following, format, function,
-        gamma, gcd, gen_random_uuid, generate_series_source, generate_series_step_source,
-        generate_subscripts_source, greatest, grouping, groups, initcap, isempty, isfinite, json,
-        json_agg, json_agg_strict, json_array_elements_source, json_array_length, json_build_array,
-        json_build_object, json_each_source, json_exists, json_get, json_get_text, json_object,
-        json_object_agg, json_object_agg_strict, json_object_agg_unique,
-        json_object_agg_unique_strict, json_object_keys_source, json_path, json_path_text,
-        json_query, json_scalar, json_serialize, json_typeof, json_value, jsonb_agg,
-        jsonb_agg_object, jsonb_agg_strict, jsonb_array_elements, jsonb_array_elements_source,
-        jsonb_array_length, jsonb_build_array, jsonb_build_object, jsonb_delete, jsonb_each,
-        jsonb_each_source, jsonb_insert, jsonb_object, jsonb_object_agg, jsonb_object_agg_strict,
-        jsonb_object_agg_unique, jsonb_object_agg_unique_strict, jsonb_object_keys_source,
-        jsonb_path_exists, jsonb_path_query, jsonb_pretty, jsonb_set, jsonb_strip_nulls,
-        jsonb_typeof, lag, last_value, lcm, lead, least, left, length, lgamma, ln, log, lower,
-        lower_inc, lower_inf, lpad, ltrim, make_date, make_time, make_timestamp, make_timestamptz,
-        max, md5, merge_action, min, mod_, mode, normalize, normalize_form, not, not_similar_to,
-        now, nth_value, ntile, nullif, octet_length, or, ordered_set_aggregate, param,
-        partition_by, percent_rank, percentile_cont, percentile_disc, phraseto_tsquery,
-        phraseto_tsquery_config, pi, plainto_tsquery, pow, power, preceding, radians, random,
-        random_between, range, range_agg, range_intersect_agg, range_lower, range_upper, rank,
-        raw_expr, raw_predicate, regexp_matches, regexp_replace, regexp_split_to_array,
-        regexp_split_to_table_source, repeat, replace, reverse, right, round, row, row_number,
-        row_to_json, rows, rpad, rtrim, scalar_subquery, session_user, sign, similar_to, slice,
-        split_part, sqrt, starts_with, stddev, stddev_pop, stddev_samp, string_agg,
-        string_to_array, strpos, subscript, substring, sum, text_starts_with, timezone, to_char,
-        to_date, to_json, to_jsonb, to_number, to_timestamp, to_tsquery, to_tsvector,
-        to_tsvector_config, translate, trim, true_, trunc, ts_headline, ts_match, ts_rank,
-        ts_rank_cd, unbounded_following, unbounded_preceding, unicode_assigned, unnest,
-        unnest_source, upper, upper_inc, upper_inf, uuid_extract_timestamp, uuid_extract_version,
-        uuidv4, uuidv7, uuidv7_shift, values_source, var_pop, var_samp, variance, version,
-        websearch_to_tsquery, width_bucket, window,
+        array_to_json, array_to_string, array_upper, ascii, avg, avg_distinct, bit_and, bit_or,
+        bit_xor, bool_and, bool_or, btrim, cardinality, case, casefold, cbrt, ceil, char_length,
+        chr, coalesce, concat, concat_op, concat_ws, count, count_all, count_distinct, crc32,
+        crc32c, cume_dist, current_database, current_date, current_row, current_schema,
+        current_timestamp, current_user, date_bin, date_trunc, decode, degrees, dense_rank, div,
+        encode, every, exists, exp, extract, factorial, false_, first_value, floor, following,
+        format, function, gamma, gcd, gen_random_uuid, generate_series_source,
+        generate_series_step_source, generate_subscripts_source, greatest, grouping, groups,
+        initcap, isempty, isfinite, json, json_agg, json_agg_strict, json_array_elements_source,
+        json_array_length, json_build_array, json_build_object, json_each_source, json_exists,
+        json_get, json_get_text, json_object, json_object_agg, json_object_agg_strict,
+        json_object_agg_unique, json_object_agg_unique_strict, json_object_keys_source, json_path,
+        json_path_text, json_query, json_scalar, json_serialize, json_typeof, json_value,
+        jsonb_agg, jsonb_agg_object, jsonb_agg_strict, jsonb_array_elements,
+        jsonb_array_elements_source, jsonb_array_length, jsonb_build_array, jsonb_build_object,
+        jsonb_delete, jsonb_each, jsonb_each_source, jsonb_insert, jsonb_object, jsonb_object_agg,
+        jsonb_object_agg_strict, jsonb_object_agg_unique, jsonb_object_agg_unique_strict,
+        jsonb_object_keys_source, jsonb_path_exists, jsonb_path_query, jsonb_pretty, jsonb_set,
+        jsonb_strip_nulls, jsonb_typeof, lag, last_value, lcm, lead, least, left, length, lgamma,
+        ln, log, lower, lower_inc, lower_inf, lpad, ltrim, make_date, make_time, make_timestamp,
+        make_timestamptz, max, md5, merge_action, min, mod_, mode, multirange_merge, normalize,
+        normalize_form, not, not_similar_to, now, nth_value, ntile, null, nullif, octet_length, or,
+        ordered_set_aggregate, param, partition_by, percent_rank, percentile_cont, percentile_disc,
+        phraseto_tsquery, phraseto_tsquery_config, pi, plainto_tsquery, pow, power, preceding,
+        radians, random, random_between, range, range_agg, range_intersect_agg, range_lower,
+        range_merge, range_upper, rank, raw_expr, raw_predicate, regexp_matches, regexp_replace,
+        regexp_split_to_array, regexp_split_to_table_source, repeat, replace, reverse, right,
+        round, row, row_number, row_to_json, rows, rpad, rtrim, scalar_subquery, session_user,
+        sign, similar_to, slice, split_part, sqrt, starts_with, stddev, stddev_pop, stddev_samp,
+        string_agg, string_to_array, strpos, subscript, substring, sum, timezone, to_char, to_date,
+        to_json, to_jsonb, to_number, to_timestamp, to_tsquery, to_tsvector, to_tsvector_config,
+        translate, trim, trim_array, true_, trunc, ts_headline, ts_match, ts_rank, ts_rank_cd,
+        unbounded_following, unbounded_preceding, unicode_assigned, unnest, unnest_source, upper,
+        upper_inc, upper_inf, uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7,
+        uuidv7_shift, values_source, var_pop, var_samp, variance, version, websearch_to_tsquery,
+        width_bucket, window,
     };
 }
 
@@ -236,20 +238,22 @@ pub mod dsl {
 pub mod prelude {
     pub use crate::{
         Assignment, BindValue, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
-        ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields, ConflictTarget,
-        ConstraintConflictBuilder, Cte, CteMaterialization, DbErrorInfo, DbErrorPosition, Delete,
-        Error, FetchClause, Field, FieldRef, FrameBound, FrameExclude, GroupByItem, Insert,
-        Insertable, IntoAssignments, IntoFieldMetas, IntoFieldRef, IntoRowValues, IntoSelectItems,
-        Join, JoinKind, JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction,
-        MergeWhen, Meta, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
-        OffsetWindowFunctionBuilder, OpSet, OrderDirection, OrderItem, Param, Params, PgConnection,
-        PgExecutor, PgPool, RawStmt, Result, RowLock, ScalarValue, SearchFilter, SearchOperator,
-        SearchPredicate, SearchRequest, SearchSort, Select, SelectItem, SetOperator, SetQuery,
-        SortDirection, Source, Stmt, Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind,
-        WindowFunction, WindowFunctionBuilder, WindowSpec, cte, cte_ref, delete_from, except,
-        except_all, field, function_source, insert, intersect, intersect_all, jsonb_agg_object,
-        merge_into, raw, raw_expr, raw_predicate, raw_source, schema, select, subquery, table, tx,
-        union, union_all, update, values_source, view,
+        ColumnConflictBuilder, ColumnError, ConflictAction, ConflictClause, ConflictFields,
+        ConflictTarget, ConstraintConflictBuilder, ConstraintError, Cte, CteMaterialization,
+        CteShapeError, DatabaseFailure, DbErrorInfo, DbErrorPosition, Delete, Error, FetchClause,
+        Field, FieldRef, FrameBound, FrameExclude, FunctionSource, GroupByItem, Insert, Insertable,
+        IntoAssignments, IntoFieldMetas, IntoFieldRef, IntoRowValues, IntoSelectItems, Join,
+        JoinKind, JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen,
+        Meta, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
+        OffsetWindowFunctionBuilder, OpSet, OperatorError, OrderDirection, OrderItem, Param,
+        Params, PgConnection, PgExecutor, PgFailure, PgPool, RawStmt, Result, RowLock, ScalarValue,
+        SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, SearchValueError,
+        Select, SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr,
+        ValueOp, WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec,
+        WriteTargetError, cte, cte_ref, delete_from, except, except_all, field, function_source,
+        insert, intersect, intersect_all, jsonb_agg_object, merge_into, raw, raw_expr,
+        raw_predicate, raw_source, schema, select, subquery, table, tx, union, union_all, update,
+        values_source, view,
     };
 }
 
@@ -266,8 +270,8 @@ mod tests {
 
         assert!(matches!(
             error,
-            Error::InvalidOperator { field, operator }
-                if field == "id" && operator == "gt"
+            Error::InvalidOperator(err)
+                if err.field == "id" && err.operator == "gt"
         ));
     }
 

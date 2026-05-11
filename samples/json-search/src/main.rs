@@ -27,7 +27,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let merged = select(orders::view())
         .columns((orders::ID, orders::STATUS, orders::TOTAL_CENTS))
         .filter(orders::ORGANIZATION_ID.eq(current_org))
-        .request(merged_request)?
+        .apply_search(merged_request)?
         .build()?;
 
     assert_eq!(
@@ -40,11 +40,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "filter": { "field": "status", "operator": "equals", "value": "open" },
         "limit": 5
     }))?;
-    // `replace_request` is for endpoints where the JSON request is the complete
-    // search clause. Use `request` when server filters must be preserved.
+    // `replace_search` is for endpoints where the JSON request is the complete
+    // search clause. Use `apply_search` when server filters must be preserved.
     let replaced = select(orders::view())
         .filter(orders::ORGANIZATION_ID.eq(current_org))
-        .replace_request(replacement_request)?
+        .replace_search(replacement_request)?
         .build()?;
 
     assert_eq!(
@@ -58,7 +58,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }))?;
     // Unknown or non-json-exposed fields fail before SQL is rendered.
     assert!(matches!(
-        select(orders::view()).request(invalid_request),
+        select(orders::view()).apply_search(invalid_request),
         Err(rqb::Error::InvalidSearchField { field }) if field == "unknown"
     ));
 

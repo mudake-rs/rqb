@@ -1,5 +1,6 @@
 use crate::common::products;
 use futures_util::TryStreamExt;
+use rqb::prelude::*;
 use uuid::Uuid;
 
 #[allow(dead_code)]
@@ -10,6 +11,9 @@ struct ProductRow {
     name: String,
     price_cents: i64,
 }
+
+static N_META: Meta = Meta::col("n", "int4").ops(OpSet::ordered());
+const N: Field<i32> = Field::new(&N_META);
 
 #[tokio::test]
 #[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
@@ -58,4 +62,21 @@ async fn fetch_stream_scalar_yields_values() {
         .unwrap();
 
     assert_eq!(values, vec!["BAG-001", "CAM-001", "MIC-001"]);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+async fn fetch_stream_pool_scalar_owns_query_and_yields_many_rows() {
+    let pool = crate::common::pool().await;
+
+    let values = rqb::select(rqb::generate_series_source(1_i32, 150_i32, "g", N))
+        .fetch_stream_pool_scalar::<i32>(pool.clone())
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    assert_eq!(values.len(), 150);
+    assert_eq!(values[0], 1);
+    assert_eq!(values[149], 150);
 }

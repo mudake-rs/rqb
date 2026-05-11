@@ -227,6 +227,26 @@ fn value_expr_accepts_common_sqlx_postgres_literal_types() {
 }
 
 #[test]
+fn null_value_expr_and_set_null_render_without_parameters() {
+    let selected = select(users()).expr(crate::null()).build().unwrap();
+
+    assert_eq!(selected.sql, "SELECT NULL FROM \"public\".\"app_users\"");
+    assert_eq!(selected.params.len(), 0);
+
+    let updated = update(users())
+        .set(EMAIL.set_null())
+        .filter(ID.eq(1))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        updated.sql,
+        "UPDATE \"public\".\"app_users\" SET \"email_address\" = NULL WHERE \"id\" = $1"
+    );
+    assert_eq!(updated.params.len(), 1);
+}
+
+#[test]
 fn ergonomic_constructors_build_the_same_typed_ast() {
     let built = select(table("public.app_users", &USERS_FIELDS))
         .column(ID)
@@ -551,8 +571,8 @@ fn expression_backed_text_and_array_predicates_render() {
 
     let array_built = select(orders())
         .column(ORDER_USER_ID)
-        .filter(TAGS.contains_any_expr(array(["vip", "staff"])))
-        .filter(TAGS.contains_all_expr(crate::array_cat(TAGS, array(["paid"]))))
+        .filter(TAGS.overlaps_expr(array(["vip", "staff"])))
+        .filter(TAGS.contains_expr(crate::array_cat(TAGS, array(["paid"]))))
         .filter(TAGS.contained_by_expr(crate::array_cat(TAGS, array(["archived"]))))
         .filter(TAGS.has_expr(crate::lower("VIP")))
         .filter(TAGS.not_has_expr("blocked"))
@@ -576,7 +596,7 @@ fn variadic_select_projection_helpers_render() {
         .columns((ID, EMAIL))
         .exprs([crate::lower(EMAIL), crate::upper(EMAIL)])
         .items([crate::length(EMAIL).alias("email_length")])
-        .aggs([crate::count_all().alias("rows")])
+        .items([crate::count_all().alias("rows")])
         .build()
         .unwrap();
 
@@ -904,7 +924,7 @@ fn cte_column_aliases_must_match_exposed_fields() {
 
     assert!(matches!(
         err,
-        crate::Error::InvalidCteShape { name, .. } if name == "broken"
+        crate::Error::InvalidCteShape(err) if err.name == "broken"
     ));
 }
 
@@ -936,21 +956,21 @@ fn window_helpers_render_over_partition_and_order_specs() {
 #[test]
 fn aggregate_helpers_render_common_postgres_aggregates() {
     let built = select(users())
-        .agg(count_all().alias("total"))
-        .agg(count_distinct(EMAIL).alias("unique_emails"))
-        .agg(
+        .item(count_all().alias("total"))
+        .item(count_distinct(EMAIL).alias("unique_emails"))
+        .item(
             array_agg(EMAIL)
                 .aggregate_order_desc(ID)
                 .aggregate_filter(ID.gt(10))
                 .alias("emails"),
         )
-        .agg(
+        .item(
             json_agg(ID)
                 .aggregate_order_asc(EMAIL)
                 .aggregate_filter(ID.gt(20))
                 .alias("ids_json"),
         )
-        .agg(crate::string_agg(EMAIL, ",").alias("emails_csv"))
+        .item(crate::string_agg(EMAIL, ",").alias("emails_csv"))
         .build()
         .unwrap();
 
@@ -966,8 +986,8 @@ fn jsonb_agg_object_renders_keyed_objects_with_filter_and_order() {
     let built = select(orders())
         .item(
             crate::jsonb_agg_object![ORDER_USER_ID, TOTAL]
-                .order_desc(TOTAL)
-                .filter(TOTAL.gt(0))
+                .aggregate_order_desc(TOTAL)
+                .aggregate_filter(TOTAL.gt(0))
                 .alias("orders"),
         )
         .build()
@@ -1072,12 +1092,12 @@ fn row_array_subscript_slice_extract_and_cast_render_value_expressions() {
 fn array_and_json_predicates_render_without_raw_sql() {
     let built = select(orders())
         .filter(BoolExpr::and([
-            TAGS.contains_all(vec!["paid".to_owned(), "vip".to_owned()]),
+            TAGS.contains(vec!["paid".to_owned(), "vip".to_owned()]),
             TAGS.has("urgent".to_owned()),
             TAGS.is_not_empty(),
-            PAYLOAD.key_exists("source"),
-            PAYLOAD.keys_exist_any(vec!["card".to_owned(), "bank".to_owned()]),
-            PAYLOAD.json_contains(serde_json::json!({ "channel": "web" })),
+            PAYLOAD.has_key("source"),
+            PAYLOAD.has_any_keys(vec!["card".to_owned(), "bank".to_owned()]),
+            PAYLOAD.contains(serde_json::json!({ "channel": "web" })),
             SCORE_RANGE.range_contains(42),
         ]))
         .build()
@@ -1337,7 +1357,7 @@ fn postgres_18_function_helpers_render_without_raw_sql() {
             crate::uuidv7_shift(param("1 hour".to_owned()).cast("interval"))
                 .alias("shifted_uuid_v7"),
         )
-        .filter(crate::text_starts_with(EMAIL, "egor"))
+        .filter(crate::starts_with(EMAIL, "egor"))
         .filter(crate::unicode_assigned(EMAIL))
         .build()
         .unwrap();
@@ -1440,6 +1460,11 @@ fn json_utility_and_range_helpers_render_without_raw_sql() {
         .item(crate::row_to_json(row((ORDER_USER_ID, TOTAL))).alias("row_json"))
         .item(crate::range_lower(SCORE_RANGE).alias("lower_score"))
         .item(crate::range_upper(SCORE_RANGE).alias("upper_score"))
+        .item(crate::range_merge(SCORE_RANGE).alias("merged_score"))
+        .item(
+            crate::multirange_merge(raw_expr("'{}'::int4multirange", Vec::<Param>::new()))
+                .alias("merged_multi"),
+        )
         .filter(BoolExpr::and([
             crate::isempty(SCORE_RANGE),
             crate::lower_inc(SCORE_RANGE),
@@ -1452,7 +1477,7 @@ fn json_utility_and_range_helpers_render_without_raw_sql() {
 
     assert_eq!(
         built.sql,
-        "SELECT jsonb_pretty(\"payload\") AS \"pretty_payload\", array_to_json(\"tags\") AS \"tags_json\", row_to_json(ROW(\"user_id\", \"total_cents\")) AS \"row_json\", lower(\"score_range\") AS \"lower_score\", upper(\"score_range\") AS \"upper_score\" FROM \"public\".\"orders\" WHERE (isempty(\"score_range\") IS TRUE AND lower_inc(\"score_range\") IS TRUE AND upper_inc(\"score_range\") IS TRUE AND lower_inf(\"score_range\") IS TRUE AND upper_inf(\"score_range\") IS TRUE)"
+        "SELECT jsonb_pretty(\"payload\") AS \"pretty_payload\", array_to_json(\"tags\") AS \"tags_json\", row_to_json(ROW(\"user_id\", \"total_cents\")) AS \"row_json\", lower(\"score_range\") AS \"lower_score\", upper(\"score_range\") AS \"upper_score\", range_merge(\"score_range\") AS \"merged_score\", multirange_merge('{}'::int4multirange) AS \"merged_multi\" FROM \"public\".\"orders\" WHERE (isempty(\"score_range\") IS TRUE AND lower_inc(\"score_range\") IS TRUE AND upper_inc(\"score_range\") IS TRUE AND lower_inf(\"score_range\") IS TRUE AND upper_inf(\"score_range\") IS TRUE)"
     );
     assert_eq!(built.params.len(), 0);
 }
@@ -1465,6 +1490,7 @@ fn array_and_aggregate_fill_in_helpers_render_without_raw_sql() {
         .item(crate::array_lower(TAGS, 1_i32).alias("tag_lower"))
         .item(crate::array_upper(TAGS, 1_i32).alias("tag_upper"))
         .item(crate::array_ndims(TAGS).alias("tag_ndims"))
+        .item(crate::trim_array(TAGS, 1_i32).alias("tag_trimmed"))
         .item(crate::array_reverse(TAGS).alias("tag_reverse"))
         .item(crate::array_sample(TAGS, 2_i32).alias("tag_sample"))
         .item(crate::array_shuffle(TAGS).alias("tag_shuffle"))
@@ -1474,14 +1500,16 @@ fn array_and_aggregate_fill_in_helpers_render_without_raw_sql() {
 
     assert_eq!(
         array_built.sql,
-        "SELECT array_cat(\"tags\", ARRAY[$1, $2]) AS \"tag_cat\", array_dims(\"tags\") AS \"tag_dims\", array_lower(\"tags\", $3) AS \"tag_lower\", array_upper(\"tags\", $4) AS \"tag_upper\", array_ndims(\"tags\") AS \"tag_ndims\", array_reverse(\"tags\") AS \"tag_reverse\", array_sample(\"tags\", $5) AS \"tag_sample\", array_shuffle(\"tags\") AS \"tag_shuffle\", array_sort(\"tags\", $6, $7) AS \"tag_sort_desc\" FROM \"public\".\"orders\""
+        "SELECT array_cat(\"tags\", ARRAY[$1, $2]) AS \"tag_cat\", array_dims(\"tags\") AS \"tag_dims\", array_lower(\"tags\", $3) AS \"tag_lower\", array_upper(\"tags\", $4) AS \"tag_upper\", array_ndims(\"tags\") AS \"tag_ndims\", trim_array(\"tags\", $5) AS \"tag_trimmed\", array_reverse(\"tags\") AS \"tag_reverse\", array_sample(\"tags\", $6) AS \"tag_sample\", array_shuffle(\"tags\") AS \"tag_shuffle\", array_sort(\"tags\", $7, $8) AS \"tag_sort_desc\" FROM \"public\".\"orders\""
     );
-    assert_eq!(array_built.params.len(), 7);
+    assert_eq!(array_built.params.len(), 8);
 
     let aggregate_built = select(orders())
         .column(ORDER_USER_ID)
         .item(crate::grouping([ORDER_USER_ID]).alias("grouping_mask"))
         .item(crate::any_value(PAYLOAD).alias("any_payload"))
+        .item(crate::sum_distinct(TOTAL).alias("distinct_total"))
+        .item(crate::avg_distinct(TOTAL).alias("distinct_avg"))
         .item(crate::bit_xor(TOTAL).alias("checksum"))
         .item(crate::jsonb_agg_strict(PAYLOAD).alias("payloads"))
         .item(crate::jsonb_object_agg_unique(ORDER_USER_ID, PAYLOAD).alias("payload_by_user"))
@@ -1492,7 +1520,7 @@ fn array_and_aggregate_fill_in_helpers_render_without_raw_sql() {
 
     assert_eq!(
         aggregate_built.sql,
-        "SELECT \"user_id\", GROUPING(\"user_id\") AS \"grouping_mask\", any_value(\"payload\") AS \"any_payload\", bit_xor(\"total_cents\") AS \"checksum\", jsonb_agg_strict(\"payload\") AS \"payloads\", jsonb_object_agg_unique(\"user_id\", \"payload\") AS \"payload_by_user\", range_agg(\"score_range\") AS \"score_ranges\" FROM \"public\".\"orders\" GROUP BY ROLLUP(\"user_id\")"
+        "SELECT \"user_id\", GROUPING(\"user_id\") AS \"grouping_mask\", any_value(\"payload\") AS \"any_payload\", sum(DISTINCT \"total_cents\") AS \"distinct_total\", avg(DISTINCT \"total_cents\") AS \"distinct_avg\", bit_xor(\"total_cents\") AS \"checksum\", jsonb_agg_strict(\"payload\") AS \"payloads\", jsonb_object_agg_unique(\"user_id\", \"payload\") AS \"payload_by_user\", range_agg(\"score_range\") AS \"score_ranges\" FROM \"public\".\"orders\" GROUP BY ROLLUP(\"user_id\")"
     );
     assert_eq!(aggregate_built.params.len(), 0);
 }
@@ -1535,16 +1563,22 @@ fn set_query_fetch_with_ties_renders_after_order_by() {
 #[test]
 fn cte_hints_function_sources_and_merge_render() {
     static SERIES_META: Meta = Meta::new("value", "value", "int4").ops(OpSet::ordered());
+    static ORDINALITY_META: Meta =
+        Meta::new("ordinality", "ordinality", "int8").ops(OpSet::ordered());
     let series = function_source(
         "generate_series",
         vec![param(1_i32), param(3_i32)],
         "g",
-        vec![SERIES_META],
+        vec![SERIES_META, ORDINALITY_META],
     )
     .with_ordinality();
-    let generated = cte("generated", select(series), vec![SERIES_META])
-        .columns(["value"])
-        .materialized();
+    let generated = cte(
+        "generated",
+        select(series),
+        vec![SERIES_META, ORDINALITY_META],
+    )
+    .columns(["value", "ordinality"])
+    .materialized();
 
     let built = select(generated.source())
         .with(generated)
@@ -1554,7 +1588,7 @@ fn cte_hints_function_sources_and_merge_render() {
 
     assert_eq!(
         built.sql,
-        "WITH \"generated\" (\"value\") AS MATERIALIZED (SELECT \"g\".\"value\" FROM generate_series($1, $2) WITH ORDINALITY AS \"g\" (\"value\")) SELECT \"value\" FROM \"generated\""
+        "WITH \"generated\" (\"value\", \"ordinality\") AS MATERIALIZED (SELECT \"g\".\"value\", \"g\".\"ordinality\" FROM generate_series($1, $2) WITH ORDINALITY AS \"g\" (\"value\", \"ordinality\")) SELECT \"value\" FROM \"generated\""
     );
     assert_eq!(built.params.len(), 2);
 

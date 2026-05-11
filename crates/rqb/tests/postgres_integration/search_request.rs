@@ -29,7 +29,7 @@ async fn search_request_filter_and_sort_round_trip() {
             order_search::CHANNEL,
             order_search::TOTAL_CENTS,
         ))
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .fetch_all_as::<SearchRow>(&pool)
         .await
@@ -60,7 +60,7 @@ async fn search_request_multi_key_sort_round_trip() {
             order_search::CHANNEL,
             order_search::TOTAL_CENTS,
         ))
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .fetch_all_as::<SearchRow>(&pool)
         .await
@@ -91,7 +91,7 @@ async fn search_request_limit_offset_round_trip() {
             order_search::CHANNEL,
             order_search::TOTAL_CENTS,
         ))
-        .request(request)
+        .apply_search(request)
         .unwrap()
         .fetch_all_as::<SearchRow>(&pool)
         .await

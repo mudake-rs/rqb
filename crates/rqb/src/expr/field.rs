@@ -122,6 +122,11 @@ impl<T> Field<T> {
         }
     }
 
+    /// Creates an assignment that writes SQL `NULL`.
+    pub fn set_null(self) -> crate::Assignment {
+        self.set_expr(ValueExpr::Null)
+    }
+
     /// Creates an assignment from `EXCLUDED.field`.
     pub fn set_excluded(self) -> crate::Assignment {
         crate::Assignment {

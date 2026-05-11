@@ -6,6 +6,7 @@ use crate::Result;
 /// Rendered SQL plus its bind parameters.
 #[derive(Clone, Debug)]
 #[must_use]
+#[non_exhaustive]
 pub struct BuiltQuery {
     /// Rendered Postgres SQL using `$N` placeholders.
     pub sql: String,
@@ -62,6 +63,18 @@ mod tests {
 
             let scalars = built.fetch_stream_scalar::<i64>(&pool).unwrap();
             drop(scalars);
+
+            let owned_rows = built.clone().fetch_stream_pool(pool.clone()).unwrap();
+            drop(owned_rows);
+
+            let owned_typed_rows = built
+                .clone()
+                .fetch_stream_pool_as::<(i64,)>(pool.clone())
+                .unwrap();
+            drop(owned_typed_rows);
+
+            let owned_scalars = built.fetch_stream_pool_scalar::<i64>(pool).unwrap();
+            drop(owned_scalars);
         }
 
         let _ = assert_type_checks as fn(sqlx::PgPool, BuiltQuery);

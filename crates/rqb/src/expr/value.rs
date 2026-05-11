@@ -181,8 +181,13 @@ impl ValueExpr {
     pub fn aggregate_order_by(mut self, item: OrderItem) -> Self {
         if let Self::Aggregate { order_by, .. } = &mut self {
             order_by.push(item);
+            return self;
         }
-        self
+
+        Self::InvalidAggregateModifier {
+            expr: Box::new(self),
+            modifier: "aggregate_order_by",
+        }
     }
 
     /// Adds aggregate-local ascending order.
@@ -193,21 +198,6 @@ impl ValueExpr {
     /// Adds aggregate-local descending order.
     pub fn aggregate_order_desc(self, expr: impl Into<ValueExpr>) -> Self {
         self.aggregate_order_by(OrderItem::desc(expr))
-    }
-
-    /// Alias for [`ValueExpr::aggregate_order_by`].
-    pub fn order_by(self, item: OrderItem) -> Self {
-        self.aggregate_order_by(item)
-    }
-
-    /// Alias for [`ValueExpr::aggregate_order_asc`].
-    pub fn order_asc(self, expr: impl Into<ValueExpr>) -> Self {
-        self.aggregate_order_asc(expr)
-    }
-
-    /// Alias for [`ValueExpr::aggregate_order_desc`].
-    pub fn order_desc(self, expr: impl Into<ValueExpr>) -> Self {
-        self.aggregate_order_desc(expr)
     }
 
     /// Adds an aggregate `FILTER (WHERE ...)` predicate.
@@ -226,12 +216,13 @@ impl ValueExpr {
             }
             _ => {}
         }
-        self
-    }
-
-    /// Alias for [`ValueExpr::aggregate_filter`].
-    pub fn filter(self, filter: BoolExpr) -> Self {
-        self.aggregate_filter(filter)
+        match self {
+            Self::Aggregate { .. } | Self::OrderedSetAggregate { .. } => self,
+            expr => Self::InvalidAggregateModifier {
+                expr: Box::new(expr),
+                modifier: "aggregate_filter",
+            },
+        }
     }
 
     pub(crate) fn field_meta(&self) -> Option<&Meta> {

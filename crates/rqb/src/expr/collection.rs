@@ -6,13 +6,13 @@ use super::{BoolExpr, Field, FieldRef, ValueExpr};
 
 impl<T> Field<Vec<T>> {
     /// Builds an array overlap predicate (`&&`) from a SQL array expression.
-    pub fn contains_any_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
-        self.reference().contains_any_expr(values)
+    pub fn overlaps_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().overlaps_expr(values)
     }
 
     /// Builds an array contains-all predicate (`@>`) from a SQL array expression.
-    pub fn contains_all_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
-        self.reference().contains_all_expr(values)
+    pub fn contains_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+        self.reference().contains_expr(values)
     }
 
     /// Builds an array contained-by predicate (`<@`) from a SQL array expression.
@@ -36,13 +36,13 @@ where
     T: BindValue + PgHasArrayType,
 {
     /// Builds an array overlap predicate (`&&`).
-    pub fn contains_any(self, values: Vec<T>) -> BoolExpr {
-        self.reference().contains_any(values)
+    pub fn overlaps(self, values: Vec<T>) -> BoolExpr {
+        self.reference().overlaps(values)
     }
 
     /// Builds an array contains-all predicate (`@>`).
-    pub fn contains_all(self, values: Vec<T>) -> BoolExpr {
-        self.reference().contains_all(values)
+    pub fn contains(self, values: Vec<T>) -> BoolExpr {
+        self.reference().contains(values)
     }
 
     /// Builds an array contained-by predicate (`<@`).
@@ -83,12 +83,12 @@ where
 
 impl<T> FieldRef<Vec<T>> {
     /// Builds an array overlap predicate (`&&`) from a SQL array expression.
-    pub fn contains_any_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+    pub fn overlaps_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
         self.array_expr_infix("&&", values, false)
     }
 
     /// Builds an array contains-all predicate (`@>`) from a SQL array expression.
-    pub fn contains_all_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
+    pub fn contains_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
         self.array_expr_infix("@>", values, false)
     }
 
@@ -135,12 +135,12 @@ where
     T: BindValue + PgHasArrayType,
 {
     /// Builds an array overlap predicate (`&&`).
-    pub fn contains_any(self, values: Vec<T>) -> BoolExpr {
+    pub fn overlaps(self, values: Vec<T>) -> BoolExpr {
         self.array_infix("&&", values, false)
     }
 
     /// Builds an array contains-all predicate (`@>`).
-    pub fn contains_all(self, values: Vec<T>) -> BoolExpr {
+    pub fn contains(self, values: Vec<T>) -> BoolExpr {
         self.array_infix("@>", values, false)
     }
 
@@ -211,39 +211,29 @@ where
 }
 
 impl Field<serde_json::Value> {
-    /// Alias for [`Field::json_contains`].
-    pub fn contains(self, value: serde_json::Value) -> BoolExpr {
-        self.json_contains(value)
-    }
-
-    /// Alias for [`Field::json_contained_by`].
-    pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
-        self.json_contained_by(value)
-    }
-
-    /// Builds a JSONB key-exists predicate (`?`).
-    pub fn key_exists(self, key: impl Into<String>) -> BoolExpr {
-        self.reference().key_exists(key)
-    }
-
-    /// Builds a JSONB any-key-exists predicate (`?|`).
-    pub fn keys_exist_any(self, keys: Vec<String>) -> BoolExpr {
-        self.reference().keys_exist_any(keys)
-    }
-
-    /// Builds a JSONB all-keys-exist predicate (`?&`).
-    pub fn keys_exist_all(self, keys: Vec<String>) -> BoolExpr {
-        self.reference().keys_exist_all(keys)
-    }
-
     /// Builds a JSONB containment predicate (`@>`).
-    pub fn json_contains(self, value: serde_json::Value) -> BoolExpr {
-        self.reference().json_contains(value)
+    pub fn contains(self, value: serde_json::Value) -> BoolExpr {
+        self.reference().contains(value)
     }
 
     /// Builds a JSONB contained-by predicate (`<@`).
-    pub fn json_contained_by(self, value: serde_json::Value) -> BoolExpr {
-        self.reference().json_contained_by(value)
+    pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
+        self.reference().contained_by(value)
+    }
+
+    /// Builds a JSONB key-exists predicate (`?`).
+    pub fn has_key(self, key: impl Into<String>) -> BoolExpr {
+        self.reference().has_key(key)
+    }
+
+    /// Builds a JSONB any-key-exists predicate (`?|`).
+    pub fn has_any_keys(self, keys: Vec<String>) -> BoolExpr {
+        self.reference().has_any_keys(keys)
+    }
+
+    /// Builds a JSONB all-keys-exist predicate (`?&`).
+    pub fn has_all_keys(self, keys: Vec<String>) -> BoolExpr {
+        self.reference().has_all_keys(keys)
     }
 
     /// Builds a JSON value access expression (`->`).
@@ -272,11 +262,6 @@ where
     T: BindValue,
     sqlx::postgres::types::PgRange<T>: BindValue,
 {
-    /// Alias for [`Field::range_contains`].
-    pub fn contains(self, value: T) -> BoolExpr {
-        self.range_contains(value)
-    }
-
     /// Builds a range contains element predicate (`@>`).
     pub fn range_contains(self, value: T) -> BoolExpr {
         self.reference().range_contains(value)
@@ -328,11 +313,6 @@ where
     T: BindValue,
     sqlx::postgres::types::PgRange<T>: BindValue,
 {
-    /// Alias for [`FieldRef::range_contains`].
-    pub fn contains(self, value: T) -> BoolExpr {
-        self.range_contains(value)
-    }
-
     /// Builds a range contains element predicate (`@>`).
     pub fn range_contains(self, value: T) -> BoolExpr {
         BoolExpr::Infix {
@@ -394,39 +374,29 @@ where
 }
 
 impl FieldRef<serde_json::Value> {
-    /// Alias for [`FieldRef::json_contains`].
-    pub fn contains(self, value: serde_json::Value) -> BoolExpr {
-        self.json_contains(value)
-    }
-
-    /// Alias for [`FieldRef::json_contained_by`].
-    pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
-        self.json_contained_by(value)
-    }
-
-    /// Builds a JSONB key-exists predicate (`?`).
-    pub fn key_exists(self, key: impl Into<String>) -> BoolExpr {
-        self.json_infix("?", Param::typed(key.into()))
-    }
-
-    /// Builds a JSONB any-key-exists predicate (`?|`).
-    pub fn keys_exist_any(self, keys: Vec<String>) -> BoolExpr {
-        self.json_infix("?|", Param::typed(keys))
-    }
-
-    /// Builds a JSONB all-keys-exist predicate (`?&`).
-    pub fn keys_exist_all(self, keys: Vec<String>) -> BoolExpr {
-        self.json_infix("?&", Param::typed(keys))
-    }
-
     /// Builds a JSONB containment predicate (`@>`).
-    pub fn json_contains(self, value: serde_json::Value) -> BoolExpr {
+    pub fn contains(self, value: serde_json::Value) -> BoolExpr {
         self.json_infix("@>", Param::typed(value))
     }
 
     /// Builds a JSONB contained-by predicate (`<@`).
-    pub fn json_contained_by(self, value: serde_json::Value) -> BoolExpr {
+    pub fn contained_by(self, value: serde_json::Value) -> BoolExpr {
         self.json_infix("<@", Param::typed(value))
+    }
+
+    /// Builds a JSONB key-exists predicate (`?`).
+    pub fn has_key(self, key: impl Into<String>) -> BoolExpr {
+        self.json_infix("?", Param::typed(key.into()))
+    }
+
+    /// Builds a JSONB any-key-exists predicate (`?|`).
+    pub fn has_any_keys(self, keys: Vec<String>) -> BoolExpr {
+        self.json_infix("?|", Param::typed(keys))
+    }
+
+    /// Builds a JSONB all-keys-exist predicate (`?&`).
+    pub fn has_all_keys(self, keys: Vec<String>) -> BoolExpr {
+        self.json_infix("?&", Param::typed(keys))
     }
 
     /// Builds a JSON value access expression (`->`).

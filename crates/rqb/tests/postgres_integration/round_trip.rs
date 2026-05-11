@@ -129,6 +129,40 @@ async fn delete_with_returning_decodes() {
 
 #[tokio::test]
 #[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+async fn update_and_delete_or_filters_round_trip() {
+    let pool = common::pool().await;
+    let first_id = Uuid::new_v4();
+    let second_id = Uuid::new_v4();
+    let first_sku = common::unique_text("or-filter-a");
+    let second_sku = common::unique_text("or-filter-b");
+    common::insert_product(&pool, first_id, &first_sku, "First", 100).await;
+    common::insert_product(&pool, second_id, &second_sku, "Second", 200).await;
+
+    let updated = rqb::update(products::table())
+        .set(products::NAME.set("Updated".to_owned()))
+        .filter(products::ID.eq(first_id))
+        .or_filter(products::ID.eq(second_id))
+        .returning_all()
+        .fetch_all_as::<ProductRow>(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(updated.len(), 2);
+    assert!(updated.iter().all(|row| row.name == "Updated"));
+
+    let deleted = rqb::delete_from(products::table())
+        .filter(products::ID.eq(Uuid::nil()))
+        .replace_filter(products::ID.in_list([first_id, second_id]))
+        .returning_all()
+        .fetch_all_as::<ProductRow>(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(deleted.len(), 2);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
 async fn on_conflict_do_update_excluded_round_trip() {
     let pool = common::pool().await;
     let id = Uuid::new_v4();

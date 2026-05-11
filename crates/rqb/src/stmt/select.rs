@@ -110,16 +110,6 @@ impl Select {
         self
     }
 
-    /// Alias for `item(...)` in aggregate-heavy selects.
-    pub fn agg(self, item: SelectItem) -> Self {
-        self.item(item)
-    }
-
-    /// Adds multiple aggregate projection items.
-    pub fn aggs(self, items: impl IntoSelectItems) -> Self {
-        self.items(items)
-    }
-
     /// Adds a predicate to `WHERE`, composing with existing predicates using `AND`.
     pub fn filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::and_option(self.filter, filter));
@@ -384,16 +374,6 @@ impl Select {
         self.lock_of(LockMode::Update, relation)
     }
 
-    /// Adds `FOR NO KEY UPDATE`.
-    pub fn for_no_key_update(self) -> Self {
-        self.lock(LockMode::NoKeyUpdate)
-    }
-
-    /// Adds `FOR NO KEY UPDATE OF relation`.
-    pub fn for_no_key_update_of(self, relation: impl Into<String>) -> Self {
-        self.lock_of(LockMode::NoKeyUpdate, relation)
-    }
-
     /// Adds `FOR SHARE`.
     pub fn for_share(self) -> Self {
         self.lock(LockMode::Share)
@@ -402,22 +382,6 @@ impl Select {
     /// Adds `FOR SHARE OF relation`.
     pub fn for_share_of(self, relation: impl Into<String>) -> Self {
         self.lock_of(LockMode::Share, relation)
-    }
-
-    /// Adds `FOR KEY SHARE`.
-    pub fn for_key_share(self) -> Self {
-        self.lock(LockMode::KeyShare)
-    }
-
-    /// Adds `FOR KEY SHARE OF relation`.
-    pub fn for_key_share_of(self, relation: impl Into<String>) -> Self {
-        self.lock_of(LockMode::KeyShare, relation)
-    }
-
-    /// Adds a relation alias to the current row lock, creating `FOR UPDATE` if absent.
-    pub fn lock_relation(mut self, relation: impl Into<String>) -> Self {
-        self.lock = Some(self.lock.unwrap_or_default().of(relation));
-        self
     }
 
     /// Sets `NOWAIT` on the current row lock, creating `FOR UPDATE` if absent.

@@ -4,11 +4,18 @@ impl Delete {
     /// Creates a delete statement for a table or view source.
     pub(crate) fn from(target: impl Into<Source>) -> Self {
         Self {
+            ctes: Vec::new(),
             target: target.into(),
             using: Vec::new(),
             filter: None,
             returning: Vec::new(),
         }
+    }
+
+    /// Adds a CTE to the delete statement.
+    pub fn with(mut self, cte: Cte) -> Self {
+        self.ctes.push(cte);
+        self
     }
 
     /// Adds a `USING` source.

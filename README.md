@@ -330,6 +330,26 @@ update(schema::users::table())
     .await?;
 ```
 
+`UPDATE` and `DELETE` also accept CTEs, so write statements can stay in the
+typed builder instead of falling back to raw SQL:
+
+```rust
+let active_ids = select(schema::users::table())
+    .column(schema::users::ID)
+    .filter(schema::users::ACTIVE.eq(true))
+    .try_into_cte("active_ids")?;
+let active_ids_source = active_ids.source().alias("ids");
+let u = schema::users::alias("u");
+
+update(&u)
+    .with(active_ids)
+    .set(schema::users::STATUS.set("active"))
+    .from(active_ids_source)
+    .filter(u.id().eq_field(schema::users::ID.at("ids")))
+    .execute(&pool)
+    .await?;
+```
+
 With generated schema modules, request DTOs can derive write mappings:
 
 ```rust

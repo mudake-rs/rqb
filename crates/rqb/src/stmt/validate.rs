@@ -189,6 +189,10 @@ impl ConflictClause {
 impl Update {
     /// Validates target, assignments, optional sources, and returning list.
     pub fn validate(&self) -> Result<()> {
+        validate_cte_names(&self.ctes)?;
+        for cte in &self.ctes {
+            cte.validate()?;
+        }
         validate_table_target("update", &self.target)?;
         validate_nonempty_assignments("update", &self.assignments)?;
         for assignment in &self.assignments {
@@ -207,6 +211,10 @@ impl Update {
 impl Delete {
     /// Validates target, required filter, optional sources, and returning list.
     pub fn validate(&self) -> Result<()> {
+        validate_cte_names(&self.ctes)?;
+        for cte in &self.ctes {
+            cte.validate()?;
+        }
         validate_table_target("delete", &self.target)?;
         let Some(filter) = &self.filter else {
             return Err(Error::DeleteWithoutFilter);
@@ -273,6 +281,7 @@ fn validate_nonempty_columns(statement: &'static str, columns: &[Meta]) -> Resul
 
 impl MergeAction {
     fn validate(&self) -> Result<()> {
+        self.validate_when_matrix()?;
         match self {
             Self::DoNothing { condition, .. } | Self::Delete { condition, .. } => {
                 if let Some(condition) = condition {
@@ -294,15 +303,10 @@ impl MergeAction {
                 Ok(())
             }
             Self::Update {
-                when,
                 condition,
                 assignments,
+                ..
             } => {
-                if *when == MergeWhen::NotMatched {
-                    return Err(Error::InvalidMergeShape {
-                        message: "merge update is not valid for WHEN NOT MATCHED",
-                    });
-                }
                 if let Some(condition) = condition {
                     condition.validate()?;
                 }
@@ -313,6 +317,30 @@ impl MergeAction {
                 Ok(())
             }
         }
+    }
+
+    fn validate_when_matrix(&self) -> Result<()> {
+        let invalid_message = match self {
+            Self::DoNothing { .. } => None,
+            // Insert actions are structurally tied to WHEN NOT MATCHED by the
+            // builder and renderer, so the invalid INSERT branches cannot be
+            // represented by the current AST.
+            Self::Insert { .. } => None,
+            Self::Update {
+                when: MergeWhen::NotMatched,
+                ..
+            } => Some("merge update is not valid for WHEN NOT MATCHED"),
+            Self::Delete {
+                when: MergeWhen::NotMatched,
+                ..
+            } => Some("merge delete is not valid for WHEN NOT MATCHED"),
+            Self::Update { .. } | Self::Delete { .. } => None,
+        };
+
+        if let Some(message) = invalid_message {
+            return Err(Error::InvalidMergeShape { message });
+        }
+        Ok(())
     }
 }
 

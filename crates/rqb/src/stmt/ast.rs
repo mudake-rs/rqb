@@ -465,6 +465,8 @@ pub struct Insert {
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Update {
+    /// CTEs attached to this update.
+    pub ctes: Vec<Cte>,
     /// Target table or view.
     pub target: Source,
     /// Assignments for `SET`.
@@ -481,6 +483,8 @@ pub struct Update {
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Delete {
+    /// CTEs attached to this delete.
+    pub ctes: Vec<Cte>,
     /// Target table or view.
     pub target: Source,
     /// Optional `USING` sources.

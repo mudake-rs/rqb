@@ -153,6 +153,9 @@ impl ConflictClause {
 
 impl Update {
     fn collect_params(&self, params: &mut Vec<Param>) {
+        for cte in &self.ctes {
+            cte.collect_params(params);
+        }
         for assignment in &self.assignments {
             assignment.value.collect_params(params);
         }
@@ -168,6 +171,9 @@ impl Update {
 
 impl Delete {
     fn collect_params(&self, params: &mut Vec<Param>) {
+        for cte in &self.ctes {
+            cte.collect_params(params);
+        }
         for source in &self.using {
             source.collect_from_params(params);
         }

@@ -42,6 +42,7 @@ impl Renderer {
     }
 
     pub(super) fn render_update(&mut self, update: &crate::Update) -> Result<()> {
+        self.render_ctes(&update.ctes)?;
         self.sql.push_str("UPDATE ");
         self.render_write_target(&update.target);
         self.sql.push_str(" SET ");
@@ -56,6 +57,7 @@ impl Renderer {
     }
 
     pub(super) fn render_delete(&mut self, delete: &Delete) -> Result<()> {
+        self.render_ctes(&delete.ctes)?;
         self.sql.push_str("DELETE FROM ");
         self.render_write_target(&delete.target);
         self.render_delete_using(&delete.using)?;

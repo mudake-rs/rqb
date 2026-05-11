@@ -1158,6 +1158,58 @@ fn update_from_delete_using_and_lock_of_render_with_aliases() {
 }
 
 #[test]
+fn update_with_cte_renders_with_prefix_and_keeps_param_order() {
+    let active_ids = cte(
+        "active_ids",
+        select(users()).column(ID).filter(ACTIVE.eq(true)),
+        ID,
+    );
+    let active_source = active_ids.source().alias("a");
+
+    let built = update(users().alias("u"))
+        .with(active_ids)
+        .set(EMAIL.set("active@example.com".to_owned()))
+        .from(active_source)
+        .filter(ID.at("u").eq_field(ID.at("a")))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "WITH \"active_ids\" (\"id\") AS (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"active\" = $1) UPDATE \"public\".\"app_users\" AS \"u\" SET \"email_address\" = $2 FROM \"active_ids\" AS \"a\" WHERE \"u\".\"id\" = \"a\".\"id\""
+    );
+    assert_eq!(built.params.len(), 2);
+}
+
+#[test]
+fn delete_with_cte_renders_with_prefix_and_keeps_param_order() {
+    let small_orders = cte(
+        "small_orders",
+        select(orders())
+            .column(ORDER_USER_ID)
+            .filter(TOTAL.lt(5_000_i64)),
+        ORDER_USER_ID,
+    );
+    let small_source = small_orders.source().alias("small");
+
+    let built = delete_from(users().alias("u"))
+        .with(small_orders)
+        .using(small_source)
+        .filter(and([
+            ID.at("u").eq_field(ORDER_USER_ID.at("small")),
+            ACTIVE.at("u").eq(false),
+        ]))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "WITH \"small_orders\" (\"user_id\") AS (SELECT \"user_id\" FROM \"public\".\"orders\" WHERE \"total_cents\" < $1) DELETE FROM \"public\".\"app_users\" AS \"u\" USING \"small_orders\" AS \"small\" WHERE (\"u\".\"id\" = \"small\".\"user_id\" AND \"u\".\"active\" = $2)"
+    );
+    assert_eq!(built.params.len(), 2);
+}
+
+#[test]
 fn window_frames_and_more_window_functions_render() {
     let built = select(users())
         .item(

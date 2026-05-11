@@ -177,6 +177,7 @@ fn set_query_fetch_with_ties_requires_order_and_excludes_limit() {
 #[test]
 fn delete_requires_filter() {
     let stmt = crate::Stmt::Delete(Box::new(crate::Delete {
+        ctes: Vec::new(),
         target: users(),
         using: Vec::new(),
         filter: None,
@@ -402,6 +403,42 @@ fn cte_accepts_raw_statement_without_manual_stmt_variant() {
 }
 
 #[test]
+fn update_and_delete_accept_empty_cte_lists_and_reject_duplicate_names() {
+    update(users()).set(ID.set(1)).validate().unwrap();
+    delete_from(users()).filter(ID.eq(1)).validate().unwrap();
+
+    let first = cte("dupe", select(users()).column(ID), ID);
+    let second = cte("dupe", select(users()).column(ID), ID);
+    let err = update(users())
+        .with(first)
+        .with(second)
+        .set(ID.set(1))
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidCteShape { name, message }
+            if name == "dupe" && message == "duplicate CTE name"
+    ));
+
+    let first = cte("dupe", select(users()).column(ID), ID);
+    let second = cte("dupe", select(users()).column(ID), ID);
+    let err = delete_from(users())
+        .with(first)
+        .with(second)
+        .filter(ID.eq(1))
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidCteShape { name, message }
+            if name == "dupe" && message == "duplicate CTE name"
+    ));
+}
+
+#[test]
 fn subquery_sources_reject_write_statements_after_into_stmt_conversion() {
     let source = subquery(delete_from(users()).filter(ID.eq(1)), "deleted", ID);
 
@@ -536,6 +573,27 @@ fn merge_update_is_not_valid_for_when_not_matched() {
         err,
         crate::Error::InvalidMergeShape { message }
             if message == "merge update is not valid for WHEN NOT MATCHED"
+    ));
+}
+
+#[test]
+fn merge_delete_is_not_valid_for_when_not_matched() {
+    let mut merge = merge_into(
+        users(),
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    );
+    merge.actions.push(MergeAction::Delete {
+        when: MergeWhen::NotMatched,
+        condition: None,
+    });
+
+    let err = merge.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidMergeShape { message }
+            if message == "merge delete is not valid for WHEN NOT MATCHED"
     ));
 }
 

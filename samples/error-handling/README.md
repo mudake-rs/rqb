@@ -12,8 +12,10 @@ database flow is compile-checked but not awaited.
 - sqlx database errors normalize into structured `rqb::Error` variants.
 - API or service code can match `UniqueViolation`, `ForeignKeyViolation`,
   `NotFound`, and retryable transaction errors by meaning.
-- The sample includes a compile-checked executed flow and points to
-  `samples/rest-api/src/error.rs` for HTTP status mapping.
+- `constraint_name()` and `is_retryable()` cover common API boundary decisions
+  without parsing database message strings.
+- The sample includes a compile-checked executed flow; `samples/rest-api/src/error.rs`
+  shows the same idea inside an axum `IntoResponse` mapping.
 
 Run with:
 

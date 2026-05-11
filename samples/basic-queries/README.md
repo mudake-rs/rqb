@@ -11,6 +11,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `.filter(...)` composes typed predicates and binds Rust values as `$N`.
 - `and([...])` and `or([...])` express nested `AND` / `OR` groups.
 - `.filter_if(...)` and `.filter_option(...)` keep optional filters readable.
+- `.or_filter(...)` / `.or_filter_option(...)` are available when an optional
+  branch should be OR-ed into an existing predicate.
 - `.column(...)` narrows projection without string column names.
 - `.order_asc_nulls_last(...)`, `.limit(...)`, and `.offset(...)` stay in the
   typed builder.

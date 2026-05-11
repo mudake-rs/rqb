@@ -12,7 +12,8 @@ executable API documentation.
    shows alias handles, aggregate `FILTER`, and `jsonb_agg_object!` in one
    realistic report query.
 3. **Real service shape**: [`rest-api`](rest-api/) shows routes, DTOs,
-   services, `PgExecutor`, `tx!`, JSON search, and application pagination.
+   services, `PgExecutor`, `tx!`, cursor pagination, upserts, JSON search, and
+   streamed CSV responses.
 
 ## Reading Order
 
@@ -39,8 +40,8 @@ executable API documentation.
 - [`custom-types`](custom-types/): raw-only schema metadata for extension types
   outside the typed subset. Renders SQL and asserts it.
 - [`rest-api`](rest-api/): service-layer REST shape with pool execution,
-  closure-style transactions, and JSON search. Builds the router without
-  listening or connecting.
+  closure-style transactions, cursor pagination, aggregate reports, streaming
+  export, and JSON search. Builds the router without listening or connecting.
 - [`schema`](schema/): shared generated schema crate used by the runnable
   samples.
 
@@ -64,7 +65,8 @@ focused samples stay small enough to read in one sitting.
 
 Sample comments call out the non-obvious pieces: default projections are
 metadata-driven, alias handles remove repeated `.at("alias")` calls, raw sources
-need exposed fields, and REST pagination stays in application code.
+need exposed fields, REST pagination stays in application code, and `BuiltQuery`
+owns streaming SQL plus bind arguments for HTTP body streams.
 
 `samples/schema/src/lib.rs` is generated from `samples/schema.sql` by `rqb-cli`
 and imported by the runnable samples:

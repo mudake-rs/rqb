@@ -9,11 +9,17 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 
 - `Insertable` maps DTO fields to generated schema fields without a serde JSON
   bridge.
+- `Changeset` maps PATCH DTOs to assignments and skips `None` fields.
 - `Field<T>::set(...)` binds values through sqlx-supported Postgres types;
   `set_many((...))` batches manual assignments without losing field metadata.
+- `set_if(...)` and `set_option(...)` are available when assignments depend on
+  application state.
 - `returning_all()` uses generated metadata for explicit `RETURNING` columns.
-- `on_conflict(...).do_update_set(...)` keeps conflict target and update
-  assignments structured.
+- `on_conflict(...).do_update_set(...)` and
+  `do_update_excluded((...))` keep conflict target and update assignments
+  structured.
+- `insert(...).from_select(...)` validates target column count against the
+  server-owned select projection.
 - Numeric, temporal, JSONB, bytea, array, network, and range types stay on the
   sqlx encode path.
 

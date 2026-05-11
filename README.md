@@ -96,6 +96,11 @@ against `&PgPool`, `&mut PgConnection`, or a transaction connection.
 Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
 with `?` placeholders. `??` renders a literal question mark.
 
+Streaming is exposed on `BuiltQuery`: build once, keep the built query alive,
+then call `fetch_stream_as::<T>()` or `fetch_stream_scalar::<T>()`. This keeps
+the non-stream builders simple and makes ownership explicit for HTTP response
+streams.
+
 ## Server-Owned SQL Shape
 
 Rust code owns joins, CTEs, subqueries, set queries, aggregates, windows, locks,
@@ -131,8 +136,9 @@ let rows = select(&u)
 Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
 `FILTER`, window functions, array/jsonb/range predicates, conditional
-`filter_option(...)` / `set_option(...)` helpers, `set_many((...))`,
-row-value comparisons for cursor pagination, `insert(...).from_select(...)`,
+`filter_if(...)` / `filter_option(...)` / `or_filter_option(...)` /
+`set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
+comparisons for cursor pagination, `insert(...).from_select(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. REST-style pagination stays
 in application code; the REST sample shows `limit` / `offset` plus
@@ -307,6 +313,19 @@ let changed = update(schema::users::table())
     .await?;
 ```
 
+Conditional write helpers keep service code linear when a field depends on
+application state:
+
+```rust
+update(schema::users::table())
+    .set_option(new_email, |email| schema::users::EMAIL.set(email))
+    .set_option(new_status, |status| schema::users::STATUS.set(status))
+    .filter(schema::users::ID.eq(user_id))
+    .filter_option(current_status, |status| schema::users::STATUS.eq(status))
+    .execute(&pool)
+    .await?;
+```
+
 With generated schema modules, request DTOs can derive write mappings:
 
 ```rust
@@ -332,6 +351,24 @@ path.
 `#[derive(rqb::Changeset)]` maps `Option<T>` fields as patch fields: `Some`
 sets the column, `None` leaves it unchanged.
 
+Upserts can update several columns from `EXCLUDED` without repeating
+`set_excluded()` per field:
+
+```rust
+insert(schema::products::table())
+    .values(&product)
+    .on_conflict(schema::products::SKU)
+    .do_update_excluded((
+        schema::products::NAME,
+        schema::products::PRICE_CENTS,
+        schema::products::ATTRIBUTES,
+        schema::products::TAGS,
+    ))
+    .returning_all()
+    .fetch_one_as::<ProductRow>(&pool)
+    .await?;
+```
+
 `DELETE` without a filter is rejected during validation.
 
 ## Transactions
@@ -353,6 +390,10 @@ tx!(&pool, |conn| {
 })
 .await?;
 ```
+
+Use explicit `pool.begin().await?` / `commit().await?` when you need sqlx
+features that do not fit closure scope, such as savepoints, custom isolation
+setup, or transaction ownership that crosses helper boundaries.
 
 ## CLI
 

@@ -26,6 +26,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 divan = "0.1.21"
+sqlx = { workspace = true, features = ["derive"] }
+tokio.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [[bench]]

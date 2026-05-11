@@ -42,7 +42,7 @@ CREATE TABLE products (
     id UUID PRIMARY KEY,
     sku TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    price_cents BIGINT NOT NULL CHECK (price_cents >= 0),
+    price_cents BIGINT NOT NULL CONSTRAINT products_price_cents_non_negative CHECK (price_cents >= 0),
     attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
     tags TEXT[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -63,8 +63,8 @@ CREATE TABLE order_items (
     id UUID PRIMARY KEY,
     order_id UUID NOT NULL REFERENCES orders(id),
     product_id UUID NOT NULL REFERENCES products(id),
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    unit_price_cents BIGINT NOT NULL CHECK (unit_price_cents >= 0),
+    quantity INTEGER NOT NULL CONSTRAINT order_items_quantity_positive CHECK (quantity > 0),
+    unit_price_cents BIGINT NOT NULL CONSTRAINT order_items_unit_price_cents_non_negative CHECK (unit_price_cents >= 0),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 

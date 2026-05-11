@@ -1,18 +1,25 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_USER: rqb
       POSTGRES_PASSWORD: rqb
       POSTGRES_DB: rqb
+      PGDATA: /var/lib/postgresql/data/pgdata
     tmpfs:
-      - /var/lib/postgresql/data
-    command: >
-      postgres
-      -c fsync=off
-      -c synchronous_commit=off
-      -c full_page_writes=off
-      -c max_wal_size=256MB
+      - /var/lib/postgresql/data:size=512m
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=20
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rqb -d rqb"]
       interval: 1s
@@ -42,6 +49,7 @@ services:
         . /usr/local/cargo/env;
         until (echo > /dev/tcp/postgres/5432) >/dev/null 2>&1; do sleep 0.5; done;
         cargo test --workspace --all-features &&
+        cargo test -p rqb --test postgres_integration --all-features -- --ignored --test-threads=1 &&
         cargo check --workspace --no-default-features
       '
 

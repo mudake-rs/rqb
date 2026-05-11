@@ -10,6 +10,7 @@ pub(crate) struct Relation {
 pub(crate) enum RelationKind {
     Table,
     View,
+    MaterializedView,
 }
 
 #[derive(Debug, Clone)]
@@ -17,6 +18,16 @@ pub(crate) struct Column {
     pub(crate) name: String,
     pub(crate) const_name: String,
     pub(crate) ty: ColumnType,
+    pub(crate) nullable: bool,
+    pub(crate) generated: GeneratedKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GeneratedKind {
+    None,
+    Stored,
+    IdentityAlways,
+    IdentityByDefault,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

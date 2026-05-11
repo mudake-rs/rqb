@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Schema introspection and code generation for rqb."
+readme = "README.md"
 keywords = ["postgres", "query-builder", "codegen", "database", "cli"]
 categories = ["database", "command-line-utilities", "development-tools"]
-publish = false
 
 [[bin]]
 name = "rqb"

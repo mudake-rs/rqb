@@ -457,8 +457,11 @@ setup, or transaction ownership that crosses helper boundaries.
 `rqb-cli` introspects Postgres and writes a compact `rqb::schema!` module. The
 macro expands to `Meta`, `Field<T>`, `FIELDS`, and `table()` / `view()` items.
 
+Install the CLI with `cargo install rqb-cli`; the installed binary is `rqb`.
+Inside this workspace, run the same binary through `cargo run -p rqb-cli --`.
+
 ```bash
-cargo run -p rqb-cli -- generate \
+rqb generate \
   --database-url "$DATABASE_URL" \
   --schema public \
   --out src/schema.rs
@@ -477,11 +480,15 @@ let distance = embedding.op("<->", rqb::dsl::param("[0.1,0.2,0.3]".to_owned()).c
 Generated field names match database column names. HTTP JSON casing belongs in
 application DTOs, not in generated schema metadata.
 
+The CLI also annotates nullable, generated, identity, and materialized-view
+metadata in comments. It does not generate row structs; use `Option<T>` in
+`sqlx::FromRow` structs for nullable columns.
+
 ## Crates
 
 - `rqb`: typed AST, renderer, params, execution helpers, and public API.
 - `rqb-macros`: procedural macros re-exported by `rqb`.
-- `rqb-cli`: schema introspection and code generation, not published.
+- `rqb-cli`: schema introspection and code generation.
 
 ## Checks
 

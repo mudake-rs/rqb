@@ -5,7 +5,7 @@ use heck::ToShoutySnakeCase;
 use sqlx::{PgPool, Row};
 
 use crate::ident::{sanitize_ident, unique_ident_strings};
-use crate::model::{Column, Relation, RelationKind};
+use crate::model::{Column, GeneratedKind, Relation, RelationKind};
 use crate::type_map::map_column_type;
 
 pub(crate) async fn introspect(
@@ -15,11 +15,13 @@ pub(crate) async fn introspect(
 ) -> Result<Vec<Relation>> {
     let rows = sqlx::query(
         r#"
-        SELECT table_name, table_type
-        FROM information_schema.tables
-        WHERE table_schema = $1
-          AND table_type IN ('BASE TABLE', 'VIEW')
-        ORDER BY table_name
+        SELECT c.relname AS relation_name,
+               c.relkind::text AS relation_kind
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1
+          AND c.relkind IN ('r', 'p', 'v', 'm')
+        ORDER BY c.relname
         "#,
     )
     .bind(schema)
@@ -29,15 +31,15 @@ pub(crate) async fn introspect(
     let only = only_tables.iter().cloned().collect::<BTreeSet<_>>();
     let mut relations = BTreeMap::<String, Relation>::new();
     for row in rows {
-        let name: String = row.try_get("table_name")?;
+        let name: String = row.try_get("relation_name")?;
         if !only.is_empty() && !only.contains(&name) {
             continue;
         }
-        let table_type: String = row.try_get("table_type")?;
-        let kind = if table_type == "VIEW" {
-            RelationKind::View
-        } else {
-            RelationKind::Table
+        let relation_kind: String = row.try_get("relation_kind")?;
+        let kind = match relation_kind.as_str() {
+            "v" => RelationKind::View,
+            "m" => RelationKind::MaterializedView,
+            _ => RelationKind::Table,
         };
         relations.insert(
             name.clone(),
@@ -63,13 +65,21 @@ pub(crate) async fn introspect(
 
     let column_rows = sqlx::query(
         r#"
-        SELECT table_name,
-               column_name,
-               data_type,
-               udt_name
-        FROM information_schema.columns
-        WHERE table_schema = $1
-        ORDER BY table_name, ordinal_position
+        SELECT c.relname AS table_name,
+               a.attname AS column_name,
+               t.typname AS udt_name,
+               NOT a.attnotnull AS nullable,
+               a.attgenerated::text AS generated,
+               a.attidentity::text AS identity_generation
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+        JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
+        WHERE n.nspname = $1
+          AND c.relkind IN ('r', 'p', 'v', 'm')
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+        ORDER BY c.relname, a.attnum
         "#,
     )
     .bind(schema)
@@ -82,17 +92,30 @@ pub(crate) async fn introspect(
             continue;
         };
         let name: String = row.try_get("column_name")?;
-        let data_type: String = row.try_get("data_type")?;
         let udt_name: String = row.try_get("udt_name")?;
+        let nullable: bool = row.try_get("nullable")?;
+        let generated: String = row.try_get("generated")?;
+        let identity_generation: String = row.try_get("identity_generation")?;
         relation.columns.push(Column {
             const_name: sanitize_ident(&name.to_shouty_snake_case()),
-            ty: map_column_type(&data_type, &udt_name),
+            ty: map_column_type(&udt_name),
+            nullable,
+            generated: generated_kind(&generated, &identity_generation),
             name,
         });
     }
 
     assign_unique_names(&mut relations);
     Ok(relations.into_values().collect())
+}
+
+fn generated_kind(generated: &str, identity_generation: &str) -> GeneratedKind {
+    match (generated, identity_generation) {
+        ("s", _) => GeneratedKind::Stored,
+        (_, "a") => GeneratedKind::IdentityAlways,
+        (_, "d") => GeneratedKind::IdentityByDefault,
+        _ => GeneratedKind::None,
+    }
 }
 
 fn assign_unique_names(relations: &mut BTreeMap<String, Relation>) {
@@ -115,15 +138,17 @@ fn assign_unique_names(relations: &mut BTreeMap<String, Relation>) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use crate::model::{Column, ColumnType, KnownType, Relation, RelationKind};
+    use crate::model::{Column, ColumnType, GeneratedKind, KnownType, Relation, RelationKind};
 
-    use super::assign_unique_names;
+    use super::{assign_unique_names, generated_kind};
 
     fn column(name: &str, const_name: &str) -> Column {
         Column {
             name: name.to_owned(),
             const_name: const_name.to_owned(),
             ty: ColumnType::Known(KnownType::Text),
+            nullable: false,
+            generated: GeneratedKind::None,
         }
     }
 
@@ -162,5 +187,13 @@ mod tests {
 
         let relation = relations.get("events").unwrap();
         assert_eq!(relation.columns[0].const_name, "FIELDS_1");
+    }
+
+    #[test]
+    fn generated_kind_maps_pg_catalog_markers() {
+        assert_eq!(generated_kind("s", ""), GeneratedKind::Stored);
+        assert_eq!(generated_kind("", "a"), GeneratedKind::IdentityAlways);
+        assert_eq!(generated_kind("", "d"), GeneratedKind::IdentityByDefault);
+        assert_eq!(generated_kind("", ""), GeneratedKind::None);
     }
 }

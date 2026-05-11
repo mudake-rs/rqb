@@ -11,6 +11,7 @@ use uuid::Uuid;
 rqb::schema! {
     table sample.app_users {
         id: uuid = Uuid,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         organization_id: uuid = Uuid,
         email: text = String,
         status: text = String,
@@ -20,6 +21,7 @@ rqb::schema! {
     }
     table sample.events {
         id: uuid = Uuid,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         order_id: uuid = Uuid,
         event_type: text = String,
         payload: jsonb = Value,
@@ -27,6 +29,7 @@ rqb::schema! {
     }
     table sample.invoices {
         id: uuid = Uuid,
+        // Identity: always. Do not include in INSERT assignments; use OVERRIDING SYSTEM VALUE to override.
         invoice_no: int8 = i64,
         customer_id: uuid = Uuid,
         state: invoice_state,
@@ -35,14 +38,23 @@ rqb::schema! {
         amount_history: "numeric[]" = Vec<BigDecimal>,
         due_on: date = NaiveDate,
         issued_at: timestamp = NaiveDateTime,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         paid_at: timestamptz = DateTime<Utc>,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         reminder_time: time = NaiveTime,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         cutoff_time: timetz = PgTimeTz<NaiveTime, FixedOffset>,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         grace_period: interval = PgInterval,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         service_days: daterange = PgRange<NaiveDate>,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         billing_window: tstzrange = PgRange<DateTime<Utc>>,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         client_ip: inet = String,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         client_network: cidr = String,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
         pdf: bytea = Vec<u8>,
         tags: "text[]" = Vec<String>,
         metadata: jsonb = Value,
@@ -53,9 +65,12 @@ rqb::schema! {
         product_id: uuid = Uuid,
         quantity: int4 = i32,
         unit_price_cents: int8 = i64,
+        // Nullable in Postgres metadata. Use Option<T> in row structs.
+        // Generated: stored. Do not include in INSERT assignments.
         line_total_cents: int8 = i64,
         metadata: jsonb = Value,
     }
+    // View column nullability is conservative in Postgres metadata.
     view sample.order_search_view {
         id: uuid = Uuid,
         user_id: uuid = Uuid,

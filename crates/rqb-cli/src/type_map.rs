@@ -1,9 +1,7 @@
 use crate::model::{ColumnType, KnownType};
 
-pub(crate) fn map_column_type(data_type: &str, udt_name: &str) -> ColumnType {
-    if data_type == "ARRAY"
-        && let Some(elem) = udt_name.strip_prefix('_')
-    {
+pub(crate) fn map_column_type(udt_name: &str) -> ColumnType {
+    if let Some(elem) = udt_name.strip_prefix('_') {
         return match map_known_udt(elem) {
             Some(KnownType::Array(_)) => ColumnType::RawOnly {
                 pg: udt_name.to_owned(),
@@ -64,16 +62,13 @@ mod tests {
 
     #[test]
     fn maps_common_sqlx_supported_types() {
+        assert_eq!(map_column_type("uuid"), ColumnType::Known(KnownType::Uuid));
         assert_eq!(
-            map_column_type("uuid", "uuid"),
-            ColumnType::Known(KnownType::Uuid)
-        );
-        assert_eq!(
-            map_column_type("ARRAY", "_uuid"),
+            map_column_type("_uuid"),
             ColumnType::Known(KnownType::Array(Box::new(KnownType::Uuid)))
         );
         assert_eq!(
-            map_column_type("USER-DEFINED", "vector"),
+            map_column_type("vector"),
             ColumnType::RawOnly {
                 pg: "vector".to_owned()
             }
@@ -83,27 +78,21 @@ mod tests {
     #[test]
     fn maps_temporal_network_range_and_json_types() {
         assert_eq!(
-            map_column_type("timestamp with time zone", "timestamptz"),
+            map_column_type("timestamptz"),
             ColumnType::Known(KnownType::Timestamptz)
         );
         assert_eq!(
-            map_column_type("time with time zone", "timetz"),
+            map_column_type("timetz"),
             ColumnType::Known(KnownType::Timetz)
         );
+        assert_eq!(map_column_type("inet"), ColumnType::Known(KnownType::Inet));
         assert_eq!(
-            map_column_type("USER-DEFINED", "inet"),
-            ColumnType::Known(KnownType::Inet)
-        );
-        assert_eq!(
-            map_column_type("USER-DEFINED", "tstzrange"),
+            map_column_type("tstzrange"),
             ColumnType::Known(KnownType::Range(Box::new(KnownType::Timestamptz)))
         );
+        assert_eq!(map_column_type("json"), ColumnType::Known(KnownType::Json));
         assert_eq!(
-            map_column_type("json", "json"),
-            ColumnType::Known(KnownType::Json)
-        );
-        assert_eq!(
-            map_column_type("jsonb", "jsonb"),
+            map_column_type("jsonb"),
             ColumnType::Known(KnownType::Jsonb)
         );
     }
@@ -111,7 +100,7 @@ mod tests {
     #[test]
     fn nested_arrays_fall_back_to_raw_only_pg_type() {
         assert_eq!(
-            map_column_type("ARRAY", "__int4"),
+            map_column_type("__int4"),
             ColumnType::RawOnly {
                 pg: "__int4".to_owned()
             }
@@ -121,17 +110,17 @@ mod tests {
     #[test]
     fn maps_arrays_of_temporal_range_and_network_types() {
         assert_eq!(
-            map_column_type("ARRAY", "_timestamptz"),
+            map_column_type("_timestamptz"),
             ColumnType::Known(KnownType::Array(Box::new(KnownType::Timestamptz)))
         );
         assert_eq!(
-            map_column_type("ARRAY", "_int4range"),
+            map_column_type("_int4range"),
             ColumnType::Known(KnownType::Array(Box::new(KnownType::Range(Box::new(
                 KnownType::Int4
             )))))
         );
         assert_eq!(
-            map_column_type("ARRAY", "_inet"),
+            map_column_type("_inet"),
             ColumnType::Known(KnownType::Array(Box::new(KnownType::Inet)))
         );
     }
@@ -139,7 +128,7 @@ mod tests {
     #[test]
     fn unknown_arrays_remain_raw_only() {
         assert_eq!(
-            map_column_type("ARRAY", "_vector"),
+            map_column_type("_vector"),
             ColumnType::RawOnly {
                 pg: "_vector".to_owned()
             }

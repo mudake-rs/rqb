@@ -77,7 +77,7 @@ impl Renderer {
                 self.sql.push('(');
                 self.render_value(left)?;
                 self.sql.push(' ');
-                self.sql.push_str(value_op_sql(*op));
+                self.sql.push_str(op.as_sql());
                 self.sql.push(' ');
                 self.render_value(right)?;
                 self.sql.push(')');
@@ -314,15 +314,5 @@ impl Renderer {
             FrameBound::UnboundedFollowing => self.sql.push_str("UNBOUNDED FOLLOWING"),
         }
         Ok(())
-    }
-}
-
-pub(super) fn value_op_sql(op: ValueOp) -> &'static str {
-    match op {
-        ValueOp::Add => "+",
-        ValueOp::Sub => "-",
-        ValueOp::Mul => "*",
-        ValueOp::Div => "/",
-        ValueOp::Custom(op) => op,
     }
 }

@@ -3,7 +3,7 @@ use uuid::Uuid;
 use super::escaped_like_pattern;
 use crate::{
     BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, Params,
-    ValueExpr, raw_expr, raw_predicate, row,
+    ValueExpr, ValueOp, raw_expr, raw_predicate, row,
 };
 
 #[test]
@@ -71,6 +71,15 @@ fn value_expr_is_separate_from_bool_expr() {
     };
 
     filter.validate().unwrap();
+}
+
+#[test]
+fn value_ops_expose_sql_tokens() {
+    assert_eq!(ValueOp::Add.as_sql(), "+");
+    assert_eq!(ValueOp::Sub.as_sql(), "-");
+    assert_eq!(ValueOp::Mul.as_sql(), "*");
+    assert_eq!(ValueOp::Div.as_sql(), "/");
+    assert_eq!(ValueOp::Custom("<->").as_sql(), "<->");
 }
 
 #[test]

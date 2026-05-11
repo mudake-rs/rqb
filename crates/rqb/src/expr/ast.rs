@@ -93,6 +93,19 @@ pub enum ValueOp {
     Custom(&'static str),
 }
 
+impl ValueOp {
+    /// Returns the SQL operator token.
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Custom(op) => op,
+        }
+    }
+}
+
 /// Supported SQL window function names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowFunction {

@@ -195,6 +195,7 @@ impl MergeAction {
             Self::Insert {
                 condition,
                 assignments,
+                ..
             }
             | Self::Update {
                 condition,

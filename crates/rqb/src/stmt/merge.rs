@@ -153,6 +153,7 @@ impl NotMatchedMergeBuilder {
         finish_merge_action(
             self.merge,
             MergeAction::Insert {
+                when: MergeWhen::NotMatched,
                 condition: self.condition,
                 assignments: assignments.into_assignments(),
             },

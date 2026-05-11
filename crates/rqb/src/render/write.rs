@@ -108,10 +108,11 @@ impl Renderer {
                 Ok(())
             }
             MergeAction::Insert {
+                when,
                 condition,
                 assignments,
             } => {
-                self.render_merge_when(MergeWhen::NotMatched, condition.as_deref())?;
+                self.render_merge_when(*when, condition.as_deref())?;
                 self.sql.push_str(" THEN INSERT (");
                 for (idx, assignment) in assignments.iter().enumerate() {
                     if idx > 0 {

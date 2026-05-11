@@ -598,6 +598,50 @@ fn merge_delete_is_not_valid_for_when_not_matched() {
 }
 
 #[test]
+fn merge_insert_is_not_valid_for_when_matched() {
+    let mut merge = merge_into(
+        users(),
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    );
+    merge.actions.push(MergeAction::Insert {
+        when: MergeWhen::Matched,
+        condition: None,
+        assignments: vec![ID.set(1)],
+    });
+
+    let err = merge.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidMergeShape { message }
+            if message == "merge insert is not valid for WHEN MATCHED"
+    ));
+}
+
+#[test]
+fn merge_insert_is_not_valid_for_when_not_matched_by_source() {
+    let mut merge = merge_into(
+        users(),
+        users().alias("source"),
+        ID.eq_field(ID.at("source")),
+    );
+    merge.actions.push(MergeAction::Insert {
+        when: MergeWhen::NotMatchedBySource,
+        condition: None,
+        assignments: vec![ID.set(1)],
+    });
+
+    let err = merge.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidMergeShape { message }
+            if message == "merge insert is not valid for WHEN NOT MATCHED BY SOURCE"
+    ));
+}
+
+#[test]
 fn merge_insert_requires_assignments() {
     let merge = merge_into(
         users(),

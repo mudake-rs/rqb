@@ -519,6 +519,8 @@ pub enum MergeAction {
     },
     /// `INSERT`.
     Insert {
+        /// Match branch for the action.
+        when: MergeWhen,
         /// Optional branch condition.
         condition: Option<Box<BoolExpr>>,
         /// Insert assignments.

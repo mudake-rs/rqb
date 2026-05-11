@@ -292,6 +292,7 @@ impl MergeAction {
             Self::Insert {
                 condition,
                 assignments,
+                ..
             } => {
                 if let Some(condition) = condition {
                     condition.validate()?;
@@ -322,9 +323,14 @@ impl MergeAction {
     fn validate_when_matrix(&self) -> Result<()> {
         let invalid_message = match self {
             Self::DoNothing { .. } => None,
-            // Insert actions are structurally tied to WHEN NOT MATCHED by the
-            // builder and renderer, so the invalid INSERT branches cannot be
-            // represented by the current AST.
+            Self::Insert {
+                when: MergeWhen::Matched,
+                ..
+            } => Some("merge insert is not valid for WHEN MATCHED"),
+            Self::Insert {
+                when: MergeWhen::NotMatchedBySource,
+                ..
+            } => Some("merge insert is not valid for WHEN NOT MATCHED BY SOURCE"),
             Self::Insert { .. } => None,
             Self::Update {
                 when: MergeWhen::NotMatched,

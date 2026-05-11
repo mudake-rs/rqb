@@ -162,6 +162,7 @@ Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `filter_if(...)` / `filter_option(...)` / `or_filter_option(...)` /
 `set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
 comparisons for cursor pagination, `insert(...).from_select(...)`,
+`values_source(...)`, `generate_series_source(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated
 against Postgres `WHEN` clause rules before rendering. REST-style pagination stays
@@ -203,12 +204,14 @@ Common helper families in the flat catalog:
 | Boolean predicates | `and`, `or`, `not`, `exists`, `true_`, `false_` |
 | Aggregates | `count_all`, `sum`, `jsonb_agg_object`, `percentile_cont` |
 | Arrays | `array`, `array_length`, `array_position`, `unnest` |
-| Date and time | `now`, `date_trunc`, `extract`, `make_timestamptz` |
-| Full-text search | `to_tsvector`, `plainto_tsquery`, `ts_rank` |
-| JSON/JSONB | `jsonb_build_object`, `json_get_text`, `jsonb_set` |
-| Math | `round`, `sqrt`, `pow`, `random_between` |
-| Scalar expressions | `case`, `coalesce`, `greatest`, `scalar_subquery` |
-| Text | `lower`, `substring`, `regexp_replace`, `trim` |
+| Date and time | `now`, `date_trunc`, `date_bin`, `to_char`, `isfinite` |
+| Full-text search | `to_tsvector`, `phraseto_tsquery`, `ts_rank`, `ts_headline` |
+| JSON/JSONB | `json_build_object`, `jsonb_build_object`, `jsonb_pretty`, `array_to_json` |
+| Math | `round`, `sqrt`, `pow`, `random_between`, `width_bucket` |
+| Range | `range_lower`, `range_upper`, `isempty`, `lower_inc` |
+| Scalar expressions | `case`, `coalesce`, `greatest`, `current_user`, `scalar_subquery` |
+| Set-returning sources | `generate_series_source`, `generate_subscripts_source`, `regexp_split_to_table_source`, `values_source` |
+| Text | `lower`, `format`, `translate`, `repeat`, `octet_length`, `encode` |
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
 | Window functions | `window`, `row_number`, `rank`, `lag`, `preceding`, `unbounded_preceding` |
 
@@ -265,27 +268,19 @@ bind-count mismatches and numbered together with the surrounding typed query:
 ```rust
 use rqb::prelude::*;
 
-let month = raw_expr(
-    "to_char(created_at, ?)",
-    [Param::typed("YYYY-MM".to_owned())],
+let extension_score = raw_expr(
+    "custom_extension_score(payload, ?::text)",
+    [Param::typed("strict".to_owned())],
 )
-.alias("month");
+.alias("extension_score");
 
-let score_bucket = raw_expr(
-    "width_bucket(score, 0, 100, ?)",
-    [Param::typed(10_i32)],
-)
-.alias("score_bucket");
-
-let days = raw_source(
-    "generate_series(?::date, ?::date, ?::interval)",
-    "days",
+let extension_rows = raw_source(
+    "SELECT * FROM custom_extension_scan(?::text)",
+    "ext",
     vec![
-        Param::typed(start_date),
-        Param::typed(end_date),
-        Param::typed("1 day".to_owned()),
+        Param::typed("tenant-42".to_owned()),
     ],
-    rqb::field!("day": date => chrono::NaiveDate, ordered),
+    rqb::field!("id": uuid => uuid::Uuid, equality),
 );
 ```
 

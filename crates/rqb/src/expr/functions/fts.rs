@@ -29,6 +29,28 @@ pub fn plainto_tsquery(query: impl Into<ValueExpr>) -> ValueExpr {
     function("plainto_tsquery", [query])
 }
 
+/// Builds `phraseto_tsquery(query)`.
+pub fn phraseto_tsquery(query: impl Into<ValueExpr>) -> ValueExpr {
+    function("phraseto_tsquery", [query])
+}
+
+/// Builds `phraseto_tsquery(config::regconfig, query)`.
+pub fn phraseto_tsquery_config(
+    config: impl Into<ValueExpr>,
+    query: impl Into<ValueExpr>,
+) -> ValueExpr {
+    function(
+        "phraseto_tsquery",
+        [
+            ValueExpr::Cast {
+                expr: Box::new(config.into()),
+                pg: "regconfig",
+            },
+            query.into(),
+        ],
+    )
+}
+
 /// Builds `websearch_to_tsquery(query)`.
 pub fn websearch_to_tsquery(query: impl Into<ValueExpr>) -> ValueExpr {
     function("websearch_to_tsquery", [query])
@@ -57,4 +79,9 @@ pub fn ts_rank(vector: impl Into<ValueExpr>, query: impl Into<ValueExpr>) -> Val
 /// Builds `ts_rank_cd(vector, query)`.
 pub fn ts_rank_cd(vector: impl Into<ValueExpr>, query: impl Into<ValueExpr>) -> ValueExpr {
     function("ts_rank_cd", [vector.into(), query.into()])
+}
+
+/// Builds `ts_headline(...)`.
+pub fn ts_headline(args: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
+    function("ts_headline", args)
 }

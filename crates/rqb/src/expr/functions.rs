@@ -10,6 +10,7 @@ mod fts;
 mod json;
 mod math;
 mod merge;
+mod range;
 mod scalar;
 mod text;
 mod uuid;
@@ -32,29 +33,37 @@ pub use array_fn::{
 };
 pub use binary::{crc32, crc32c};
 pub use date::{
-    age, current_date, current_timestamp, date_trunc, extract, make_date, make_time,
-    make_timestamp, make_timestamptz, now, timezone,
+    age, current_date, current_timestamp, date_bin, date_trunc, extract, isfinite, make_date,
+    make_time, make_timestamp, make_timestamptz, now, timezone, to_char, to_date, to_number,
+    to_timestamp,
 };
 pub use fts::{
-    plainto_tsquery, to_tsquery, to_tsvector, to_tsvector_config, ts_match, ts_rank, ts_rank_cd,
-    websearch_to_tsquery,
+    phraseto_tsquery, phraseto_tsquery_config, plainto_tsquery, to_tsquery, to_tsvector,
+    to_tsvector_config, ts_headline, ts_match, ts_rank, ts_rank_cd, websearch_to_tsquery,
 };
 pub use json::{
-    json, json_exists, json_get, json_get_text, json_path, json_path_text, json_query, json_scalar,
-    json_serialize, json_value, jsonb_array_elements, jsonb_build_array, jsonb_build_object,
-    jsonb_delete, jsonb_each, jsonb_insert, jsonb_object, jsonb_path_exists, jsonb_path_query,
-    jsonb_set, jsonb_strip_nulls, jsonb_typeof, to_json, to_jsonb,
+    array_to_json, json, json_array_length, json_build_array, json_build_object, json_exists,
+    json_get, json_get_text, json_object, json_path, json_path_text, json_query, json_scalar,
+    json_serialize, json_typeof, json_value, jsonb_array_elements, jsonb_array_length,
+    jsonb_build_array, jsonb_build_object, jsonb_delete, jsonb_each, jsonb_insert, jsonb_object,
+    jsonb_path_exists, jsonb_path_query, jsonb_pretty, jsonb_set, jsonb_strip_nulls, jsonb_typeof,
+    row_to_json, to_json, to_jsonb,
 };
 pub use math::{
     abs, cbrt, ceil, degrees, div, exp, factorial, floor, gamma, gcd, lcm, lgamma, ln, log, mod_,
-    pi, pow, power, radians, random, random_between, round, sign, sqrt, trunc,
+    pi, pow, power, radians, random, random_between, round, sign, sqrt, trunc, width_bucket,
 };
 pub use merge::merge_action;
-pub use scalar::{coalesce, greatest, least, nullif};
+pub use range::{isempty, lower_inc, lower_inf, range_lower, range_upper, upper_inc, upper_inf};
+pub use scalar::{
+    coalesce, current_database, current_schema, current_user, greatest, least, nullif,
+    session_user, version,
+};
 pub use text::{
-    btrim, casefold, char_length, concat, concat_ws, left, length, lower, lpad, ltrim, md5,
-    normalize, normalize_form, regexp_matches, regexp_replace, regexp_split_to_array, replace,
-    reverse, right, rpad, rtrim, split_part, strpos, substring, text_starts_with, trim,
+    ascii, btrim, casefold, char_length, chr, concat, concat_ws, decode, encode, format, initcap,
+    left, length, lower, lpad, ltrim, md5, normalize, normalize_form, octet_length, regexp_matches,
+    regexp_replace, regexp_split_to_array, repeat, replace, reverse, right, rpad, rtrim,
+    split_part, starts_with, strpos, substring, text_starts_with, translate, trim,
     unicode_assigned, upper,
 };
 pub use uuid::{

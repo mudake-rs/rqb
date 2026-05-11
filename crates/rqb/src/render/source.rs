@@ -114,6 +114,38 @@ impl Renderer {
                     self.sql.push(')');
                 }
             }
+            Source::Values {
+                rows,
+                alias,
+                fields,
+            } => {
+                self.sql.push_str("(VALUES ");
+                for (row_idx, row) in rows.iter().enumerate() {
+                    if row_idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    self.sql.push('(');
+                    for (value_idx, value) in row.iter().enumerate() {
+                        if value_idx > 0 {
+                            self.sql.push_str(", ");
+                        }
+                        self.render_value(value)?;
+                    }
+                    self.sql.push(')');
+                }
+                self.sql.push_str(") AS ");
+                write_quoted_ident(&mut self.sql, alias);
+                if !fields.is_empty() {
+                    self.sql.push_str(" (");
+                    for (idx, field) in fields.iter().enumerate() {
+                        if idx > 0 {
+                            self.sql.push_str(", ");
+                        }
+                        write_quoted_ident(&mut self.sql, field.db);
+                    }
+                    self.sql.push(')');
+                }
+            }
         }
         Ok(())
     }
@@ -142,7 +174,11 @@ impl Renderer {
 
     fn render_source_column_list(&mut self, source: &Source) {
         match source {
-            Source::Subquery { fields, .. } | Source::Raw { fields, .. } if !fields.is_empty() => {
+            Source::Subquery { fields, .. }
+            | Source::Raw { fields, .. }
+            | Source::Values { fields, .. }
+                if !fields.is_empty() =>
+            {
                 self.render_cte_columns(fields.iter().map(|field| field.db));
             }
             _ => {}
@@ -159,7 +195,10 @@ impl Renderer {
                 write_quoted_ident(&mut self.sql, name);
                 self.render_optional_alias(alias.as_deref());
             }
-            Source::Subquery { .. } | Source::Raw { .. } | Source::Function { .. } => {
+            Source::Subquery { .. }
+            | Source::Raw { .. }
+            | Source::Function { .. }
+            | Source::Values { .. } => {
                 unreachable!("write target validated as table")
             }
         }

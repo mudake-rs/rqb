@@ -1,4 +1,4 @@
-use rqb::dsl::{count_all, exists, scalar_subquery, true_};
+use rqb::dsl::{count_all, exists, generate_series_step_source, scalar_subquery, true_};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::order_items as items;
@@ -49,6 +49,17 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "WITH RECURSIVE \"nums\" (\"n\") AS (SELECT $1::int4 AS n UNION ALL SELECT n + 1 FROM nums WHERE n < $2) SELECT \"n\" FROM \"nums\""
     );
     assert_eq!(recursive.params.len(), 2);
+
+    // Common set-returning functions can be used as typed sources without
+    // writing a raw `FROM generate_series(...)` fragment.
+    let series = generate_series_step_source(1_i32, 3_i32, 1_i32, "g", n);
+    let generated_series = select(series).build()?;
+
+    assert_eq!(
+        generated_series.sql,
+        "SELECT \"g\".\"n\" FROM generate_series($1, $2, $3) AS \"g\" (\"n\")"
+    );
+    assert_eq!(generated_series.params.len(), 3);
 
     // Computed subquery projections need explicit metadata because there is no
     // generated table field for `count(*) AS item_count`.
@@ -103,6 +114,26 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "SELECT \"seeded\".\"id\" AS \"seeded_id\" FROM (SELECT $1::uuid AS id) AS \"seeded\" (\"id\")"
     );
 
+    // VALUES sources are useful for joining or filtering against server-owned
+    // in-memory rows while keeping column metadata explicit.
+    let seeded_orders = values_source(
+        [
+            (Uuid::nil(), "paid"),
+            (Uuid::nil(), "refunded"),
+        ],
+        "seeded_orders",
+        (orders::ID, orders::STATUS),
+    );
+    let values_query = select(seeded_orders)
+        .filter(orders::STATUS.at("seeded_orders").eq("paid"))
+        .build()?;
+
+    assert_eq!(
+        values_query.sql,
+        "SELECT \"seeded_orders\".\"id\", \"seeded_orders\".\"status\" FROM (VALUES ($1, $2), ($3, $4)) AS \"seeded_orders\" (\"id\", \"status\") WHERE \"seeded_orders\".\"status\" = $5"
+    );
+    assert_eq!(values_query.params.len(), 5);
+
     let set_query = union(
         select(orders::table())
             .column(orders::ID)
@@ -119,9 +150,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     println!("{}", paid_users.sql);
     println!("{}", recursive.sql);
+    println!("{}", generated_series.sql);
     println!("{}", lateral.sql);
     println!("{}", retention_delete.sql);
     println!("{}", raw_source_query.sql);
+    println!("{}", values_query.sql);
     println!("{}", set_query.sql);
     Ok(())
 }

@@ -12,6 +12,11 @@ pub fn char_length(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("char_length", [expr])
 }
 
+/// Builds `octet_length(expr)`.
+pub fn octet_length(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("octet_length", [expr])
+}
+
 /// Builds `lower(expr)`.
 pub fn lower(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("lower", [expr])
@@ -20,6 +25,11 @@ pub fn lower(expr: impl Into<ValueExpr>) -> ValueExpr {
 /// Builds `upper(expr)`.
 pub fn upper(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("upper", [expr])
+}
+
+/// Builds `initcap(expr)`.
+pub fn initcap(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("initcap", [expr])
 }
 
 /// Builds `casefold(expr)`.
@@ -88,9 +98,58 @@ pub fn strpos(text: impl Into<ValueExpr>, substring: impl Into<ValueExpr>) -> Va
     function("strpos", [text.into(), substring.into()])
 }
 
+/// Builds `format(format, ...)`.
+pub fn format(
+    format: impl Into<ValueExpr>,
+    args: impl IntoIterator<Item = impl Into<ValueExpr>>,
+) -> ValueExpr {
+    let mut values = vec![format.into()];
+    values.extend(args.into_iter().map(Into::into));
+    function("format", values)
+}
+
+/// Builds `translate(text, from, to)`.
+pub fn translate(
+    text: impl Into<ValueExpr>,
+    from: impl Into<ValueExpr>,
+    to: impl Into<ValueExpr>,
+) -> ValueExpr {
+    function("translate", [text.into(), from.into(), to.into()])
+}
+
+/// Builds `repeat(text, count)`.
+pub fn repeat(text: impl Into<ValueExpr>, count: impl Into<ValueExpr>) -> ValueExpr {
+    function("repeat", [text.into(), count.into()])
+}
+
+/// Builds `ascii(expr)`.
+pub fn ascii(expr: impl Into<ValueExpr>) -> ValueExpr {
+    function("ascii", [expr])
+}
+
+/// Builds `chr(code)`.
+pub fn chr(code: impl Into<ValueExpr>) -> ValueExpr {
+    function("chr", [code])
+}
+
+/// Builds `encode(bytea, format)`.
+pub fn encode(bytea: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> ValueExpr {
+    function("encode", [bytea.into(), format.into()])
+}
+
+/// Builds `decode(text, format)`.
+pub fn decode(text: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> ValueExpr {
+    function("decode", [text.into(), format.into()])
+}
+
 /// Builds `starts_with(text, prefix)`.
 pub fn text_starts_with(text: impl Into<ValueExpr>, prefix: impl Into<ValueExpr>) -> BoolExpr {
     function("starts_with", [text.into(), prefix.into()]).is_true()
+}
+
+/// Alias for [`text_starts_with`].
+pub fn starts_with(text: impl Into<ValueExpr>, prefix: impl Into<ValueExpr>) -> BoolExpr {
+    text_starts_with(text, prefix)
 }
 
 /// Builds `trim(expr)`.

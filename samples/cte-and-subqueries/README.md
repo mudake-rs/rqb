@@ -13,7 +13,11 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `scalar_subquery(...)` turns a server-owned select into a value expression for
   comparisons.
 - Recursive CTEs can use raw SQL while still validating bind counts.
+- Common set-returning functions such as `generate_series` can be exposed as
+  typed sources without raw SQL.
 - Lateral joins and raw sources declare exposed fields for outer typed queries.
+- `values_source(...)` builds `FROM (VALUES ...) AS alias(columns...)` with
+  explicit field metadata.
 - Set queries such as `UNION` preserve parameter ordering across both sides.
 
 Run with:

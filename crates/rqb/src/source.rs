@@ -1,4 +1,4 @@
-use crate::{BoolExpr, Field, FieldRef, Meta, Param, Stmt};
+use crate::{BoolExpr, Field, FieldRef, IntoRowValues, Meta, Param, Stmt, ValueExpr};
 use crate::{Result, raw};
 
 /// Relation-like object that can appear in a `FROM`, `JOIN`, `UPDATE`, or write target.
@@ -57,13 +57,22 @@ pub enum Source {
         /// Function name rendered as SQL.
         name: &'static str,
         /// Function arguments.
-        args: Vec<crate::ValueExpr>,
+        args: Vec<ValueExpr>,
         /// Required SQL alias.
         alias: String,
         /// Exposed fields.
         fields: Vec<Meta>,
         /// Whether to render `WITH ORDINALITY`.
         ordinality: bool,
+    },
+    /// Inline `VALUES` table source.
+    Values {
+        /// Row values.
+        rows: Vec<Vec<ValueExpr>>,
+        /// Required SQL alias.
+        alias: String,
+        /// Exposed fields.
+        fields: Vec<Meta>,
     },
 }
 
@@ -224,7 +233,7 @@ pub fn raw_source(
 /// `WITH ORDINALITY`.
 pub fn function_source(
     name: &'static str,
-    args: impl Into<Vec<crate::ValueExpr>>,
+    args: impl Into<Vec<ValueExpr>>,
     alias: impl Into<String>,
     fields: impl IntoFieldMetas,
 ) -> Source {
@@ -234,6 +243,149 @@ pub fn function_source(
         alias: alias.into(),
         fields: fields.into_field_metas(),
         ordinality: false,
+    }
+}
+
+/// Creates a `generate_series(start, stop)` table-valued function source.
+pub fn generate_series_source(
+    start: impl Into<ValueExpr>,
+    stop: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source(
+        "generate_series",
+        vec![start.into(), stop.into()],
+        alias,
+        fields,
+    )
+}
+
+/// Creates a `generate_series(start, stop, step)` table-valued function source.
+pub fn generate_series_step_source(
+    start: impl Into<ValueExpr>,
+    stop: impl Into<ValueExpr>,
+    step: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source(
+        "generate_series",
+        vec![start.into(), stop.into(), step.into()],
+        alias,
+        fields,
+    )
+}
+
+/// Creates an `unnest(array)` table-valued function source.
+pub fn unnest_source(
+    array: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("unnest", vec![array.into()], alias, fields)
+}
+
+/// Creates a `generate_subscripts(array, dim)` table-valued function source.
+pub fn generate_subscripts_source(
+    array: impl Into<ValueExpr>,
+    dim: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source(
+        "generate_subscripts",
+        vec![array.into(), dim.into()],
+        alias,
+        fields,
+    )
+}
+
+/// Creates a `regexp_split_to_table(text, pattern)` source.
+pub fn regexp_split_to_table_source(
+    text: impl Into<ValueExpr>,
+    pattern: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source(
+        "regexp_split_to_table",
+        vec![text.into(), pattern.into()],
+        alias,
+        fields,
+    )
+}
+
+/// Creates a `json_object_keys(json)` source.
+pub fn json_object_keys_source(
+    value: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("json_object_keys", vec![value.into()], alias, fields)
+}
+
+/// Creates a `jsonb_object_keys(jsonb)` source.
+pub fn jsonb_object_keys_source(
+    value: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("jsonb_object_keys", vec![value.into()], alias, fields)
+}
+
+/// Creates a `json_each(json)` source.
+pub fn json_each_source(
+    value: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("json_each", vec![value.into()], alias, fields)
+}
+
+/// Creates a `jsonb_each(jsonb)` source.
+pub fn jsonb_each_source(
+    value: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("jsonb_each", vec![value.into()], alias, fields)
+}
+
+/// Creates a `json_array_elements(json)` source.
+pub fn json_array_elements_source(
+    value: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("json_array_elements", vec![value.into()], alias, fields)
+}
+
+/// Creates a `jsonb_array_elements(jsonb)` source.
+pub fn jsonb_array_elements_source(
+    value: impl Into<ValueExpr>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source {
+    function_source("jsonb_array_elements", vec![value.into()], alias, fields)
+}
+
+/// Creates a `FROM (VALUES ...) AS alias(columns...)` source.
+pub fn values_source<R>(
+    rows: impl IntoIterator<Item = R>,
+    alias: impl Into<String>,
+    fields: impl IntoFieldMetas,
+) -> Source
+where
+    R: IntoRowValues,
+{
+    Source::Values {
+        rows: rows
+            .into_iter()
+            .map(IntoRowValues::into_row_values)
+            .collect(),
+        alias: alias.into(),
+        fields: fields.into_field_metas(),
     }
 }
 
@@ -514,6 +666,7 @@ impl Source {
             Self::Subquery { .. } => "subquery",
             Self::Raw { .. } => "raw",
             Self::Function { .. } => "function",
+            Self::Values { .. } => "values",
         }
     }
 
@@ -531,7 +684,8 @@ impl Source {
             | Self::Cte { alias: current, .. } => *current = Some(alias),
             Self::Subquery { alias: current, .. }
             | Self::Raw { alias: current, .. }
-            | Self::Function { alias: current, .. } => *current = alias,
+            | Self::Function { alias: current, .. }
+            | Self::Values { alias: current, .. } => *current = alias,
         }
         self
     }
@@ -551,7 +705,8 @@ impl Source {
             }
             Self::Subquery { alias, .. }
             | Self::Raw { alias, .. }
-            | Self::Function { alias, .. } => Some(alias),
+            | Self::Function { alias, .. }
+            | Self::Values { alias, .. } => Some(alias),
         }
     }
 
@@ -565,7 +720,8 @@ impl Source {
             Self::Cte { fields, .. }
             | Self::Subquery { fields, .. }
             | Self::Raw { fields, .. }
-            | Self::Function { fields, .. } => fields.iter().for_each(f),
+            | Self::Function { fields, .. }
+            | Self::Values { fields, .. } => fields.iter().for_each(f),
         }
     }
 
@@ -608,6 +764,34 @@ impl Source {
                 }
                 Ok(())
             }
+            Self::Values {
+                rows,
+                alias,
+                fields,
+            } => {
+                validate_source_alias(alias, "values source alias cannot be empty")?;
+                if rows.is_empty() {
+                    return Err(crate::Error::InvalidSelectShape {
+                        message: "values source requires at least one row",
+                    });
+                }
+                if fields.is_empty() {
+                    return Err(crate::Error::InvalidSelectShape {
+                        message: "values source fields cannot be empty",
+                    });
+                }
+                for row in rows {
+                    if row.len() != fields.len() {
+                        return Err(crate::Error::InvalidSelectShape {
+                            message: "values source row arity must match exposed field count",
+                        });
+                    }
+                    for value in row {
+                        value.validate()?;
+                    }
+                }
+                Ok(())
+            }
             Self::Cte { name, .. } => {
                 if name.is_empty() {
                     return Err(crate::Error::InvalidSelectShape {
@@ -631,6 +815,13 @@ impl Source {
                     arg.collect_params(params);
                 }
             }
+            Self::Values { rows, .. } => {
+                for row in rows {
+                    for value in row {
+                        value.collect_params(params);
+                    }
+                }
+            }
             Self::Table { .. } | Self::View { .. } | Self::Cte { .. } => {}
         }
     }
@@ -646,8 +837,8 @@ fn validate_source_alias(alias: &str, message: &'static str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CteMaterialization, IntoFieldMetas, Source, cte, cte_ref, function_source, raw_source,
-        table,
+        CteMaterialization, IntoFieldMetas, Source, cte, cte_ref, function_source,
+        generate_series_step_source, raw_source, table, values_source,
     };
     use crate::{Field, Meta, OpSet, Param, select};
 
@@ -770,16 +961,18 @@ mod tests {
             crate::Error::InvalidSelectShape { message }
                 if message == "function source alias cannot be empty"
         ));
+
+        let values = values_source([[1_i32]], "", ID);
+        assert!(matches!(
+            values.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "values source alias cannot be empty"
+        ));
     }
 
     #[test]
     fn function_source_validates_arguments_and_ordinality_is_opt_in() {
-        let source = function_source(
-            "generate_series",
-            vec![crate::ValueExpr::from(1_i32), crate::ValueExpr::from(3_i32)],
-            "g",
-            vec![ID_META],
-        );
+        let source = generate_series_step_source(1_i32, 3_i32, 1_i32, "g", ID);
         assert!(matches!(
             &source,
             Source::Function {
@@ -795,6 +988,33 @@ mod tests {
                 ordinality: true,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn values_source_validates_rows_and_exposed_fields() {
+        let valid = values_source([[1_i32], [2_i32]], "input", ID);
+        valid.validate().unwrap();
+
+        let empty_rows = values_source(Vec::<[i32; 1]>::new(), "input", ID);
+        assert!(matches!(
+            empty_rows.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "values source requires at least one row"
+        ));
+
+        let empty_fields = values_source([[1_i32]], "input", ());
+        assert!(matches!(
+            empty_fields.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "values source fields cannot be empty"
+        ));
+
+        let wrong_arity = values_source([(1_i32, 2_i32)], "input", ID);
+        assert!(matches!(
+            wrong_arity.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "values source row arity must match exposed field count"
         ));
     }
 

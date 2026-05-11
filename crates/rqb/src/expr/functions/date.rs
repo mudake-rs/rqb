@@ -1,4 +1,4 @@
-use crate::ValueExpr;
+use crate::{BoolExpr, ValueExpr};
 
 use super::function;
 
@@ -20,6 +20,40 @@ pub fn current_date() -> ValueExpr {
 /// Builds `date_trunc(part, expr)`.
 pub fn date_trunc(part: impl Into<ValueExpr>, expr: impl Into<ValueExpr>) -> ValueExpr {
     function("date_trunc", [part.into(), expr.into()])
+}
+
+/// Builds `date_bin(stride, source, origin)`.
+pub fn date_bin(
+    stride: impl Into<ValueExpr>,
+    source: impl Into<ValueExpr>,
+    origin: impl Into<ValueExpr>,
+) -> ValueExpr {
+    function("date_bin", [stride.into(), source.into(), origin.into()])
+}
+
+/// Builds `to_char(value, format)`.
+pub fn to_char(value: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> ValueExpr {
+    function("to_char", [value.into(), format.into()])
+}
+
+/// Builds `to_date(text, format)`.
+pub fn to_date(text: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> ValueExpr {
+    function("to_date", [text.into(), format.into()])
+}
+
+/// Builds `to_timestamp(text, format)`.
+pub fn to_timestamp(text: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> ValueExpr {
+    function("to_timestamp", [text.into(), format.into()])
+}
+
+/// Builds `to_number(text, format)`.
+pub fn to_number(text: impl Into<ValueExpr>, format: impl Into<ValueExpr>) -> ValueExpr {
+    function("to_number", [text.into(), format.into()])
+}
+
+/// Builds `isfinite(value)`.
+pub fn isfinite(value: impl Into<ValueExpr>) -> BoolExpr {
+    function("isfinite", [value]).is_true()
 }
 
 /// Builds `EXTRACT(field FROM expr)`.

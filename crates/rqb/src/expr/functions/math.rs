@@ -126,3 +126,16 @@ pub fn random() -> ValueExpr {
 pub fn random_between(min: impl Into<ValueExpr>, max: impl Into<ValueExpr>) -> ValueExpr {
     function("random", [min.into(), max.into()])
 }
+
+/// Builds `width_bucket(operand, low, high, count)`.
+pub fn width_bucket(
+    operand: impl Into<ValueExpr>,
+    low: impl Into<ValueExpr>,
+    high: impl Into<ValueExpr>,
+    count: impl Into<ValueExpr>,
+) -> ValueExpr {
+    function(
+        "width_bucket",
+        [operand.into(), low.into(), high.into(), count.into()],
+    )
+}

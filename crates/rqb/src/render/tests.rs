@@ -1270,6 +1270,62 @@ fn helper_functions_cover_common_postgres_builtins() {
 }
 
 #[test]
+fn postgres_gap_helpers_render_without_raw_sql() {
+    let built = select(users())
+        .item(crate::to_char(crate::current_timestamp(), "YYYY-MM").alias("month"))
+        .item(crate::to_date("2026-05-11", "YYYY-MM-DD").alias("parsed_date"))
+        .item(crate::to_timestamp("2026-05-11 12:00", "YYYY-MM-DD HH24:MI").alias("parsed_ts"))
+        .item(crate::to_number("1,234.50", "9,999.99").alias("parsed_number"))
+        .item(crate::date_bin("1 hour", crate::current_timestamp(), "2000-01-01").alias("bucket"))
+        .item(crate::octet_length(EMAIL).alias("email_bytes"))
+        .item(crate::initcap(EMAIL).alias("email_title"))
+        .item(crate::encode(param(vec![0xde_u8, 0xad]), "hex").alias("encoded"))
+        .item(crate::decode("dead", "hex").alias("decoded"))
+        .item(crate::ascii("A").alias("ascii_a"))
+        .item(crate::chr(65_i32).alias("chr_a"))
+        .item(crate::current_user().alias("current_user"))
+        .item(crate::session_user().alias("session_user"))
+        .item(crate::current_schema().alias("current_schema"))
+        .item(crate::current_database().alias("current_database"))
+        .filter(crate::isfinite(crate::current_timestamp()))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT to_char(CURRENT_TIMESTAMP, $1) AS \"month\", to_date($2, $3) AS \"parsed_date\", to_timestamp($4, $5) AS \"parsed_ts\", to_number($6, $7) AS \"parsed_number\", date_bin($8, CURRENT_TIMESTAMP, $9) AS \"bucket\", octet_length(\"email_address\") AS \"email_bytes\", initcap(\"email_address\") AS \"email_title\", encode($10, $11) AS \"encoded\", decode($12, $13) AS \"decoded\", ascii($14) AS \"ascii_a\", chr($15) AS \"chr_a\", CURRENT_USER AS \"current_user\", SESSION_USER AS \"session_user\", CURRENT_SCHEMA AS \"current_schema\", current_database() AS \"current_database\" FROM \"public\".\"app_users\" WHERE isfinite(CURRENT_TIMESTAMP) IS TRUE"
+    );
+    assert_eq!(built.params.len(), 15);
+}
+
+#[test]
+fn json_symmetry_helpers_render_without_raw_sql() {
+    let built = select(orders())
+        .item(
+            crate::json_build_object(vec![
+                param("id".to_owned()),
+                ORDER_USER_ID.expr(),
+                param("total".to_owned()),
+                TOTAL.expr(),
+            ])
+            .alias("json_obj"),
+        )
+        .item(crate::json_build_array(vec![ORDER_USER_ID.expr(), TOTAL.expr()]).alias("json_arr"))
+        .item(crate::json_object(array(["id", "42"])).alias("json_object"))
+        .item(crate::json_typeof(PAYLOAD).alias("json_type"))
+        .item(crate::json_array_length(crate::json_build_array([TOTAL])).alias("json_len"))
+        .item(crate::jsonb_array_length(crate::jsonb_build_array([TOTAL])).alias("jsonb_len"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT json_build_object($1, \"user_id\", $2, \"total_cents\") AS \"json_obj\", json_build_array(\"user_id\", \"total_cents\") AS \"json_arr\", json_object(ARRAY[$3, $4]) AS \"json_object\", json_typeof(\"payload\") AS \"json_type\", json_array_length(json_build_array(\"total_cents\")) AS \"json_len\", jsonb_array_length(jsonb_build_array(\"total_cents\")) AS \"jsonb_len\" FROM \"public\".\"orders\""
+    );
+    assert_eq!(built.params.len(), 4);
+}
+
+#[test]
 fn postgres_18_function_helpers_render_without_raw_sql() {
     let built = select(users())
         .item(crate::casefold(EMAIL).alias("folded_email"))
@@ -1293,6 +1349,114 @@ fn postgres_18_function_helpers_render_without_raw_sql() {
         "SELECT casefold(\"email_address\") AS \"folded_email\", normalize(\"email_address\", NFC) AS \"normalized_email\", gamma(\"id\") AS \"gamma_id\", lgamma(\"id\") AS \"lgamma_id\", crc32($1) AS \"crc\", uuidv4() AS \"uuid_v4\", gen_random_uuid() AS \"random_uuid\", uuidv7(CAST($2 AS interval)) AS \"shifted_uuid_v7\" FROM \"public\".\"app_users\" WHERE (starts_with(\"email_address\", $3) IS TRUE AND unicode_assigned(\"email_address\") IS TRUE)"
     );
     assert_eq!(built.params.len(), 3);
+}
+
+#[test]
+fn values_and_srf_sources_render_without_raw_sql() {
+    static KEY_META: Meta = Meta::new("key", "key", "text").ops(OpSet::ordered());
+    static IDX_META: Meta = Meta::new("idx", "idx", "int4").ops(OpSet::ordered());
+    const KEY: Field<String> = Field::new(&KEY_META);
+    const IDX: Field<i32> = Field::new(&IDX_META);
+
+    let values = crate::values_source([(1_i32, "alpha"), (2_i32, "beta")], "input", (ID, EMAIL));
+    let values_built = select(values)
+        .filter(ID.at("input").gt(1_i32))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        values_built.sql,
+        "SELECT \"input\".\"id\", \"input\".\"email_address\" AS \"email\" FROM (VALUES ($1, $2), ($3, $4)) AS \"input\" (\"id\", \"email_address\") WHERE \"input\".\"id\" > $5"
+    );
+    assert_eq!(values_built.params.len(), 5);
+
+    let series = crate::generate_series_step_source(1_i32, 3_i32, 1_i32, "g", ID);
+    let series_built = select(series).build().unwrap();
+
+    assert_eq!(
+        series_built.sql,
+        "SELECT \"g\".\"id\" FROM generate_series($1, $2, $3) AS \"g\" (\"id\")"
+    );
+    assert_eq!(series_built.params.len(), 3);
+
+    let keys = crate::jsonb_object_keys_source(
+        param(serde_json::json!({"source": "sample"})),
+        "keys",
+        KEY,
+    );
+    let keys_built = select(keys).build().unwrap();
+
+    assert_eq!(
+        keys_built.sql,
+        "SELECT \"keys\".\"key\" FROM jsonb_object_keys($1) AS \"keys\" (\"key\")"
+    );
+    assert_eq!(keys_built.params.len(), 1);
+
+    let subscripts = crate::generate_subscripts_source(array(["a", "b"]), 1_i32, "idxs", IDX);
+    let subscripts_built = select(subscripts).build().unwrap();
+
+    assert_eq!(
+        subscripts_built.sql,
+        "SELECT \"idxs\".\"idx\" FROM generate_subscripts(ARRAY[$1, $2], $3) AS \"idxs\" (\"idx\")"
+    );
+    assert_eq!(subscripts_built.params.len(), 3);
+
+    let parts = crate::regexp_split_to_table_source("alpha,beta", ",", "parts", KEY);
+    let parts_built = select(parts).build().unwrap();
+
+    assert_eq!(
+        parts_built.sql,
+        "SELECT \"parts\".\"key\" FROM regexp_split_to_table($1, $2) AS \"parts\" (\"key\")"
+    );
+    assert_eq!(parts_built.params.len(), 2);
+}
+
+#[test]
+fn competitor_text_fts_system_and_analytics_helpers_render_without_raw_sql() {
+    let built = select(users())
+        .item(crate::format("user:%s", [EMAIL]).alias("formatted"))
+        .item(crate::translate(EMAIL, "@.", "__").alias("translated"))
+        .item(crate::repeat("*", 3_i32).alias("repeated"))
+        .item(crate::width_bucket(ID, 0_i32, 100_i32, 10_i32).alias("bucket"))
+        .item(crate::version().alias("pg_version"))
+        .item(
+            crate::ts_headline(vec![EMAIL.into(), crate::phraseto_tsquery("hello world")])
+                .alias("headline"),
+        )
+        .filter(crate::starts_with(EMAIL, "egor"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT format($1, \"email_address\") AS \"formatted\", translate(\"email_address\", $2, $3) AS \"translated\", repeat($4, $5) AS \"repeated\", width_bucket(\"id\", $6, $7, $8) AS \"bucket\", version() AS \"pg_version\", ts_headline(\"email_address\", phraseto_tsquery($9)) AS \"headline\" FROM \"public\".\"app_users\" WHERE starts_with(\"email_address\", $10) IS TRUE"
+    );
+    assert_eq!(built.params.len(), 10);
+}
+
+#[test]
+fn json_utility_and_range_helpers_render_without_raw_sql() {
+    let built = select(orders())
+        .item(crate::jsonb_pretty(PAYLOAD).alias("pretty_payload"))
+        .item(crate::array_to_json(TAGS).alias("tags_json"))
+        .item(crate::row_to_json(row((ORDER_USER_ID, TOTAL))).alias("row_json"))
+        .item(crate::range_lower(SCORE_RANGE).alias("lower_score"))
+        .item(crate::range_upper(SCORE_RANGE).alias("upper_score"))
+        .filter(BoolExpr::and([
+            crate::isempty(SCORE_RANGE),
+            crate::lower_inc(SCORE_RANGE),
+            crate::upper_inc(SCORE_RANGE),
+            crate::lower_inf(SCORE_RANGE),
+            crate::upper_inf(SCORE_RANGE),
+        ]))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT jsonb_pretty(\"payload\") AS \"pretty_payload\", array_to_json(\"tags\") AS \"tags_json\", row_to_json(ROW(\"user_id\", \"total_cents\")) AS \"row_json\", lower(\"score_range\") AS \"lower_score\", upper(\"score_range\") AS \"upper_score\" FROM \"public\".\"orders\" WHERE (isempty(\"score_range\") IS TRUE AND lower_inc(\"score_range\") IS TRUE AND upper_inc(\"score_range\") IS TRUE AND lower_inf(\"score_range\") IS TRUE AND upper_inf(\"score_range\") IS TRUE)"
+    );
+    assert_eq!(built.params.len(), 0);
 }
 
 #[test]

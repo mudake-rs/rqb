@@ -94,7 +94,10 @@ impl Renderer {
                 write_quoted_ident(&mut self.sql, name);
                 self.render_optional_alias(alias.as_deref());
             }
-            Source::Subquery { .. } | Source::Raw { .. } | Source::Function { .. } => {
+            Source::Subquery { .. }
+            | Source::Raw { .. }
+            | Source::Function { .. }
+            | Source::Values { .. } => {
                 unreachable!("merge target validated as table")
             }
         }

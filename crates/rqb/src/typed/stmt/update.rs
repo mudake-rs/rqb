@@ -2,6 +2,7 @@ use super::*;
 
 impl Update {
     /// Creates an update statement for a table or view source.
+    #[doc(hidden)]
     pub fn table(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
@@ -24,6 +25,23 @@ impl Update {
         self
     }
 
+    /// Adds one `SET` assignment only when `condition` is true.
+    pub fn set_if(self, condition: bool, assignment: Assignment) -> Self {
+        if condition {
+            self.set(assignment)
+        } else {
+            self
+        }
+    }
+
+    /// Adds one `SET` assignment built from an optional value.
+    pub fn set_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> Assignment) -> Self {
+        match value {
+            Some(value) => self.set(f(value)),
+            None => self,
+        }
+    }
+
     /// Applies assignments produced by a partial update [`Changeset`] DTO.
     pub fn patch(mut self, changes: impl Changeset) -> Self {
         extend_assignments(&mut self.assignments, changes.changeset_assignments());
@@ -40,6 +58,19 @@ impl Update {
     pub fn filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
+    }
+
+    /// Adds a `WHERE` predicate only when `condition` is true.
+    pub fn filter_if(self, condition: bool, filter: BoolExpr) -> Self {
+        if condition { self.filter(filter) } else { self }
+    }
+
+    /// Adds a `WHERE` predicate built from an optional value.
+    pub fn filter_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> BoolExpr) -> Self {
+        match value {
+            Some(value) => self.filter(f(value)),
+            None => self,
+        }
     }
 
     /// Adds one field to `RETURNING`.

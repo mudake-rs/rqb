@@ -13,6 +13,7 @@ impl MergeWhen {
 
 impl Merge {
     /// Creates a PostgreSQL `MERGE` statement.
+    #[doc(hidden)]
     pub fn into(target: impl Into<Source>, using: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             ctes: Vec::new(),

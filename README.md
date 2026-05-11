@@ -130,7 +130,8 @@ let rows = select(&u)
 
 Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
-`FILTER`, window functions, array/jsonb/range predicates, `set_many((...))`,
+`FILTER`, window functions, array/jsonb/range predicates, conditional
+`filter_option(...)` / `set_option(...)` helpers, `set_many((...))`,
 row-value comparisons for cursor pagination, `insert(...).from_select(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. REST-style pagination stays
@@ -157,7 +158,8 @@ use the explicit `cte(...)`, `subquery(...)`, or `raw_source(...)` constructors.
 
 SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
 like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
-service module. Import from the grouped modules when autocomplete noise matters:
+service module. Use `rqb::dsl::*` for short query modules, or import a focused
+group when autocomplete noise matters:
 
 ```rust
 use rqb::dsl::agg::{count_all, sum};
@@ -165,6 +167,22 @@ use rqb::dsl::date::date_trunc;
 use rqb::dsl::scalar::coalesce;
 use rqb::prelude::*;
 ```
+
+Common groups:
+
+| Module | Use for |
+| --- | --- |
+| `rqb::dsl::bools` | `and`, `or`, `not`, `exists`, `true_`, `false_` |
+| `rqb::dsl::agg` | aggregates such as `count_all`, `sum`, `jsonb_agg_object`, percentiles |
+| `rqb::dsl::arrays` | Postgres array functions and array constructors |
+| `rqb::dsl::date` | `now`, `date_trunc`, `extract`, timestamp builders |
+| `rqb::dsl::fts` | `to_tsvector`, `plainto_tsquery`, ranking helpers |
+| `rqb::dsl::json` | JSON/JSONB builders, path/query helpers, navigation |
+| `rqb::dsl::math` | numeric functions such as `round`, `sqrt`, `pow` |
+| `rqb::dsl::scalar` | `case`, `coalesce`, `greatest`, `least`, scalar subqueries |
+| `rqb::dsl::text` | string functions and pattern helpers |
+| `rqb::dsl::uuid` | UUID generation and UUID v7 inspection helpers |
+| `rqb::dsl::window` | window functions and frame constructors |
 
 ## JSON Search
 
@@ -197,6 +215,59 @@ let query = select(schema::order_search_view::view())
 
 Server filters are preserved and combined with the request filter using `AND`.
 Only fields with `Meta::json(...)` are visible to JSON requests.
+
+## Error Handling
+
+rqb returns one structured `Error` enum for validation failures, sqlx execution
+failures, and mapped Postgres SQLSTATE errors. Application code should match on
+variants, not parse database message strings.
+
+The usual HTTP mapping is:
+
+| Error group | Typical API status | Notes |
+| --- | --- | --- |
+| `NotFound` | `404 Not Found` | From `fetch_one` / `fetch_one_as` when no row exists. |
+| `UniqueViolation`, `ExclusionViolation` | `409 Conflict` | Use `constraint_name()` when logging or building domain-specific messages. |
+| `ForeignKeyViolation`, `RestrictViolation`, `NotNullViolation`, `CheckViolation` | `400 Bad Request` | Client supplied data that violates table constraints. |
+| `InvalidSearchField`, `SearchFieldNotExposed`, `InvalidSearchOperator`, `InvalidSearchValue`, `EmptySearchLogical`, `InvalidSort` | `400 Bad Request` | Client-controlled `SearchRequest` was invalid. |
+| `SerializationFailure`, `DeadlockDetected`, connection failures | `503 Service Unavailable` or retry response | `error.is_retryable()` returns true for these retryable cases. |
+| `QueryCanceled` | `504 Gateway Timeout` or request timeout | Depends on whether the cancel was server timeout or caller cancellation. |
+| `InsufficientPrivilege` | `403 Forbidden` | Usually deployment or role configuration. |
+| Builder-shape errors such as `DeleteWithoutFilter`, `RawBindMismatch`, `InvalidInsertShape`, `InvalidCteShape`, `InvalidRowShape` | usually `500 Internal Server Error` | These are normally server-owned query bugs unless they came directly from a JSON request. |
+
+Example boundary mapping:
+
+```rust
+use axum::http::StatusCode;
+
+fn status_for_error(error: &rqb::Error) -> StatusCode {
+    use rqb::Error;
+
+    match error {
+        Error::NotFound => StatusCode::NOT_FOUND,
+        Error::UniqueViolation { .. } | Error::ExclusionViolation { .. } => {
+            StatusCode::CONFLICT
+        }
+        Error::ForeignKeyViolation { .. }
+        | Error::RestrictViolation { .. }
+        | Error::NotNullViolation { .. }
+        | Error::CheckViolation { .. }
+        | Error::InvalidSearchField { .. }
+        | Error::SearchFieldNotExposed { .. }
+        | Error::InvalidSearchOperator { .. }
+        | Error::InvalidSearchValue { .. }
+        | Error::EmptySearchLogical { .. }
+        | Error::InvalidSort { .. } => StatusCode::BAD_REQUEST,
+        Error::QueryCanceled { .. } => StatusCode::GATEWAY_TIMEOUT,
+        Error::InsufficientPrivilege { .. } => StatusCode::FORBIDDEN,
+        error if error.is_retryable() => StatusCode::SERVICE_UNAVAILABLE,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+```
+
+`samples/rest-api/src/error.rs` shows the same pattern inside an axum
+`IntoResponse` implementation.
 
 ## Writes
 

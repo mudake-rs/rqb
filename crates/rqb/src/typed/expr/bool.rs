@@ -70,6 +70,31 @@ impl BoolExpr {
             None => next,
         }
     }
+
+    pub(crate) fn or_pair(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::Or(mut left), Self::Or(right)) if !left.is_empty() && !right.is_empty() => {
+                left.extend(right);
+                Self::Or(left)
+            }
+            (Self::Or(mut left), right) if !left.is_empty() => {
+                left.push(right);
+                Self::Or(left)
+            }
+            (left, Self::Or(mut right)) if !right.is_empty() => {
+                right.insert(0, left);
+                Self::Or(right)
+            }
+            (left, right) => Self::Or(vec![left, right]),
+        }
+    }
+
+    pub(crate) fn or_option(current: Option<Self>, next: Self) -> Self {
+        match current {
+            Some(existing) => Self::or_pair(existing, next),
+            None => next,
+        }
+    }
 }
 
 impl ValueExpr {

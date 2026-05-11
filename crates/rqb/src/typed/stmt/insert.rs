@@ -2,6 +2,7 @@ use super::*;
 
 impl Insert {
     /// Creates an insert statement for a table or view source.
+    #[doc(hidden)]
     pub fn into(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
@@ -34,6 +35,23 @@ impl Insert {
             assignments.into_assignments(),
         );
         self
+    }
+
+    /// Adds one assignment only when `condition` is true.
+    pub fn set_if(self, condition: bool, assignment: Assignment) -> Self {
+        if condition {
+            self.set(assignment)
+        } else {
+            self
+        }
+    }
+
+    /// Adds one assignment built from an optional value.
+    pub fn set_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> Assignment) -> Self {
+        match value {
+            Some(value) => self.set(f(value)),
+            None => self,
+        }
     }
 
     /// Adds assignments produced by an [`Insertable`] DTO.

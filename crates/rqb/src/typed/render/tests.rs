@@ -1,9 +1,9 @@
 use crate::typed::{
     Assignment, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param, RawStmt, Select,
     SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce,
-    count_all, count_distinct, cte, current_date, current_timestamp, extract, function_source,
-    insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont, row, row_number,
-    scalar_subquery, select, slice, subscript, table, to_jsonb, true_, update, window,
+    count_all, count_distinct, cte, current_date, current_timestamp, delete_from, extract,
+    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont, row,
+    row_number, scalar_subquery, select, slice, subscript, table, to_jsonb, true_, update, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -221,6 +221,57 @@ fn ergonomic_constructors_build_the_same_typed_ast() {
         "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" WHERE (\"id\" > $1 AND \"id\" < $2 AND \"email_address\" <> $3) ORDER BY \"id\" DESC LIMIT $4 OFFSET $5"
     );
     assert_eq!(built.params.len(), 5);
+}
+
+#[test]
+fn conditional_builder_helpers_skip_or_apply_optional_clauses() {
+    let select_sql = select(users())
+        .column(ID)
+        .filter(ID.eq(1))
+        .or_filter_option(Some("egor@example.com".to_owned()), |email| EMAIL.eq(email))
+        .or_filter_if(false, ACTIVE.eq(false))
+        .build()
+        .unwrap();
+
+    let insert_sql = insert(users())
+        .set_if(false, ID.set(999))
+        .set_option(Some("egor@example.com".to_owned()), |email| {
+            EMAIL.set(email)
+        })
+        .set_option(None::<i32>, |id| ID.set(id))
+        .build()
+        .unwrap();
+
+    let update_sql = update(users())
+        .set_if(true, EMAIL.set("new@example.com".to_owned()))
+        .set_option(None::<i32>, |id| ID.set(id))
+        .filter_if(false, ID.eq(999))
+        .filter_option(Some(1), |id| ID.eq(id))
+        .build()
+        .unwrap();
+
+    let delete_sql = delete_from(users())
+        .filter_if(true, ACTIVE.eq(false))
+        .filter_option(None::<i32>, |id| ID.eq(id))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        select_sql.sql,
+        "SELECT \"id\" FROM \"public\".\"app_users\" WHERE (\"id\" = $1 OR \"email_address\" = $2)"
+    );
+    assert_eq!(
+        insert_sql.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"email_address\") VALUES ($1)"
+    );
+    assert_eq!(
+        update_sql.sql,
+        "UPDATE \"public\".\"app_users\" SET \"email_address\" = $1 WHERE \"id\" = $2"
+    );
+    assert_eq!(
+        delete_sql.sql,
+        "DELETE FROM \"public\".\"app_users\" WHERE \"active\" = $1"
+    );
 }
 
 #[test]

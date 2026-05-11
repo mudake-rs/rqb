@@ -2,6 +2,7 @@ use super::*;
 
 impl Delete {
     /// Creates a delete statement for a table or view source.
+    #[doc(hidden)]
     pub fn from(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
@@ -21,6 +22,19 @@ impl Delete {
     pub fn filter(mut self, filter: BoolExpr) -> Self {
         self.filter = Some(BoolExpr::and_option(self.filter, filter));
         self
+    }
+
+    /// Adds a `WHERE` predicate only when `condition` is true.
+    pub fn filter_if(self, condition: bool, filter: BoolExpr) -> Self {
+        if condition { self.filter(filter) } else { self }
+    }
+
+    /// Adds a `WHERE` predicate built from an optional value.
+    pub fn filter_option<T>(self, value: Option<T>, f: impl FnOnce(T) -> BoolExpr) -> Self {
+        match value {
+            Some(value) => self.filter(f(value)),
+            None => self,
+        }
     }
 
     /// Adds one field to `RETURNING`.

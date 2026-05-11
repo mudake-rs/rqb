@@ -52,12 +52,12 @@ fn render_relation(out: &mut String, relation: &Relation, module_name: &str) {
         String::new()
     };
 
-    if relation.kind == RelationKind::MaterializedView {
-        out.push_str("    // Materialized view.\n");
-    } else if relation.kind == RelationKind::View
-        && relation.columns.iter().any(|column| column.nullable)
-    {
-        out.push_str("    // View column nullability is conservative in Postgres metadata.\n");
+    match relation.kind {
+        RelationKind::MaterializedView => out.push_str("    // Materialized view.\n"),
+        RelationKind::View if relation.columns.iter().any(|column| column.nullable) => {
+            out.push_str("    // View column nullability is conservative in Postgres metadata.\n");
+        }
+        RelationKind::Table | RelationKind::View => {}
     }
     out.push_str(&format!("    {kind} {name}{module_alias} {{\n"));
     for column in &relation.columns {
@@ -85,8 +85,7 @@ fn render_column(out: &mut String, relation_kind: RelationKind, column: &Column)
     } else {
         String::new()
     };
-    let pg_name = column.pg_name();
-    let pg = render_pg_name(&pg_name);
+    let pg = render_name(&column.pg_name());
     let rust_ty = match &column.ty {
         ColumnType::Known(known) => format!(" = {}", rust_type_name(known)),
         ColumnType::RawOnly { .. } => String::new(),
@@ -117,14 +116,6 @@ fn column_comments(relation_kind: RelationKind, column: &Column) -> Vec<&'static
 }
 
 fn render_name(name: &str) -> String {
-    if is_plain_ident(name) {
-        name.to_owned()
-    } else {
-        rust_string_literal(name)
-    }
-}
-
-fn render_pg_name(name: &str) -> String {
     if is_plain_ident(name) {
         name.to_owned()
     } else {

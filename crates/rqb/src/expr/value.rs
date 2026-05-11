@@ -208,23 +208,32 @@ impl ValueExpr {
 
     /// Adds an aggregate `FILTER (WHERE ...)` predicate.
     #[inline]
-    pub fn aggregate_filter(mut self, filter: BoolExpr) -> Self {
-        match &mut self {
-            Self::Aggregate {
-                filter: current, ..
-            }
-            | Self::OrderedSetAggregate {
-                filter: current, ..
-            } => {
-                *current = Some(Box::new(BoolExpr::and_option(
-                    current.take().map(|existing| *existing),
-                    filter,
-                )));
-            }
-            _ => {}
-        }
+    pub fn aggregate_filter(self, next_filter: BoolExpr) -> Self {
         match self {
-            Self::Aggregate { .. } | Self::OrderedSetAggregate { .. } => self,
+            Self::Aggregate {
+                name,
+                args,
+                distinct,
+                order_by,
+                filter,
+            } => Self::Aggregate {
+                name,
+                args,
+                distinct,
+                order_by,
+                filter: combine_aggregate_filters(filter, next_filter),
+            },
+            Self::OrderedSetAggregate {
+                name,
+                args,
+                within_group,
+                filter,
+            } => Self::OrderedSetAggregate {
+                name,
+                args,
+                within_group,
+                filter: combine_aggregate_filters(filter, next_filter),
+            },
             expr => Self::InvalidAggregateModifier {
                 expr: Box::new(expr),
                 modifier: "aggregate_filter",
@@ -246,6 +255,16 @@ impl ValueExpr {
             right: right.into(),
         }
     }
+}
+
+fn combine_aggregate_filters(
+    current: Option<Box<BoolExpr>>,
+    next: BoolExpr,
+) -> Option<Box<BoolExpr>> {
+    Some(Box::new(BoolExpr::and_option(
+        current.map(|existing| *existing),
+        next,
+    )))
 }
 
 impl From<Param> for ValueExpr {

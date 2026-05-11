@@ -77,10 +77,10 @@ pub enum Source {
     },
 }
 
-/// Table-valued function source before it is converted into a general [`Source`].
+/// Table-valued function source before it enters the general [`Source`] enum.
 ///
-/// This wrapper keeps `WITH ORDINALITY` available only for sources where
-/// PostgreSQL supports it.
+/// Keeping this as a separate builder limits `WITH ORDINALITY` to the sources
+/// where PostgreSQL supports it.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]

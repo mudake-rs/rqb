@@ -524,41 +524,26 @@ impl From<sqlx::Error> for Error {
 
 impl Error {
     pub(crate) fn invalid_operator(field: impl Into<String>, operator: impl Into<String>) -> Self {
-        Self::InvalidOperator(Box::new(OperatorError {
-            field: field.into(),
-            operator: operator.into(),
-        }))
+        Self::InvalidOperator(Box::new(OperatorError::new(field, operator)))
     }
 
     pub(crate) fn invalid_search_operator(
         field: impl Into<String>,
         operator: impl Into<String>,
     ) -> Self {
-        Self::InvalidSearchOperator(Box::new(OperatorError {
-            field: field.into(),
-            operator: operator.into(),
-        }))
+        Self::InvalidSearchOperator(Box::new(OperatorError::new(field, operator)))
     }
 
     pub(crate) fn invalid_search_value(field: impl Into<String>, expected: &'static str) -> Self {
-        Self::InvalidSearchValue(Box::new(SearchValueError {
-            field: field.into(),
-            expected,
-        }))
+        Self::InvalidSearchValue(Box::new(SearchValueError::new(field, expected)))
     }
 
     pub(crate) fn invalid_write_target(statement: &'static str, source_kind: &'static str) -> Self {
-        Self::InvalidWriteTarget(Box::new(WriteTargetError {
-            statement,
-            source_kind,
-        }))
+        Self::InvalidWriteTarget(Box::new(WriteTargetError::new(statement, source_kind)))
     }
 
     pub(crate) fn invalid_cte_shape(name: impl Into<String>, message: &'static str) -> Self {
-        Self::InvalidCteShape(Box::new(CteShapeError {
-            name: name.into(),
-            message,
-        }))
+        Self::InvalidCteShape(Box::new(CteShapeError::new(name, message)))
     }
 
     fn from_sqlx_database_error(db: &(dyn DatabaseError + 'static)) -> Self {
@@ -576,70 +561,47 @@ impl Error {
         let info = DbErrorInfo::from_sqlx_database_error(db);
 
         match code.as_str() {
-            "23505" => Self::UniqueViolation(Box::new(ConstraintError {
-                constraint,
-                detail,
-                info,
-            })),
-            "23503" => Self::ForeignKeyViolation(Box::new(ConstraintError {
-                constraint,
-                detail,
-                info,
-            })),
-            "23001" => Self::RestrictViolation(Box::new(ConstraintError {
-                constraint,
-                detail,
-                info,
-            })),
-            "23502" => Self::NotNullViolation(Box::new(ColumnError { column, info })),
-            "23514" => Self::CheckViolation(Box::new(ConstraintError {
-                constraint,
-                detail,
-                info,
-            })),
-            "23P01" => Self::ExclusionViolation(Box::new(ConstraintError {
-                constraint,
-                detail,
-                info,
-            })),
-            "40001" => Self::SerializationFailure(Box::new(PgFailure {
-                message,
-                detail,
-                hint,
-                info,
-            })),
-            "40P01" => Self::DeadlockDetected(Box::new(PgFailure {
-                message,
-                detail,
-                hint,
-                info,
-            })),
-            "57014" => Self::QueryCanceled(Box::new(PgFailure {
-                message,
-                detail,
-                hint,
-                info,
-            })),
-            "42501" => Self::InsufficientPrivilege(Box::new(DatabaseFailure {
-                code,
-                message,
-                detail,
-                hint,
-                constraint,
-                table,
-                column,
-                info,
-            })),
-            _ => Self::Database(Box::new(DatabaseFailure {
-                code,
-                message,
-                detail,
-                hint,
-                constraint,
-                table,
-                column,
-                info,
-            })),
+            "23505" => {
+                Self::UniqueViolation(Box::new(ConstraintError::new(constraint, detail, info)))
+            }
+            "23503" => {
+                Self::ForeignKeyViolation(Box::new(ConstraintError::new(constraint, detail, info)))
+            }
+            "23001" => {
+                Self::RestrictViolation(Box::new(ConstraintError::new(constraint, detail, info)))
+            }
+            "23502" => Self::NotNullViolation(Box::new(ColumnError::new(column, info))),
+            "23514" => {
+                Self::CheckViolation(Box::new(ConstraintError::new(constraint, detail, info)))
+            }
+            "23P01" => {
+                Self::ExclusionViolation(Box::new(ConstraintError::new(constraint, detail, info)))
+            }
+            "40001" => {
+                Self::SerializationFailure(Box::new(PgFailure::new(message, detail, hint, info)))
+            }
+            "40P01" => {
+                Self::DeadlockDetected(Box::new(PgFailure::new(message, detail, hint, info)))
+            }
+            "57014" => Self::QueryCanceled(Box::new(PgFailure::new(message, detail, hint, info))),
+            "42501" => Self::InsufficientPrivilege(Box::new(
+                DatabaseFailure::new(code, message)
+                    .detail(detail)
+                    .hint(hint)
+                    .constraint(constraint)
+                    .table(table)
+                    .column(column)
+                    .info(info),
+            )),
+            _ => Self::Database(Box::new(
+                DatabaseFailure::new(code, message)
+                    .detail(detail)
+                    .hint(hint)
+                    .constraint(constraint)
+                    .table(table)
+                    .column(column)
+                    .info(info),
+            )),
         }
     }
 

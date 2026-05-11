@@ -16,9 +16,9 @@ impl Renderer {
             }
             write_quoted_ident(&mut self.sql, &cte.name);
             if !cte.columns.is_empty() {
-                self.render_cte_columns(cte.columns.iter().map(String::as_str));
+                self.render_paren_column_list(cte.columns.iter().map(String::as_str));
             } else if !cte.fields.is_empty() {
-                self.render_cte_columns(cte.fields.iter().map(|field| field.db));
+                self.render_paren_column_list(cte.fields.iter().map(|field| field.db));
             }
             self.sql.push_str(" AS");
             if let Some(materialization) = cte.materialization {
@@ -33,7 +33,7 @@ impl Renderer {
         Ok(())
     }
 
-    fn render_cte_columns<'a>(&mut self, columns: impl IntoIterator<Item = &'a str>) {
+    fn render_paren_column_list<'a>(&mut self, columns: impl IntoIterator<Item = &'a str>) {
         self.sql.push_str(" (");
         for (column_idx, column) in columns.into_iter().enumerate() {
             if column_idx > 0 {
@@ -62,6 +62,7 @@ impl Renderer {
             self.sql.push('*');
         }
     }
+
     pub(super) fn render_source(&mut self, source: &Source) -> Result<()> {
         match source {
             Source::Table { name, alias, .. } | Source::View { name, alias, .. } => {
@@ -104,14 +105,7 @@ impl Renderer {
                 self.sql.push_str(" AS ");
                 write_quoted_ident(&mut self.sql, alias);
                 if !fields.is_empty() {
-                    self.sql.push_str(" (");
-                    for (idx, field) in fields.iter().enumerate() {
-                        if idx > 0 {
-                            self.sql.push_str(", ");
-                        }
-                        write_quoted_ident(&mut self.sql, field.db);
-                    }
-                    self.sql.push(')');
+                    self.render_paren_column_list(fields.iter().map(|field| field.db));
                 }
             }
             Source::Values {
@@ -136,14 +130,7 @@ impl Renderer {
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
                 if !fields.is_empty() {
-                    self.sql.push_str(" (");
-                    for (idx, field) in fields.iter().enumerate() {
-                        if idx > 0 {
-                            self.sql.push_str(", ");
-                        }
-                        write_quoted_ident(&mut self.sql, field.db);
-                    }
-                    self.sql.push(')');
+                    self.render_paren_column_list(fields.iter().map(|field| field.db));
                 }
             }
         }
@@ -179,7 +166,7 @@ impl Renderer {
             | Source::Values { fields, .. }
                 if !fields.is_empty() =>
             {
-                self.render_cte_columns(fields.iter().map(|field| field.db));
+                self.render_paren_column_list(fields.iter().map(|field| field.db));
             }
             _ => {}
         }
@@ -203,6 +190,7 @@ impl Renderer {
             }
         }
     }
+
     pub(super) fn render_field(&mut self, field: &crate::Meta, qualifier: Option<&str>) {
         if let Some(qualifier) = qualifier {
             write_quoted_ident(&mut self.sql, qualifier);

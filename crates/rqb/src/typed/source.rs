@@ -498,6 +498,12 @@ impl Cte {
     }
 }
 
+impl From<&Cte> for Source {
+    fn from(cte: &Cte) -> Self {
+        cte.source()
+    }
+}
+
 impl Source {
     /// Returns a stable source-kind name for diagnostics.
     pub const fn kind(&self) -> &'static str {
@@ -689,7 +695,7 @@ mod tests {
             select(table("public.users", &FIELDS)).column(ID),
             vec![ID_META],
         );
-        let source = cte.source().alias("i");
+        let source = Source::from(&cte).alias("i");
 
         assert!(matches!(
             source,

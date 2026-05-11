@@ -203,6 +203,38 @@ fn typed_field_can_bind_any_sqlx_supported_type() {
 }
 
 #[test]
+fn value_expr_accepts_common_sqlx_postgres_literal_types() {
+    let built = select(users())
+        .expr(ValueExpr::from(vec![0xde, 0xad, 0xbe, 0xef]))
+        .expr(ValueExpr::from(sqlx::postgres::types::PgInterval {
+            months: 0,
+            days: 1,
+            microseconds: 2,
+        }))
+        .expr(ValueExpr::from(std::time::Duration::from_micros(3)))
+        .expr(ValueExpr::from(chrono::Duration::microseconds(4)))
+        .expr(ValueExpr::from(sqlx::types::BigDecimal::from(5_i32)))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT $1, $2, $3, $4, $5 FROM \"public\".\"app_users\""
+    );
+    assert_eq!(
+        built.params.debug_names(),
+        vec![
+            std::any::type_name::<Vec<u8>>(),
+            std::any::type_name::<sqlx::postgres::types::PgInterval>(),
+            std::any::type_name::<std::time::Duration>(),
+            std::any::type_name::<chrono::Duration>(),
+            std::any::type_name::<sqlx::types::BigDecimal>(),
+        ]
+    );
+    built.arguments().unwrap();
+}
+
+#[test]
 fn ergonomic_constructors_build_the_same_typed_ast() {
     let built = select(table("public.app_users", &USERS_FIELDS))
         .column(ID)

@@ -37,6 +37,10 @@ uuid = "1"
 
 `uuid`, `chrono`, JSON, numeric, ranges, arrays, and other Postgres values are
 accepted when the Rust type implements sqlx `Encode` and `Type` for Postgres.
+Direct expression literals cover common bind types such as `Uuid`, chrono
+date/time values, `PgInterval` / durations, `BigDecimal`, `Vec<u8>`, and
+`serde_json::Value`; `param(value)` remains the explicit fallback for any other
+sqlx-supported value.
 
 ## Basic Query
 

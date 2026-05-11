@@ -282,7 +282,12 @@ macro_rules! impl_param_value_expr {
 
 impl_param_value_expr!(bool, i16, i32, i64, f32, f64);
 impl_param_value_expr!(
+    Vec<u8>,
     uuid::Uuid,
+    std::time::Duration,
+    sqlx::postgres::types::PgInterval,
+    sqlx::types::BigDecimal,
+    chrono::Duration,
     chrono::DateTime<chrono::Utc>,
     chrono::DateTime<chrono::FixedOffset>,
     chrono::NaiveDate,

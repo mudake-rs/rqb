@@ -1,5 +1,4 @@
-use rqb::dsl::fts::{plainto_tsquery, ts_rank};
-use rqb::dsl::param;
+use rqb::dsl::{param, plainto_tsquery, ts_rank};
 use rqb::prelude::*;
 use serde_json::Value;
 use uuid::Uuid;

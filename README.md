@@ -168,31 +168,29 @@ use the explicit `cte(...)`, `subquery(...)`, or `raw_source(...)` constructors.
 
 SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
 like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
-service module. Use `rqb::dsl::*` for short query modules, or import a focused
-group when autocomplete noise matters:
+service module. Use `rqb::dsl::*` for short query modules, or import the exact
+helpers a module needs:
 
 ```rust
-use rqb::dsl::agg::{count_all, sum};
-use rqb::dsl::date::date_trunc;
-use rqb::dsl::scalar::coalesce;
+use rqb::dsl::{coalesce, count_all, date_trunc, sum};
 use rqb::prelude::*;
 ```
 
-Common groups:
+Common helper families in the flat catalog:
 
-| Module | Use for |
+| Family | Examples |
 | --- | --- |
-| `rqb::dsl::bools` | `and`, `or`, `not`, `exists`, `true_`, `false_` |
-| `rqb::dsl::agg` | aggregates such as `count_all`, `sum`, `jsonb_agg_object`, percentiles |
-| `rqb::dsl::arrays` | Postgres array functions and array constructors |
-| `rqb::dsl::date` | `now`, `date_trunc`, `extract`, timestamp builders |
-| `rqb::dsl::fts` | `to_tsvector`, `plainto_tsquery`, ranking helpers |
-| `rqb::dsl::json` | JSON/JSONB builders, path/query helpers, navigation |
-| `rqb::dsl::math` | numeric functions such as `round`, `sqrt`, `pow` |
-| `rqb::dsl::scalar` | `case`, `coalesce`, `greatest`, `least`, scalar subqueries |
-| `rqb::dsl::text` | string functions and pattern helpers |
-| `rqb::dsl::uuid` | UUID generation and UUID v7 inspection helpers |
-| `rqb::dsl::window` | window functions and frame constructors |
+| Boolean predicates | `and`, `or`, `not`, `exists`, `true_`, `false_` |
+| Aggregates | `count_all`, `sum`, `jsonb_agg_object`, `percentile_cont` |
+| Arrays | `array`, `array_length`, `array_position`, `unnest` |
+| Date and time | `now`, `date_trunc`, `extract`, `make_timestamptz` |
+| Full-text search | `to_tsvector`, `plainto_tsquery`, `ts_rank` |
+| JSON/JSONB | `jsonb_build_object`, `json_get_text`, `jsonb_set` |
+| Math | `round`, `sqrt`, `pow`, `random_between` |
+| Scalar expressions | `case`, `coalesce`, `greatest`, `scalar_subquery` |
+| Text | `lower`, `substring`, `regexp_replace`, `trim` |
+| UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
+| Window functions | `window`, `row_number`, `rank`, `lag`, `preceding` |
 
 ## JSON Search
 

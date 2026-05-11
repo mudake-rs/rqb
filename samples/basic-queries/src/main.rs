@@ -73,8 +73,26 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(nested.params.len(), 3);
 
+    // `.or_filter(...)` and `.or_filter_option(...)` are useful for fallback
+    // search branches without building the OR tree by hand.
+    let fallback_email = Some("ops@example.com");
+    let disjunctive = select(users::table())
+        .columns((users::ID, users::EMAIL))
+        .filter(users::ACTIVE.eq(true))
+        .or_filter(users::STATUS.eq("invited"))
+        .or_filter_option(fallback_email, |email| users::EMAIL.eq(email))
+        .offset(5)
+        .build()?;
+
+    assert_eq!(
+        disjunctive.sql,
+        "SELECT \"id\", \"email\" FROM \"sample\".\"app_users\" WHERE (\"active\" = $1 OR \"status\" = $2 OR \"email\" = $3) OFFSET $4"
+    );
+    assert_eq!(disjunctive.params.len(), 4);
+
     println!("{}", simple.sql);
     println!("{}", composed.sql);
     println!("{}", nested.sql);
+    println!("{}", disjunctive.sql);
     Ok(())
 }

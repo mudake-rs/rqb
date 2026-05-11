@@ -1,6 +1,6 @@
-# rqb
+# rqb — Rust Query Builder
 
-sqlx-first Postgres query builder for Rust services.
+Rust Query Builder for Postgres, built on sqlx.
 
 rqb is not an ORM. It builds parameterized SQL from server-owned query shape and
 small field metadata. Typed Rust values go straight into sqlx bind arguments;
@@ -11,16 +11,32 @@ JSON search is a constrained adapter for filters, sort, limit, and offset.
 Start with [`samples`](samples). They are short, compile-checked, and show the
 actual API faster than prose.
 
+## Why rqb
+
+- You write Postgres, not generic SQL. rqb does not hide the dialect.
+- Query shape is owned by Rust code and validated before SQL is rendered.
+- Client JSON can filter, sort, limit, and offset only through exposed metadata;
+  it cannot define joins, raw SQL, CTEs, writes, or projections.
+- Values bind through sqlx Postgres arguments directly. Writes do not pass
+  through a serde JSON bridge.
+
 ## Status
 
 Pre-public, pre-1.0. APIs are still allowed to break when that makes the library
 simpler or clearer.
 
+The core builder targets Postgres 14+ for ordinary application queries. Some
+helpers expose newer server features such as `MERGE` branches from Postgres 17
+and UUIDv7 / old-new DML `RETURNING` from Postgres 18. The integration suite
+runs against Postgres 18.
+
 ## Install
+
+Until the crate is published on crates.io, depend on the git repository:
 
 ```toml
 [dependencies]
-rqb = "0.1"
+rqb = { git = "https://github.com/mudake-rs/rqb" }
 chrono = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -61,13 +77,16 @@ rqb::schema! {
 }
 
 let query = select(app_users::table())
-    .column(app_users::ID)
-    .column(app_users::EMAIL)
+    .columns((app_users::ID, app_users::EMAIL))
     .filter(app_users::STATUS.eq("active"))
     .order_asc(app_users::EMAIL)
     .limit(20)
     .build()?;
 ```
+
+Examples below use `schema::users::*` as a placeholder for whatever module your
+generated schema lives in. Samples in `samples/` use imports such as
+`use rqb_sample_schema::app_users as users;`.
 
 `select(table())` does not render `SELECT *`. It renders the known root fields
 from metadata, so SQL output stays explicit and stable.
@@ -101,9 +120,9 @@ Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
 with `?` placeholders. `??` renders a literal question mark.
 
 Streaming is exposed on `BuiltQuery`: build once, keep the built query alive,
-then call `fetch_stream_as::<T>()` or `fetch_stream_scalar::<T>()`. This keeps
-the non-stream builders simple and makes ownership explicit for HTTP response
-streams.
+then call `fetch_stream`, `fetch_stream_as::<T>()`, or
+`fetch_stream_scalar::<T>()`. This keeps the non-stream builders simple and
+makes ownership explicit for HTTP response streams.
 
 ## Server-Owned SQL Shape
 
@@ -144,7 +163,8 @@ Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
 comparisons for cursor pagination, `insert(...).from_select(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
-`merge_into(...).when_matched_if(...).update(...)`. REST-style pagination stays
+`merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated
+against Postgres `WHEN` clause rules before rendering. REST-style pagination stays
 in application code; the REST sample shows `limit` / `offset` plus
 `Select::count()` for a matching count query, cursor pagination, and streaming
 CSV responses from `BuiltQuery::fetch_stream_as` into axum `Body::from_stream`.
@@ -190,51 +210,7 @@ Common helper families in the flat catalog:
 | Scalar expressions | `case`, `coalesce`, `greatest`, `scalar_subquery` |
 | Text | `lower`, `substring`, `regexp_replace`, `trim` |
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
-| Window functions | `window`, `row_number`, `rank`, `lag`, `preceding` |
-
-## Raw Escape Hatches
-
-The typed DSL is not meant to mirror every PostgreSQL catalog function. For
-simple unlisted functions, use `function(...)`, `aggregate(...)`, or
-`function_source(...)`. For PostgreSQL syntax that does not fit those shapes,
-rqb exposes raw constructors at the exact AST slot:
-
-| Helper | Returns | Use for |
-| --- | --- | --- |
-| `raw(...)` | `RawStmt` | A full server-owned statement |
-| `raw_expr(...)` | `ValueExpr` | A projection, assignment value, or comparison side |
-| `raw_predicate(...)` | `BoolExpr` | A `WHERE`, `ON`, or `HAVING` predicate |
-| `raw_source(...)` | `Source` | A derived table or set-returning expression in `FROM` |
-
-Raw fragments use rqb `?` placeholders. They are validated for bind-count
-mismatches and numbered together with the surrounding typed query:
-
-```rust
-use rqb::prelude::*;
-
-let month = raw_expr(
-    "to_char(created_at, ?)",
-    [Param::typed("YYYY-MM".to_owned())],
-)
-.alias("month");
-
-let score_bucket = raw_expr(
-    "width_bucket(score, 0, 100, ?)",
-    [Param::typed(10_i32)],
-)
-.alias("score_bucket");
-
-let days = raw_source(
-    "generate_series(?::date, ?::date, ?::interval)",
-    "days",
-    vec![
-        Param::typed(start_date),
-        Param::typed(end_date),
-        Param::typed("1 day".to_owned()),
-    ],
-    rqb::field!("day": date => chrono::NaiveDate, ordered),
-);
-```
+| Window functions | `window`, `row_number`, `rank`, `lag`, `preceding`, `unbounded_preceding` |
 
 ## JSON Search
 
@@ -268,6 +244,51 @@ let query = select(schema::order_search_view::view())
 Server filters are preserved and combined with the request filter using `AND`.
 Only fields with `Meta::json(...)` are visible to JSON requests.
 
+## Raw Escape Hatches
+
+The typed DSL is not meant to mirror every PostgreSQL catalog function. For
+simple unlisted functions, use `function(...)`, `aggregate(...)`, or
+`function_source(...)`. For PostgreSQL syntax that does not fit those shapes,
+rqb exposes raw constructors at the exact AST slot:
+
+| Helper | Returns | Use for |
+| --- | --- | --- |
+| `raw(...)` | `RawStmt` | A full server-owned statement |
+| `raw_expr(...)` | `ValueExpr` | A projection, assignment value, or comparison side |
+| `raw_predicate(...)` | `BoolExpr` | A `WHERE`, `ON`, or `HAVING` predicate |
+| `raw_source(...)` | `Source` | A derived table or set-returning expression in `FROM` |
+
+Raw fragments use rqb `?` placeholders. Escape literal question marks as `??`,
+for example Postgres JSONB `?` operators. Raw fragments are validated for
+bind-count mismatches and numbered together with the surrounding typed query:
+
+```rust
+use rqb::prelude::*;
+
+let month = raw_expr(
+    "to_char(created_at, ?)",
+    [Param::typed("YYYY-MM".to_owned())],
+)
+.alias("month");
+
+let score_bucket = raw_expr(
+    "width_bucket(score, 0, 100, ?)",
+    [Param::typed(10_i32)],
+)
+.alias("score_bucket");
+
+let days = raw_source(
+    "generate_series(?::date, ?::date, ?::interval)",
+    "days",
+    vec![
+        Param::typed(start_date),
+        Param::typed(end_date),
+        Param::typed("1 day".to_owned()),
+    ],
+    rqb::field!("day": date => chrono::NaiveDate, ordered),
+);
+```
+
 ## Error Handling
 
 rqb returns one structured `Error` enum for validation failures, sqlx execution
@@ -276,50 +297,27 @@ variants, not parse database message strings.
 
 The usual HTTP mapping is:
 
-| Error group | Typical API status | Notes |
-| --- | --- | --- |
-| `NotFound` | `404 Not Found` | From `fetch_one` / `fetch_one_as` when no row exists. |
-| `UniqueViolation`, `ExclusionViolation` | `409 Conflict` | Use `constraint_name()` when logging or building domain-specific messages. |
-| `ForeignKeyViolation`, `RestrictViolation`, `NotNullViolation`, `CheckViolation` | `400 Bad Request` | Client supplied data that violates table constraints. |
-| `InvalidSearchField`, `SearchFieldNotExposed`, `InvalidSearchOperator`, `InvalidSearchValue`, `EmptySearchLogical`, `InvalidSort` | `400 Bad Request` | Client-controlled `SearchRequest` was invalid. |
-| `SerializationFailure`, `DeadlockDetected`, connection failures | `503 Service Unavailable` or retry response | `error.is_retryable()` returns true for these retryable cases. |
-| `QueryCanceled` | `504 Gateway Timeout` or request timeout | Depends on whether the cancel was server timeout or caller cancellation. |
-| `InsufficientPrivilege` | `403 Forbidden` | Usually deployment or role configuration. |
-| Builder-shape errors such as `DeleteWithoutFilter`, `RawBindMismatch`, `InvalidInsertShape`, `InvalidCteShape`, `InvalidRowShape` | usually `500 Internal Server Error` | These are normally server-owned query bugs unless they came directly from a JSON request. |
+- `NotFound` -> `404 Not Found`.
+- `UniqueViolation` / `ExclusionViolation` -> `409 Conflict`.
+  Use `constraint_name()` when logging or building domain-specific messages.
+- `ForeignKeyViolation`, `RestrictViolation`, `NotNullViolation`, and
+  `CheckViolation` -> `400 Bad Request`.
+- `InvalidSearchField`, `SearchFieldNotExposed`, `InvalidSearchOperator`,
+  `InvalidSearchValue`, `EmptySearchLogical`, and `InvalidSort` ->
+  `400 Bad Request`.
+- `SerializationFailure`, `DeadlockDetected`, and connection failures ->
+  `503 Service Unavailable` or a retry response. `error.is_retryable()` returns
+  true for these retryable cases.
+- `QueryCanceled` -> `504 Gateway Timeout` or request timeout, depending on
+  who canceled the query.
+- `InsufficientPrivilege` -> `403 Forbidden`.
+- Builder-shape errors such as `DeleteWithoutFilter`, `RawBindMismatch`,
+  `InvalidInsertShape`, `InvalidCteShape`, and `InvalidRowShape` are usually
+  `500 Internal Server Error` unless they came directly from a JSON request.
 
-Example boundary mapping:
-
-```rust
-use axum::http::StatusCode;
-
-fn status_for_error(error: &rqb::Error) -> StatusCode {
-    use rqb::Error;
-
-    match error {
-        Error::NotFound => StatusCode::NOT_FOUND,
-        Error::UniqueViolation { .. } | Error::ExclusionViolation { .. } => {
-            StatusCode::CONFLICT
-        }
-        Error::ForeignKeyViolation { .. }
-        | Error::RestrictViolation { .. }
-        | Error::NotNullViolation { .. }
-        | Error::CheckViolation { .. }
-        | Error::InvalidSearchField { .. }
-        | Error::SearchFieldNotExposed { .. }
-        | Error::InvalidSearchOperator { .. }
-        | Error::InvalidSearchValue { .. }
-        | Error::EmptySearchLogical { .. }
-        | Error::InvalidSort { .. } => StatusCode::BAD_REQUEST,
-        Error::QueryCanceled { .. } => StatusCode::GATEWAY_TIMEOUT,
-        Error::InsufficientPrivilege { .. } => StatusCode::FORBIDDEN,
-        error if error.is_retryable() => StatusCode::SERVICE_UNAVAILABLE,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
-    }
-}
-```
-
-`samples/rest-api/src/error.rs` shows the same pattern inside an axum
-`IntoResponse` implementation.
+See `samples/error-handling` for standalone matching examples and
+`samples/rest-api/src/error.rs` for the same pattern inside an axum
+`IntoResponse` boundary.
 
 ## Writes
 

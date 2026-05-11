@@ -34,6 +34,30 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(mixed.params.len(), 3);
     assert!(!mixed.cacheable);
 
+    // Raw expressions fit into projections and compose their bind placeholders
+    // with the rest of the surrounding typed query.
+    let computed = select(orders::table())
+        .column(orders::ID)
+        .item(
+            raw_expr(
+                "coalesce(metadata ->> ?, ?)",
+                [
+                    Param::typed("source".to_owned()),
+                    Param::typed("unknown".to_owned()),
+                ],
+            )
+            .alias("source"),
+        )
+        .filter(orders::ID.eq(Uuid::nil()))
+        .build()?;
+
+    assert_eq!(
+        computed.sql,
+        "SELECT \"id\", coalesce(metadata ->> $1, $2) AS \"source\" FROM \"sample\".\"orders\" WHERE \"id\" = $3"
+    );
+    assert_eq!(computed.params.len(), 3);
+    assert!(!computed.cacheable);
+
     assert!(matches!(
         raw("SELECT ?::int4").build(),
         Err(rqb::Error::RawBindMismatch {
@@ -44,5 +68,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     println!("{}", raw_stmt.sql);
     println!("{}", mixed.sql);
+    println!("{}", computed.sql);
     Ok(())
 }

@@ -133,6 +133,38 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "DELETE FROM \"sample\".\"invoices\" WHERE \"id\" = $1 RETURNING \"id\""
     );
     assert_eq!(raw_sql.sql, "SELECT $1::numeric + $2::numeric");
+
+    // Conditional assignment helpers keep optional write branches in the
+    // builder chain. Skipped branches do not leave dummy SQL behind.
+    let maybe_display_name = Some("Ada Lovelace");
+    let conditional_update_sql = update(users::table())
+        .set_if(true, users::STATUS.set("active"))
+        .set_option(maybe_display_name, |name| users::DISPLAY_NAME.set(name))
+        .filter(users::ID.eq(Uuid::nil()))
+        .build()?;
+
+    // For straightforward upserts, `do_update_excluded((...))` updates several
+    // columns from the proposed row without repeating `.set_excluded()`.
+    let excluded_upsert_sql = insert(users::table())
+        .set_many((
+            users::ID.set(Uuid::nil()),
+            users::EMAIL.set("ada@example.com"),
+            users::DISPLAY_NAME.set("Ada"),
+            users::STATUS.set("active"),
+        ))
+        .on_conflict(users::EMAIL)
+        .do_update_excluded((users::DISPLAY_NAME, users::STATUS))
+        .returning(users::ID)
+        .build()?;
+
+    assert_eq!(
+        conditional_update_sql.sql,
+        "UPDATE \"sample\".\"app_users\" SET \"status\" = $1, \"display_name\" = $2 WHERE \"id\" = $3"
+    );
+    assert_eq!(
+        excluded_upsert_sql.sql,
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = EXCLUDED.\"status\" RETURNING \"id\""
+    );
     assert_eq!(
         upsert_user_sql.sql,
         "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") WHERE \"active\" = $5 DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = $6 WHERE \"active\" = $7 RETURNING \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\""
@@ -147,6 +179,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("{}", insert_sql.sql);
+    println!("{}", conditional_update_sql.sql);
+    println!("{}", excluded_upsert_sql.sql);
     println!("{}", upsert_user_sql.sql);
     Ok(())
 }

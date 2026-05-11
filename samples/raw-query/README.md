@@ -8,8 +8,10 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 ## What This Shows
 
 - `raw("... ? ...").bind(value)` renders `$N` placeholders in order.
-- `raw_expr(...)` and `raw_predicate(...)` plug server-owned fragments into
-  typed projections and filters without manual struct literals.
+- `raw_expr(...)` plugs a server-owned expression into a typed projection
+  without a manual `ValueExpr::Raw` struct literal.
+- `raw_predicate(...)` plugs a server-owned predicate into a typed query without
+  a manual `BoolExpr::Raw` struct literal.
 - `??` renders a literal question mark without consuming a bind.
 - Raw sources still declare exposed fields so outer typed queries know what can
   be projected or filtered.

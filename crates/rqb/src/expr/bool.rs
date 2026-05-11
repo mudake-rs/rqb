@@ -36,12 +36,12 @@ pub fn not(expr: BoolExpr) -> BoolExpr {
 impl BoolExpr {
     /// Builds a logical `AND` group.
     pub fn and(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
-        Self::And(exprs.into_iter().collect())
+        Self::And(flatten_and(exprs))
     }
 
     /// Builds a logical `OR` group.
     pub fn or(exprs: impl IntoIterator<Item = BoolExpr>) -> Self {
-        Self::Or(exprs.into_iter().collect())
+        Self::Or(flatten_or(exprs))
     }
 
     /// Builds a logical `NOT`.
@@ -101,6 +101,28 @@ impl BoolExpr {
             None => next,
         }
     }
+}
+
+fn flatten_and(exprs: impl IntoIterator<Item = BoolExpr>) -> Vec<BoolExpr> {
+    let mut flattened = Vec::new();
+    for expr in exprs {
+        match expr {
+            BoolExpr::And(inner) if !inner.is_empty() => flattened.extend(inner),
+            other => flattened.push(other),
+        }
+    }
+    flattened
+}
+
+fn flatten_or(exprs: impl IntoIterator<Item = BoolExpr>) -> Vec<BoolExpr> {
+    let mut flattened = Vec::new();
+    for expr in exprs {
+        match expr {
+            BoolExpr::Or(inner) if !inner.is_empty() => flattened.extend(inner),
+            other => flattened.push(other),
+        }
+    }
+    flattened
 }
 
 impl ValueExpr {

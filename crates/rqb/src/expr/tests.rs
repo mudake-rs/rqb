@@ -145,11 +145,17 @@ fn and_or_free_functions_build_logical_groups() {
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
     const ID: Field<i32> = Field::new(&ID_META);
 
-    let and_group = crate::and([ID.gt(1), ID.lt(10)]);
-    let or_group = crate::or([ID.eq(1), ID.eq(2)]);
+    let and_group = crate::and([crate::and([ID.gt(1), ID.lt(10)]), ID.ne(5)]);
+    let or_group = crate::or([crate::or([ID.eq(1), ID.eq(2)]), ID.eq(3)]);
 
-    assert!(matches!(and_group, BoolExpr::And(ref exprs) if exprs.len() == 2));
-    assert!(matches!(or_group, BoolExpr::Or(ref exprs) if exprs.len() == 2));
+    assert!(matches!(and_group, BoolExpr::And(ref exprs) if exprs.len() == 3));
+    assert!(matches!(or_group, BoolExpr::Or(ref exprs) if exprs.len() == 3));
+
+    let invalid = crate::and([crate::and([]), ID.ne(5)]);
+    assert!(matches!(
+        invalid.validate().unwrap_err(),
+        crate::Error::EmptyLogical { logical } if logical == "and"
+    ));
 }
 
 #[test]

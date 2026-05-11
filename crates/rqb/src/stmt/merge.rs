@@ -113,7 +113,7 @@ impl Merge {
                     meta: *field,
                     qualifier: qualifier.clone(),
                 },
-                alias: None,
+                alias: field_alias(field),
             });
         });
         self.returning = returning;

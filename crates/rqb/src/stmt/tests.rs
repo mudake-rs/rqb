@@ -233,6 +233,32 @@ fn returning_all_replaces_existing_returning_fields() {
 }
 
 #[test]
+fn merge_returning_all_uses_target_qualifier_and_api_aliases() {
+    static NAME_META: Meta = Meta::new("displayName", "display_name", "text");
+    static RETURN_FIELDS: [&Meta; 2] = [&ID_META, &NAME_META];
+    let source = Source::Table {
+        name: "app_users",
+        alias: None,
+        fields: &RETURN_FIELDS,
+    };
+
+    let stmt = merge_into(
+        source.clone().alias("target"),
+        source.alias("incoming"),
+        ID.at("target").eq_field(ID.at("incoming")),
+    )
+    .when_matched()
+    .do_nothing()
+    .returning_all();
+    let built = stmt.build().unwrap();
+
+    assert_eq!(
+        built.sql,
+        "MERGE INTO \"app_users\" AS \"target\" USING \"app_users\" AS \"incoming\" ON \"target\".\"id\" = \"incoming\".\"id\" WHEN MATCHED THEN DO NOTHING RETURNING \"target\".\"id\", \"target\".\"display_name\" AS \"displayName\""
+    );
+}
+
+#[test]
 fn select_filter_and_having_chain_with_and_semantics() {
     let built = select(users())
         .column(ID)

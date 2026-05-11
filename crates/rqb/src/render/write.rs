@@ -72,7 +72,7 @@ impl Renderer {
     pub(super) fn render_merge(&mut self, merge: &Merge) -> Result<()> {
         self.render_ctes(&merge.ctes)?;
         self.sql.push_str("MERGE INTO ");
-        self.render_merge_target(&merge.target);
+        self.render_write_target(&merge.target);
         self.sql.push_str(" USING ");
         self.render_source(&merge.using)?;
         self.sql.push_str(" ON ");
@@ -82,25 +82,6 @@ impl Renderer {
         }
         self.render_returning(&merge.returning)?;
         Ok(())
-    }
-
-    pub(super) fn render_merge_target(&mut self, target: &Source) {
-        match target {
-            Source::Table { name, alias, .. } | Source::View { name, alias, .. } => {
-                write_quoted_qualified(&mut self.sql, name);
-                self.render_optional_alias(alias.as_deref());
-            }
-            Source::Cte { name, alias, .. } => {
-                write_quoted_ident(&mut self.sql, name);
-                self.render_optional_alias(alias.as_deref());
-            }
-            Source::Subquery { .. }
-            | Source::Raw { .. }
-            | Source::Function { .. }
-            | Source::Values { .. } => {
-                unreachable!("merge target validated as table")
-            }
-        }
     }
 
     pub(super) fn render_merge_action(&mut self, action: &MergeAction) -> Result<()> {

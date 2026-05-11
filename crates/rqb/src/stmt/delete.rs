@@ -2,8 +2,7 @@ use super::*;
 
 impl Delete {
     /// Creates a delete statement for a table or view source.
-    #[doc(hidden)]
-    pub fn from(target: impl Into<Source>) -> Self {
+    pub(crate) fn from(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
             using: Vec::new(),

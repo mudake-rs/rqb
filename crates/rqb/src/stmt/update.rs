@@ -2,8 +2,7 @@ use super::*;
 
 impl Update {
     /// Creates an update statement for a table or view source.
-    #[doc(hidden)]
-    pub fn table(target: impl Into<Source>) -> Self {
+    pub(crate) fn table(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
             assignments: Vec::new(),

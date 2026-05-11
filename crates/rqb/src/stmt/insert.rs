@@ -2,8 +2,7 @@ use super::*;
 
 impl Insert {
     /// Creates an insert statement for a table or view source.
-    #[doc(hidden)]
-    pub fn into(target: impl Into<Source>) -> Self {
+    pub(crate) fn into(target: impl Into<Source>) -> Self {
         Self {
             target: target.into(),
             columns: Vec::new(),

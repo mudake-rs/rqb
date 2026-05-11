@@ -2,8 +2,7 @@ use super::*;
 
 impl Select {
     /// Creates a select statement from a root source.
-    #[doc(hidden)]
-    pub fn from(source: impl Into<Source>) -> Self {
+    pub(crate) fn from(source: impl Into<Source>) -> Self {
         Self {
             ctes: Vec::new(),
             source: source.into(),

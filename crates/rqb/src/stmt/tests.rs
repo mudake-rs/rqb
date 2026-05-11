@@ -1,7 +1,7 @@
 use crate::{
-    BoolExpr, BoolOp, FetchClause, Field, Insert, Join, JoinKind, MergeAction, MergeWhen, Meta,
-    OpSet, OrderItem, Param, RawStmt, Select, SelectItem, SetOperator, SetQuery, Source, ValueExpr,
-    cte, cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
+    BoolExpr, BoolOp, FetchClause, Field, Join, JoinKind, MergeAction, MergeWhen, Meta, OpSet,
+    OrderItem, Param, RawStmt, Select, SelectItem, SetOperator, SetQuery, Source, ValueExpr, cte,
+    cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -199,7 +199,7 @@ fn returning_all_uses_source_fields_with_api_aliases() {
         fields: &RETURN_FIELDS,
     };
 
-    let stmt = Insert::into(source).set(ID.set(1)).returning_all();
+    let stmt = insert(source).set(ID.set(1)).returning_all();
     let built = stmt.build().unwrap();
 
     assert_eq!(
@@ -218,7 +218,7 @@ fn returning_all_replaces_existing_returning_fields() {
         fields: &RETURN_FIELDS,
     };
 
-    let stmt = Insert::into(source)
+    let stmt = insert(source)
         .set(ID.set(1))
         .returning(ID)
         .returning_all()

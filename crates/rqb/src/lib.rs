@@ -36,7 +36,9 @@
 //! traits, and structured errors that normal service modules use. Broad SQL
 //! helper names such as `lower`, `left`, `array`, `row`, and `replace` are
 //! available at the crate root for qualified calls, but are intentionally kept
-//! out of [`prelude`]. Import them from [`dsl`] when a module wants short names.
+//! out of [`prelude`]. The [`Result`] alias is also kept qualified as
+//! `rqb::Result` so application entry points can keep using their normal error
+//! type. Import SQL helpers from [`dsl`] when a module wants short names.
 //!
 //! ```rust,ignore
 //! use rqb::prelude::*;
@@ -298,7 +300,9 @@ pub mod dsl {
 /// Common imports for application query code.
 ///
 /// The prelude intentionally excludes broad SQL function names such as `lower`
-/// or `replace`; import those from [`dsl`] only where needed.
+/// or `replace`; import those from [`dsl`] only where needed. It also excludes
+/// [`Result`] so `use rqb::prelude::*` does not hijack application-level
+/// `Result` signatures.
 pub mod prelude {
     pub use crate::{
         Assignment, BindValue, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
@@ -310,7 +314,7 @@ pub mod prelude {
         JoinKind, JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction, MergeWhen,
         Meta, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
         OffsetWindowFunctionBuilder, OpSet, OperatorError, OrderDirection, OrderItem, Param,
-        Params, PgConnection, PgExecutor, PgFailure, PgPool, RawStmt, Result, RowLock, ScalarValue,
+        Params, PgConnection, PgExecutor, PgFailure, PgPool, RawStmt, RowLock, ScalarValue,
         SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, SearchValueError,
         Select, SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr,
         ValueOp, WindowFrame, WindowFrameKind, WindowFunction, WindowFunctionBuilder, WindowSpec,

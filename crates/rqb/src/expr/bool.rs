@@ -60,9 +60,11 @@ impl BoolExpr {
                 left.push(right);
                 Self::And(left)
             }
-            (left, Self::And(mut right)) if !right.is_empty() => {
-                right.insert(0, left);
-                Self::And(right)
+            (left, Self::And(right)) if !right.is_empty() => {
+                let mut exprs = Vec::with_capacity(right.len() + 1);
+                exprs.push(left);
+                exprs.extend(right);
+                Self::And(exprs)
             }
             (left, right) => Self::And(vec![left, right]),
         }
@@ -86,9 +88,11 @@ impl BoolExpr {
                 left.push(right);
                 Self::Or(left)
             }
-            (left, Self::Or(mut right)) if !right.is_empty() => {
-                right.insert(0, left);
-                Self::Or(right)
+            (left, Self::Or(right)) if !right.is_empty() => {
+                let mut exprs = Vec::with_capacity(right.len() + 1);
+                exprs.push(left);
+                exprs.extend(right);
+                Self::Or(exprs)
             }
             (left, right) => Self::Or(vec![left, right]),
         }
@@ -171,66 +175,44 @@ impl ValueExpr {
     }
 }
 
+macro_rules! boolean_field_tests {
+    () => {
+        /// Builds `field IS TRUE`.
+        pub fn is_true(self) -> BoolExpr {
+            self.expr().is_true()
+        }
+
+        /// Builds `field IS NOT TRUE`.
+        pub fn is_not_true(self) -> BoolExpr {
+            self.expr().is_not_true()
+        }
+
+        /// Builds `field IS FALSE`.
+        pub fn is_false(self) -> BoolExpr {
+            self.expr().is_false()
+        }
+
+        /// Builds `field IS NOT FALSE`.
+        pub fn is_not_false(self) -> BoolExpr {
+            self.expr().is_not_false()
+        }
+
+        /// Builds `field IS UNKNOWN`.
+        pub fn is_unknown(self) -> BoolExpr {
+            self.expr().is_unknown()
+        }
+
+        /// Builds `field IS NOT UNKNOWN`.
+        pub fn is_not_unknown(self) -> BoolExpr {
+            self.expr().is_not_unknown()
+        }
+    };
+}
+
 impl Field<bool> {
-    /// Builds `field IS TRUE`.
-    pub fn is_true(self) -> BoolExpr {
-        self.expr().is_true()
-    }
-
-    /// Builds `field IS NOT TRUE`.
-    pub fn is_not_true(self) -> BoolExpr {
-        self.expr().is_not_true()
-    }
-
-    /// Builds `field IS FALSE`.
-    pub fn is_false(self) -> BoolExpr {
-        self.expr().is_false()
-    }
-
-    /// Builds `field IS NOT FALSE`.
-    pub fn is_not_false(self) -> BoolExpr {
-        self.expr().is_not_false()
-    }
-
-    /// Builds `field IS UNKNOWN`.
-    pub fn is_unknown(self) -> BoolExpr {
-        self.expr().is_unknown()
-    }
-
-    /// Builds `field IS NOT UNKNOWN`.
-    pub fn is_not_unknown(self) -> BoolExpr {
-        self.expr().is_not_unknown()
-    }
+    boolean_field_tests!();
 }
 
 impl FieldRef<bool> {
-    /// Builds `field IS TRUE`.
-    pub fn is_true(self) -> BoolExpr {
-        self.expr().is_true()
-    }
-
-    /// Builds `field IS NOT TRUE`.
-    pub fn is_not_true(self) -> BoolExpr {
-        self.expr().is_not_true()
-    }
-
-    /// Builds `field IS FALSE`.
-    pub fn is_false(self) -> BoolExpr {
-        self.expr().is_false()
-    }
-
-    /// Builds `field IS NOT FALSE`.
-    pub fn is_not_false(self) -> BoolExpr {
-        self.expr().is_not_false()
-    }
-
-    /// Builds `field IS UNKNOWN`.
-    pub fn is_unknown(self) -> BoolExpr {
-        self.expr().is_unknown()
-    }
-
-    /// Builds `field IS NOT UNKNOWN`.
-    pub fn is_not_unknown(self) -> BoolExpr {
-        self.expr().is_not_unknown()
-    }
+    boolean_field_tests!();
 }

@@ -259,7 +259,7 @@ pub mod prelude {
 
 #[cfg(test)]
 mod tests {
-    use super::{Error, Field, Meta, OpSet};
+    use super::{Error, Field, Meta, OpSet, Result};
 
     #[test]
     fn facade_exports_typed_field_and_error() {
@@ -295,6 +295,20 @@ mod tests {
                 let _: &mut sqlx::PgConnection = conn;
                 Ok::<_, Error>(())
             });
+            drop(future);
+        }
+
+        let _ = assert_type_checks as fn(sqlx::PgPool);
+    }
+
+    #[test]
+    fn tx_macro_type_checks_with_expression_body() {
+        fn use_connection(_: &mut sqlx::PgConnection) -> Result<i32> {
+            Ok(123)
+        }
+
+        fn assert_type_checks(pool: sqlx::PgPool) {
+            let future = crate::tx!(&pool, |conn| use_connection(conn));
             drop(future);
         }
 

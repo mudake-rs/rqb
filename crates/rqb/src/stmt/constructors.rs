@@ -63,7 +63,7 @@ pub fn except_all(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
 impl Stmt {
     /// Creates a raw SQL statement variant.
     pub fn raw(sql: impl Into<String>) -> Self {
-        Self::Raw(RawStmt::new(sql))
+        Self::Raw(Box::new(RawStmt::new(sql)))
     }
 }
 
@@ -99,7 +99,7 @@ impl From<Delete> for Stmt {
 
 impl From<RawStmt> for Stmt {
     fn from(raw: RawStmt) -> Self {
-        Self::Raw(raw)
+        Self::Raw(Box::new(raw))
     }
 }
 

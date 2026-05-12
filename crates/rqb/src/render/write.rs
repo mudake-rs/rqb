@@ -4,23 +4,17 @@ impl Renderer {
     pub(super) fn render_insert(&mut self, insert: &Insert) -> Result<()> {
         self.sql.push_str("INSERT INTO ");
         self.render_write_target(&insert.target);
-        self.sql.push_str(" (");
+        self.sql.push(' ');
         if insert.source.is_some() {
-            for (idx, field) in insert.columns.iter().enumerate() {
-                if idx > 0 {
-                    self.sql.push_str(", ");
-                }
-                write_quoted_ident(&mut self.sql, field.db);
-            }
+            self.render_parenthesized_idents(insert.columns.iter().map(|field| field.db));
         } else {
-            for (idx, assignment) in insert.assignments.iter().enumerate() {
-                if idx > 0 {
-                    self.sql.push_str(", ");
-                }
-                write_quoted_ident(&mut self.sql, assignment.field.db);
-            }
+            self.render_parenthesized_idents(
+                insert
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.field.db),
+            );
         }
-        self.sql.push(')');
         if let Some(source) = &insert.source {
             self.sql.push(' ');
             self.render_select(source)?;
@@ -97,14 +91,11 @@ impl Renderer {
                 assignments,
             } => {
                 self.render_merge_when(*when, condition.as_deref())?;
-                self.sql.push_str(" THEN INSERT (");
-                for (idx, assignment) in assignments.iter().enumerate() {
-                    if idx > 0 {
-                        self.sql.push_str(", ");
-                    }
-                    write_quoted_ident(&mut self.sql, assignment.field.db);
-                }
-                self.sql.push_str(") VALUES (");
+                self.sql.push_str(" THEN INSERT ");
+                self.render_parenthesized_idents(
+                    assignments.iter().map(|assignment| assignment.field.db),
+                );
+                self.sql.push_str(" VALUES (");
                 for (idx, assignment) in assignments.iter().enumerate() {
                     if idx > 0 {
                         self.sql.push_str(", ");
@@ -200,14 +191,7 @@ impl Renderer {
         self.sql.push_str(" ON CONFLICT ");
         match &conflict.target {
             ConflictTarget::Columns { fields, predicate } => {
-                self.sql.push('(');
-                for (idx, field) in fields.iter().enumerate() {
-                    if idx > 0 {
-                        self.sql.push_str(", ");
-                    }
-                    write_quoted_ident(&mut self.sql, field.db);
-                }
-                self.sql.push(')');
+                self.render_parenthesized_idents(fields.iter().map(|field| field.db));
                 if let Some(predicate) = predicate {
                     self.sql.push_str(" WHERE ");
                     self.render_bool(predicate)?;
@@ -236,5 +220,16 @@ impl Renderer {
                 Ok(())
             }
         }
+    }
+
+    fn render_parenthesized_idents<'a>(&mut self, idents: impl IntoIterator<Item = &'a str>) {
+        self.sql.push('(');
+        for (idx, ident) in idents.into_iter().enumerate() {
+            if idx > 0 {
+                self.sql.push_str(", ");
+            }
+            write_quoted_ident(&mut self.sql, ident);
+        }
+        self.sql.push(')');
     }
 }

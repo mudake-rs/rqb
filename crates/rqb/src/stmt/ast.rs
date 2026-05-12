@@ -645,5 +645,5 @@ pub enum Stmt {
     /// Merge statement.
     Merge(Box<Merge>),
     /// Raw SQL statement.
-    Raw(RawStmt),
+    Raw(Box<RawStmt>),
 }

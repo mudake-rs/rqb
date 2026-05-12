@@ -1,10 +1,14 @@
-//! sqlx-first Postgres query builder for Rust services.
+//! SQL-first Postgres query builder for Rust services.
 //!
 //! rqb is not an ORM. Application code owns SQL shape, rqb validates the typed
 //! AST before rendering, and values are passed to Postgres as sqlx bind
 //! arguments.
 //!
-//! Start with generated schema modules:
+//! # Basic shape
+//!
+//! Start with schema metadata. In applications this usually comes from
+//! `rqb-cli` and the [`schema!`] macro; small examples can write the macro
+//! directly.
 //!
 //! ```rust,ignore
 //! rqb::schema! {
@@ -23,8 +27,60 @@
 //!     .build()?;
 //! ```
 //!
-//! Complex expression helpers live in [`dsl`]. Core builder types and generated
-//! schema support are exported from [`prelude`].
+//! `select(table())` projects known metadata fields, not `SELECT *`. Joined
+//! fields and computed expressions stay explicit.
+//!
+//! # Imports
+//!
+//! [`prelude`] contains the builders, core AST types, schema support, execution
+//! traits, and structured errors that normal service modules use. Broad SQL
+//! helper names such as `lower`, `left`, `array`, `row`, and `replace` are
+//! available at the crate root for qualified calls, but are intentionally kept
+//! out of [`prelude`]. Import them from [`dsl`] when a module wants short names.
+//!
+//! ```rust,ignore
+//! use rqb::prelude::*;
+//! use rqb::dsl::{count_all, date_trunc, sum};
+//! ```
+//!
+//! # Execution
+//!
+//! Statements build parameterized Postgres SQL and execute through sqlx
+//! executors:
+//!
+//! ```rust,ignore
+//! #[derive(sqlx::FromRow)]
+//! struct UserRow {
+//!     id: uuid::Uuid,
+//!     email: String,
+//! }
+//!
+//! let users = rqb::select(users::table())
+//!     .columns((users::ID, users::EMAIL))
+//!     .filter(users::ACTIVE.eq(true))
+//!     .fetch_all_as::<UserRow>(&pool)
+//!     .await?;
+//! ```
+//!
+//! Service functions can accept `impl PgExecutor<'e>` so the same query works
+//! with a pool, connection, or transaction. Pool-owned streaming helpers are
+//! available for HTTP response streams where the returned stream must own the
+//! built query.
+//!
+//! # JSON search boundary
+//!
+//! [`SearchRequest`] lets client JSON control filters, sort, limit, and offset
+//! only over fields exposed with [`Meta::json`]. It cannot define tables, joins,
+//! raw SQL, CTEs, writes, subqueries, or projections. Use
+//! [`Select::apply_search`] to preserve server filters, or
+//! [`Select::replace_search`] when the request is the complete search clause.
+//!
+//! # Writes and raw SQL
+//!
+//! Writes use field assignments or `#[derive(Insertable)]` /
+//! `#[derive(Changeset)]`; there is no serde JSON write bridge. Raw SQL is still
+//! server-owned and stays parameterized through [`raw`], [`raw_expr`],
+//! [`raw_predicate`], and [`raw_source`].
 
 mod built;
 mod error;
@@ -185,7 +241,15 @@ macro_rules! jsonb_agg_object {
 /// rqb result type.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// SQL expression helpers that are useful on demand but too broad for the prelude.
+/// SQL expression and source helpers that are useful on demand but too broad
+/// for the prelude.
+///
+/// Prefer importing only the helpers a query module needs:
+///
+/// ```rust,ignore
+/// use rqb::dsl::{count_all, date_trunc, sum};
+/// use rqb::prelude::*;
+/// ```
 pub mod dsl {
     pub use crate::{
         abs, age, aggregate, and, any_value, array, array_agg, array_agg_distinct, array_append,
@@ -221,13 +285,13 @@ pub mod dsl {
         regexp_split_to_array, regexp_split_to_table_source, repeat, replace, reverse, right,
         round, row, row_number, row_to_json, rows, rpad, rtrim, scalar_subquery, session_user,
         sign, similar_to, slice, split_part, sqrt, starts_with, stddev, stddev_pop, stddev_samp,
-        string_agg, string_to_array, strpos, subscript, substring, sum, timezone, to_char, to_date,
-        to_json, to_jsonb, to_number, to_timestamp, to_tsquery, to_tsvector, to_tsvector_config,
-        translate, trim, trim_array, true_, trunc, ts_headline, ts_match, ts_rank, ts_rank_cd,
-        unbounded_following, unbounded_preceding, unicode_assigned, unnest, unnest_source, upper,
-        upper_inc, upper_inf, uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7,
-        uuidv7_shift, values_source, var_pop, var_samp, variance, version, websearch_to_tsquery,
-        width_bucket, window,
+        string_agg, string_to_array, strpos, subscript, substring, sum, sum_distinct, timezone,
+        to_char, to_date, to_json, to_jsonb, to_number, to_timestamp, to_tsquery, to_tsvector,
+        to_tsvector_config, translate, trim, trim_array, true_, trunc, ts_headline, ts_match,
+        ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding, unicode_assigned, unnest,
+        unnest_source, upper, upper_inc, upper_inf, uuid_extract_timestamp, uuid_extract_version,
+        uuidv4, uuidv7, uuidv7_shift, values_source, var_pop, var_samp, variance, version,
+        websearch_to_tsquery, width_bucket, window,
     };
 }
 
@@ -318,18 +382,21 @@ mod tests {
     #[test]
     fn dsl_helpers_are_available_outside_the_core_prelude() {
         static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
-        static FIELDS: [&Meta; 1] = [&EMAIL_META];
+        static SPEND_META: Meta = Meta::new("spend", "spend", "int8").ops(OpSet::ordered());
+        static FIELDS: [&Meta; 2] = [&EMAIL_META, &SPEND_META];
         const EMAIL: Field<String> = Field::new(&EMAIL_META);
+        const SPEND: Field<i64> = Field::new(&SPEND_META);
 
         let built = crate::select(crate::table("public.users", &FIELDS))
             .item(crate::dsl::lower(EMAIL).alias("lower_email"))
+            .item(crate::dsl::sum_distinct(SPEND).alias("distinct_spend"))
             .filter(crate::dsl::and([EMAIL.ilike("%@example.com")]))
             .build()
             .unwrap();
 
         assert_eq!(
             built.sql,
-            "SELECT lower(\"email\") AS \"lower_email\" FROM \"public\".\"users\" WHERE (\"email\" ILIKE $1)"
+            "SELECT lower(\"email\") AS \"lower_email\", sum(DISTINCT \"spend\") AS \"distinct_spend\" FROM \"public\".\"users\" WHERE (\"email\" ILIKE $1)"
         );
     }
 

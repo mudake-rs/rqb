@@ -61,15 +61,33 @@ pub fn schema(input: TokenStream) -> TokenStream {
 ///
 /// Required container attribute:
 ///
-/// ```text
+/// ```rust,ignore
 /// #[rqb(table = crate::schema::users)]
 /// ```
+///
+/// By default, a Rust field named `display_name` maps to the generated schema
+/// constant `DISPLAY_NAME` in the configured table module.
 ///
 /// Field attributes:
 /// - `#[rqb(field = TABLE::FIELD)]` maps a Rust field to a differently named
 ///   generated schema field.
-/// - `#[rqb(skip)]` omits the field.
-/// - `#[rqb(skip_none)]` omits `None` for `Option<T>` fields.
+/// - `#[rqb(skip)]` omits a local-only field.
+/// - `#[rqb(skip_none)]` omits `None` for `Option<T>` fields. Without this
+///   attribute, an `Option<T>` field is still inserted as a value.
+///
+/// ```rust,ignore
+/// #[derive(rqb::Insertable)]
+/// #[rqb(table = crate::schema::users)]
+/// struct NewUser {
+///     #[rqb(field = crate::schema::users::EMAIL)]
+///     login_email: String,
+///     display_name: String,
+///     #[rqb(skip_none)]
+///     invited_by: Option<uuid::Uuid>,
+///     #[rqb(skip)]
+///     request_id: uuid::Uuid,
+/// }
+/// ```
 #[proc_macro_derive(Insertable, attributes(rqb))]
 pub fn derive_insertable(input: TokenStream) -> TokenStream {
     expand_write_record(
@@ -83,7 +101,22 @@ pub fn derive_insertable(input: TokenStream) -> TokenStream {
 /// Derives `rqb::Changeset` for patch DTOs.
 ///
 /// `Option<T>` fields naturally model PATCH semantics: `Some(value)` sets the
-/// column and `None` leaves it unchanged.
+/// column and `None` leaves it unchanged. Non-optional fields always produce an
+/// assignment.
+///
+/// The same `#[rqb(table = ...)]`, `#[rqb(field = ...)]`, and `#[rqb(skip)]`
+/// attributes supported by [`Insertable`] are available here.
+///
+/// ```rust,ignore
+/// #[derive(rqb::Changeset)]
+/// #[rqb(table = crate::schema::users)]
+/// struct PatchUser {
+///     display_name: Option<String>,
+///     active: Option<bool>,
+///     #[rqb(skip)]
+///     actor_id: uuid::Uuid,
+/// }
+/// ```
 #[proc_macro_derive(Changeset, attributes(rqb))]
 pub fn derive_changeset(input: TokenStream) -> TokenStream {
     expand_write_record(

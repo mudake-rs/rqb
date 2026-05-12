@@ -41,7 +41,8 @@ actual API faster than prose.
 
 ## Status
 
-Pre-public, pre-1.0. APIs are still allowed to break when that makes the library
+Pre-crates.io, pre-1.0. The repository is public, but the crates are not
+published yet. APIs are still allowed to break when that makes the library
 simpler or clearer.
 
 The core builder targets Postgres 14+ for ordinary application queries. Some
@@ -68,6 +69,12 @@ sqlx = { version = "0.8", features = [
     "runtime-tokio-rustls",
 ] }
 uuid = "1"
+```
+
+For reproducible application builds, pin a commit:
+
+```toml
+rqb = { git = "https://github.com/mudake-rs/rqb", rev = "<commit>" }
 ```
 
 `uuid`, `chrono`, JSON, numeric, ranges, arrays, and other Postgres values are
@@ -205,10 +212,11 @@ let order_size = case()
 Raw SQL, computed columns with custom aliases, and renamed projections can still
 use the explicit `cte(...)`, `subquery(...)`, or `raw_source(...)` constructors.
 
-SQL expression helpers live in `rqb::dsl`, outside the prelude, so broad names
-like `left`, `right`, `lower`, `replace`, `row`, and `array` do not pollute every
-service module. Use `rqb::dsl::*` for short query modules, or import the exact
-helpers a module needs:
+SQL expression helpers are available as qualified `rqb::...` calls, but they
+live outside the prelude so broad names like `left`, `right`, `lower`,
+`replace`, `row`, and `array` do not pollute every service module. Use
+`rqb::dsl::*` for short query modules, or import the exact helpers a module
+needs:
 
 ```rust
 use rqb::dsl::{coalesce, count_all, date_trunc, sum};
@@ -264,6 +272,20 @@ let query = select(schema::order_search_view::view())
 
 Server filters are preserved and combined with the request filter using `AND`.
 Only fields with `Meta::json(...)` are visible to JSON requests.
+
+Search failures are ordinary `rqb::Error` variants, so API boundaries can return
+stable client errors without parsing strings:
+
+| Error | Usual HTTP shape |
+| --- | --- |
+| `InvalidSearchField` | `400`, unknown field |
+| `SearchFieldNotExposed` | `400`, field exists but is not exposed to JSON search |
+| `InvalidSearchOperator` | `400`, operator is not allowed for that field |
+| `InvalidSearchValue` | `400`, JSON value has the wrong shape for the field kind |
+| `InvalidSort` | `400`, field is visible but not sortable |
+| `EmptySearchLogical` | `400`, `and` / `or` group is empty |
+
+See `samples/json-search` for exact payloads and error mapping.
 
 ## Raw Escape Hatches
 
@@ -438,8 +460,13 @@ The derive maps Rust fields to generated schema fields. It does not serialize
 the whole DTO through `serde_json`, so database types stay on the sqlx encode
 path.
 
-`#[derive(rqb::Changeset)]` maps `Option<T>` fields as patch fields: `Some`
-sets the column, `None` leaves it unchanged.
+Derives map `snake_case` Rust fields to generated `SHOUTY_SNAKE_CASE` schema
+constants by default. Use `#[rqb(field = schema::table::FIELD)]` when a DTO field
+name differs from the database column, and `#[rqb(skip)]` for local-only fields.
+For `Insertable`, `#[rqb(skip_none)]` skips `None` on an `Option<T>` field;
+otherwise the `Option<T>` itself is inserted as the value. `Changeset` always
+treats `Option<T>` as patch semantics: `Some` sets the column, `None` leaves it
+unchanged.
 
 Upserts can update several columns from `EXCLUDED` without repeating
 `set_excluded()` per field:
@@ -490,7 +517,17 @@ setup, or transaction ownership that crosses helper boundaries.
 `rqb-cli` introspects Postgres and writes a compact `rqb::schema!` module. The
 macro expands to `Meta`, `Field<T>`, `FIELDS`, and `table()` / `view()` items.
 
-Install the CLI with `cargo install rqb-cli`; the installed binary is `rqb`.
+Install the CLI from GitHub until the crate is published on crates.io; the
+installed binary is `rqb`.
+
+```bash
+cargo install --git https://github.com/mudake-rs/rqb rqb-cli
+```
+
+The package name is `rqb-cli`; the binary name is `rqb`.
+
+After crates.io publish, this becomes `cargo install rqb-cli`.
+
 Inside this workspace, run the same binary through `cargo run -p rqb-cli --`.
 
 ```bash

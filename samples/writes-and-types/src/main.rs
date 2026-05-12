@@ -15,10 +15,16 @@ use uuid::Uuid;
 #[derive(Insertable)]
 #[rqb(table = invoices)]
 struct NewInvoice {
-    customer_id: Uuid,
+    #[rqb(field = invoices::CUSTOMER_ID)]
+    customer: Uuid,
     amount: BigDecimal,
     due_on: NaiveDate,
     metadata: Value,
+    #[rqb(skip_none)]
+    paid_at: Option<DateTime<Utc>>,
+    #[allow(dead_code)]
+    #[rqb(skip)]
+    client_note: Option<String>,
 }
 
 #[derive(Changeset)]
@@ -35,10 +41,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let due_on = NaiveDate::from_ymd_opt(2026, 5, 1).ok_or("invalid sample due date")?;
     let paid_at = Utc::now();
     let new_invoice = NewInvoice {
-        customer_id,
+        customer: customer_id,
         amount: amount.clone(),
         due_on,
         metadata: json!({ "source": "sample" }),
+        paid_at: None,
+        client_note: Some("local-only note".to_owned()),
     };
     let mark_paid = InvoiceChanges {
         paid_at: Some(paid_at),

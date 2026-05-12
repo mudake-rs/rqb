@@ -2,6 +2,22 @@ use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
 /// Client-supplied filtering, sorting, and pagination for a server-owned query.
+///
+/// A request is compiled against the source metadata of a trusted [`Select`].
+/// Fields must exist in that source and be exposed with [`Meta::json`]. Invalid
+/// client input returns structured search errors such as
+/// [`Error::InvalidSearchField`], [`Error::SearchFieldNotExposed`],
+/// [`Error::InvalidSearchOperator`], [`Error::InvalidSearchValue`],
+/// [`Error::InvalidSort`], and [`Error::EmptySearchLogical`].
+///
+/// [`Error::EmptySearchLogical`]: crate::Error::EmptySearchLogical
+/// [`Error::InvalidSearchField`]: crate::Error::InvalidSearchField
+/// [`Error::InvalidSearchOperator`]: crate::Error::InvalidSearchOperator
+/// [`Error::InvalidSearchValue`]: crate::Error::InvalidSearchValue
+/// [`Error::InvalidSort`]: crate::Error::InvalidSort
+/// [`Error::SearchFieldNotExposed`]: crate::Error::SearchFieldNotExposed
+/// [`Meta::json`]: crate::Meta::json
+/// [`Select`]: crate::Select
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchRequest {

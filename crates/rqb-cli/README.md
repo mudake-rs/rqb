@@ -7,6 +7,16 @@ The crate installs a binary named `rqb`.
 
 ## Install
 
+Until crates.io publish, install from GitHub:
+
+```bash
+cargo install --git https://github.com/mudake-rs/rqb rqb-cli
+```
+
+The package name is `rqb-cli`; the installed binary is `rqb`.
+
+After crates.io publish:
+
 ```bash
 cargo install rqb-cli
 ```
@@ -35,7 +45,8 @@ DATABASE_URL=postgres://user:pass@localhost:5432/dbname \
   rqb generate --schema public --out src/schema.rs
 ```
 
-Limit output to selected relations with repeated `--table` flags:
+Limit output to selected tables, views, or materialized views with repeated
+`--table` flags:
 
 ```bash
 rqb generate \

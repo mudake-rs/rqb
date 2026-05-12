@@ -12,6 +12,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - Multiple sort keys are applied in client order after the server-owned filter.
 - Unknown fields, hidden fields, bad operators, and bad JSON value shapes fail
   before rendering.
+- Search validation errors can be mapped into stable API error payloads without
+  parsing display strings.
 - Client input can control filter/sort/page, but not joins, projection, raw SQL,
   or subqueries.
 - The sample asserts exact rendered SQL and parameter count without a database.

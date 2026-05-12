@@ -3,6 +3,14 @@ use rqb_sample_schema::order_search_view as orders;
 use serde_json::json;
 use uuid::Uuid;
 
+#[derive(Debug, PartialEq, Eq)]
+struct SearchApiError {
+    status: u16,
+    code: &'static str,
+    field: Option<String>,
+    detail: String,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let current_org = Uuid::nil();
     let merged_request: SearchRequest = serde_json::from_value(json!({
@@ -53,16 +61,144 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(replaced.params.len(), 2);
 
-    let invalid_request: SearchRequest = serde_json::from_value(json!({
+    let invalid_field: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "unknown", "operator": "equals", "value": "x" }
     }))?;
     // Unknown or non-json-exposed fields fail before SQL is rendered.
-    assert!(matches!(
-        select(orders::view()).apply_search(invalid_request),
-        Err(rqb::Error::InvalidSearchField { field }) if field == "unknown"
-    ));
+    assert_eq!(
+        search_api_error(search_orders(current_org, invalid_field).unwrap_err()),
+        SearchApiError {
+            status: 400,
+            code: "unknown_search_field",
+            field: Some("unknown".to_owned()),
+            detail: "unknown search field".to_owned(),
+        }
+    );
+
+    let hidden_field: SearchRequest = serde_json::from_value(json!({
+        "filter": { "field": "tags", "operator": "equals", "value": ["priority"] }
+    }))?;
+    assert_eq!(
+        search_api_error(search_orders(current_org, hidden_field).unwrap_err()),
+        SearchApiError {
+            status: 400,
+            code: "search_field_not_exposed",
+            field: Some("tags".to_owned()),
+            detail: "field is not exposed to JSON search".to_owned(),
+        }
+    );
+
+    let bad_operator: SearchRequest = serde_json::from_value(json!({
+        "filter": { "field": "total_cents", "operator": "contains", "value": "50" }
+    }))?;
+    assert_eq!(
+        search_api_error(search_orders(current_org, bad_operator).unwrap_err()),
+        SearchApiError {
+            status: 400,
+            code: "invalid_search_operator",
+            field: Some("total_cents".to_owned()),
+            detail: "operator contains is not allowed for this field".to_owned(),
+        }
+    );
+
+    let bad_value: SearchRequest = serde_json::from_value(json!({
+        "filter": { "field": "total_cents", "operator": "gte", "value": "many" }
+    }))?;
+    assert_eq!(
+        search_api_error(search_orders(current_org, bad_value).unwrap_err()),
+        SearchApiError {
+            status: 400,
+            code: "invalid_search_value",
+            field: Some("total_cents".to_owned()),
+            detail: "expected 64-bit integer".to_owned(),
+        }
+    );
+
+    let bad_sort: SearchRequest = serde_json::from_value(json!({
+        "sort": [{ "field": "metadata", "dir": "asc" }]
+    }))?;
+    assert_eq!(
+        search_api_error(search_orders(current_org, bad_sort).unwrap_err()),
+        SearchApiError {
+            status: 400,
+            code: "invalid_sort",
+            field: Some("metadata".to_owned()),
+            detail: "field is not sortable".to_owned(),
+        }
+    );
+
+    let empty_logical: SearchRequest = serde_json::from_value(json!({
+        "filter": { "and": [] }
+    }))?;
+    assert_eq!(
+        search_api_error(search_orders(current_org, empty_logical).unwrap_err()),
+        SearchApiError {
+            status: 400,
+            code: "empty_search_logical",
+            field: None,
+            detail: "and group must contain at least one filter".to_owned(),
+        }
+    );
 
     println!("{}", merged.sql);
     println!("{}", replaced.sql);
     Ok(())
+}
+
+fn search_orders(org_id: Uuid, request: SearchRequest) -> rqb::Result<BuiltQuery> {
+    select(orders::view())
+        .columns((orders::ID, orders::STATUS, orders::TOTAL_CENTS))
+        .filter(orders::ORGANIZATION_ID.eq(org_id))
+        .apply_search(request)?
+        .build()
+}
+
+fn search_api_error(error: rqb::Error) -> SearchApiError {
+    match error {
+        rqb::Error::InvalidSearchField { field } => SearchApiError {
+            status: 400,
+            code: "unknown_search_field",
+            field: Some(field),
+            detail: "unknown search field".to_owned(),
+        },
+        rqb::Error::SearchFieldNotExposed { field } => SearchApiError {
+            status: 400,
+            code: "search_field_not_exposed",
+            field: Some(field),
+            detail: "field is not exposed to JSON search".to_owned(),
+        },
+        rqb::Error::InvalidSearchOperator(err) => SearchApiError {
+            status: 400,
+            code: "invalid_search_operator",
+            detail: format!(
+                "operator {} is not allowed for this field",
+                err.operator
+            ),
+            field: Some(err.field),
+        },
+        rqb::Error::InvalidSearchValue(err) => SearchApiError {
+            status: 400,
+            code: "invalid_search_value",
+            detail: format!("expected {}", err.expected),
+            field: Some(err.field),
+        },
+        rqb::Error::InvalidSort { field } => SearchApiError {
+            status: 400,
+            code: "invalid_sort",
+            field: Some(field),
+            detail: "field is not sortable".to_owned(),
+        },
+        rqb::Error::EmptySearchLogical { logical } => SearchApiError {
+            status: 400,
+            code: "empty_search_logical",
+            field: None,
+            detail: format!("{logical} group must contain at least one filter"),
+        },
+        other => SearchApiError {
+            status: 500,
+            code: "query_shape_error",
+            field: None,
+            detail: other.to_string(),
+        },
+    }
 }

@@ -33,7 +33,10 @@ enum Command {
         database_url: String,
         #[arg(long, default_value = "public", help = "Postgres schema to introspect")]
         schema: String,
-        #[arg(long, help = "Limit generation to a table or view; may be repeated")]
+        #[arg(
+            long,
+            help = "Limit generation to a table, view, or materialized view; may be repeated"
+        )]
         table: Vec<String>,
         #[arg(
             long,

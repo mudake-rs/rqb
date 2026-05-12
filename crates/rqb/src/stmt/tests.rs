@@ -306,6 +306,19 @@ fn insert_from_select_requires_target_columns() {
 }
 
 #[test]
+fn insert_from_select_all_requires_source_fields() {
+    let source = crate::raw_source("SELECT 1 AS id", "incoming", Vec::<Param>::new(), ());
+    let insert = insert(users()).from_select_all(source);
+
+    let err = insert.validate().unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::EmptyColumns { statement } if statement == "insert-select"
+    ));
+}
+
+#[test]
 fn insert_from_select_rejects_values_assignments() {
     let insert = insert(users())
         .column(ID)

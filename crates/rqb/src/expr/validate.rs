@@ -203,6 +203,7 @@ impl ValueExpr {
             | Self::Excluded(_)
             | Self::Param(_)
             | Self::Null
+            | Self::SqlLiteral(_)
             | Self::Keyword(_) => Ok(()),
         }
     }

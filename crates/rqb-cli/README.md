@@ -94,7 +94,9 @@ rqb::schema! {
 
 Known sqlx-supported Postgres types generate typed `Field<T>` constants.
 Unknown or extension types stay raw-only metadata, which can still be used in
-server-owned SQL expressions.
+server-owned SQL expressions through `*_META.expr()` or `*_META.at("alias")`.
+This keeps extension columns available for server-owned operators without
+pretending they have a portable Rust `Field<T>` mapping.
 
 The generator annotates schema facts that matter at the `sqlx::FromRow` or
 write boundary:

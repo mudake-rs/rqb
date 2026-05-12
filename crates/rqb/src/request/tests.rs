@@ -180,15 +180,14 @@ fn search_request_supports_null_in_between_and_like() {
 }
 
 #[test]
-fn replace_search_replaces_existing_filter() {
+fn fresh_select_apply_search_uses_request_as_complete_search_clause() {
     let request: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "status", "operator": "equals", "value": "paid" }
     }))
     .unwrap();
 
     let built = crate::select(source())
-        .filter(ID.gt(10))
-        .replace_search(request)
+        .apply_search(request)
         .unwrap()
         .build()
         .unwrap();

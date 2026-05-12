@@ -7,12 +7,24 @@ use rqb_sample_schema::order_items as items;
 use rqb_sample_schema::orders;
 use uuid::Uuid;
 
+#[allow(dead_code)]
+struct CommentNode {
+    id: Uuid,
+    parent_id: Option<Uuid>,
+    body: String,
+    depth: i32,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let u = users::alias("u");
     let o = orders::alias("o");
     let item_count = rqb::field!("item_count": int8 => i64, ordered);
     let n = rqb::field!("n": int4 => i32, ordered);
     let tag = rqb::field!("tag": text => String, equality);
+    let comment_id = rqb::field!("id": uuid => Uuid, equality);
+    let comment_parent_id = rqb::field!("parent_id": uuid => Uuid, equality);
+    let comment_body = rqb::field!("body": text => String);
+    let comment_depth = rqb::field!("depth": int4 => i32, ordered);
 
     // Subqueries are still server-owned query shapes. JSON requests cannot
     // introduce EXISTS, IN-subquery, joins, or raw SQL.
@@ -35,8 +47,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(paid_users.params.len(), 1);
 
-    // Recursive CTEs often use raw SQL for the recursive term. Bind counts are
-    // still validated and CTE field metadata defines what the outer query sees.
+    // Recursive CTEs often use raw SQL for the recursive body. The `recursive()`
+    // marker owns the `WITH RECURSIVE` wrapper; the raw body starts at SELECT.
     let nums = cte(
         "nums",
         raw("SELECT ?::int4 AS n UNION ALL SELECT n + 1 FROM nums WHERE n < ?")
@@ -52,6 +64,46 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "WITH RECURSIVE \"nums\" (\"n\") AS (SELECT $1::int4 AS n UNION ALL SELECT n + 1 FROM nums WHERE n < $2) SELECT \"n\" FROM \"nums\""
     );
     assert_eq!(recursive.params.len(), 2);
+
+    // A tree walk follows the same shape. The database `parent_id` column is
+    // nullable, so the row type uses `Option<Uuid>` even though field metadata
+    // models the SQL type itself.
+    let root_comment = Uuid::nil();
+    let comment_walk = cte(
+        "comment_walk",
+        raw(
+            "SELECT id, parent_id, body, ?::int4 AS depth \
+             FROM comments WHERE id = ?::uuid \
+             UNION ALL \
+             SELECT c.id, c.parent_id, c.body, w.depth + 1 \
+             FROM comments c JOIN comment_walk w ON c.parent_id = w.id",
+        )
+        .bind(0_i32)
+        .bind(root_comment),
+        (
+            comment_id,
+            comment_parent_id,
+            comment_body,
+            comment_depth,
+        ),
+    )
+    .recursive();
+    let comment_tree = select(comment_walk.source())
+        .with(comment_walk)
+        .columns((
+            comment_id,
+            comment_parent_id,
+            comment_body,
+            comment_depth,
+        ))
+        .order_asc(comment_depth)
+        .build()?;
+
+    assert_eq!(
+        comment_tree.sql,
+        "WITH RECURSIVE \"comment_walk\" (\"id\", \"parent_id\", \"body\", \"depth\") AS (SELECT id, parent_id, body, $1::int4 AS depth FROM comments WHERE id = $2::uuid UNION ALL SELECT c.id, c.parent_id, c.body, w.depth + 1 FROM comments c JOIN comment_walk w ON c.parent_id = w.id) SELECT \"id\", \"parent_id\", \"body\", \"depth\" FROM \"comment_walk\" ORDER BY \"depth\" ASC"
+    );
+    assert_eq!(comment_tree.params.len(), 2);
 
     // Common set-returning functions can be used as typed sources without
     // writing a raw `FROM generate_series(...)` fragment.
@@ -164,6 +216,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     println!("{}", paid_users.sql);
     println!("{}", recursive.sql);
+    println!("{}", comment_tree.sql);
     println!("{}", generated_series.sql);
     println!("{}", unnested_tags.sql);
     println!("{}", lateral.sql);

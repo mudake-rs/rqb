@@ -9,8 +9,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 ## What This Shows
 
 - Unknown extension types still appear in default projection metadata.
-- Raw-only metadata can become a value expression wherever `Into<ValueExpr>` is
-  accepted.
+- Raw-only metadata can become a value expression with `*_META.expr()` or
+  `*_META.at("alias")` wherever `Into<ValueExpr>` is accepted.
 - Custom operators such as pgvector distance stay parameterized through
   `ValueExpr::op(...)`.
 - Raw-only `tsvector` metadata can participate in full-text `@@` predicates,

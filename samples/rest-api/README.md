@@ -13,11 +13,13 @@ service code:
   leaves a column untouched.
 - `GET /orders` uses seek/cursor pagination with Postgres row comparison:
   `row((created_at, id)).lt((cursor_created_at, cursor_id))`.
+- `GET /orders/filter` parses raw query-string values into typed filters at the
+  HTTP boundary before calling the database service.
 - `POST /orders/{id}/transition` locks the order row, checks a state machine,
   updates it, and writes an audit event in one `tx!` transaction.
 - `POST /products/upsert` uses `Insertable` plus
   `do_update_excluded((name, price_cents, attributes, tags))`.
-- `GET /reports/orders-by-day` shows aggregate report code with `date_trunc`,
+- `GET /reports/orders-by-day` shows aggregate report code with `date_trunc_part`,
   `GROUP BY`, `sum`, and `count_all`.
 - `GET /orders/export.csv` streams Postgres rows into HTTP response chunks with
   `fetch_stream_pool_as` and `Body::from_stream`.
@@ -33,6 +35,9 @@ service code:
   shape and the database write shape match. Split them only when they diverge.
 - REST pagination is application code: `limit`, `offset`, and `Select::count()`
   for page-style endpoints; cursor pagination for large ordered lists.
+- Query-string parsing stays in axum/serde structs before service calls; bad
+  `min_total`, `from_date`, or `limit` values become field-specific `400`
+  errors before rqb sees typed Rust values.
 - `ApiError` maps structured rqb errors to HTTP responses without parsing
   database message strings.
 - Generated alias handles and typed fields keep joins and writes readable

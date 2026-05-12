@@ -86,6 +86,31 @@ impl Insert {
         self
     }
 
+    /// Uses every exposed field from `source` as both target columns and the
+    /// `INSERT ... SELECT` projection.
+    ///
+    /// This is the compact path for bulk loads from `values_source(...)` or
+    /// staging sources whose exposed metadata already matches the insert target.
+    pub fn from_select_all(mut self, source: impl Into<Source>) -> Self {
+        let source = source.into();
+        let qualifier = source.explicit_alias().map(str::to_owned);
+        let mut projection = Vec::new();
+        source.for_each_field(|field| {
+            push_column(&mut self.columns, *field);
+            projection.push(SelectItem {
+                expr: ValueExpr::Field {
+                    meta: *field,
+                    qualifier: qualifier.clone(),
+                },
+                alias: None,
+            });
+        });
+        let mut select = Select::from(source);
+        select.projection = projection;
+        self.source = Some(Box::new(select));
+        self
+    }
+
     /// Starts an `ON CONFLICT (columns...)` clause.
     pub fn on_conflict(self, fields: impl ConflictFields) -> ColumnConflictBuilder {
         let mut target_fields = Vec::with_capacity(fields.conflict_field_count());

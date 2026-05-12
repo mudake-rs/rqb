@@ -133,6 +133,17 @@ impl<T> Field<T> {
         self.set_expr(ValueExpr::Null)
     }
 
+    /// Creates an assignment from the same field exposed by another source alias.
+    ///
+    /// This keeps sync-style updates and `MERGE` actions from repeating both
+    /// sides of `target.field = incoming.field`.
+    pub fn set_from(self, alias: impl Into<String>) -> crate::Assignment {
+        crate::Assignment {
+            field: *self.meta,
+            value: self.at(alias).expr(),
+        }
+    }
+
     /// Creates an assignment from `EXCLUDED.field`.
     #[inline]
     pub fn set_excluded(self) -> crate::Assignment {

@@ -20,6 +20,10 @@ impl Renderer {
                 self.sql.push_str("NULL");
                 Ok(())
             }
+            ValueExpr::SqlLiteral(value) => {
+                self.render_sql_literal(value);
+                Ok(())
+            }
             ValueExpr::Keyword(keyword) => {
                 self.sql.push_str(keyword);
                 Ok(())
@@ -214,6 +218,17 @@ impl Renderer {
         }
         self.sql.push(')');
         Ok(())
+    }
+
+    fn render_sql_literal(&mut self, value: &str) {
+        self.sql.push('\'');
+        for ch in value.chars() {
+            if ch == '\'' {
+                self.sql.push('\'');
+            }
+            self.sql.push(ch);
+        }
+        self.sql.push('\'');
     }
 
     pub(super) fn render_aggregate(

@@ -77,6 +77,25 @@ pub async fn list_after<'e>(
     })
 }
 
+pub async fn filter<'e>(
+    db: impl PgExecutor<'e>,
+    user_id: Uuid,
+    status: Option<String>,
+    min_total: Option<i64>,
+    from_date: Option<chrono::DateTime<chrono::Utc>>,
+    limit: u32,
+) -> rqb::Result<Vec<OrderRow>> {
+    select(orders::table())
+        .filter(orders::USER_ID.eq(user_id))
+        .filter_option(status, |status| orders::STATUS.eq(status))
+        .filter_option(min_total, |total| orders::TOTAL_CENTS.gte(total))
+        .filter_option(from_date, |from| orders::CREATED_AT.gte(from))
+        .order_desc(orders::CREATED_AT)
+        .limit(limit.clamp(1, 100))
+        .fetch_all_as::<OrderRow>(db)
+        .await
+}
+
 pub async fn cancel_open_for_user<'e>(
     db: impl PgExecutor<'e>,
     user_id: Uuid,
@@ -181,7 +200,9 @@ pub fn export_csv_stream(
         yield String::from("id,user_id,status,total_cents,created_at\n");
 
         // The rqb stream owns the pool handle and built query, so axum can keep
-        // pulling chunks after the handler returns response headers.
+        // pulling chunks after the handler returns response headers. This sample
+        // yields one CSV line per row; production exports may batch lines into
+        // larger chunks to reduce response overhead.
         while let Some(row) = rows.try_next().await? {
             yield format!(
                 "{},{},{},{},{}\n",

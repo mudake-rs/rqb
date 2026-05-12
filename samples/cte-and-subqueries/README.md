@@ -12,7 +12,10 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   accept fields directly instead of manual `*field.meta` vectors.
 - `scalar_subquery(...)` turns a server-owned select into a value expression for
   comparisons.
-- Recursive CTEs can use raw SQL while still validating bind counts.
+- Recursive CTEs use `cte(...).recursive()` for the `WITH RECURSIVE` wrapper;
+  raw recursive bodies should not include `WITH RECURSIVE` themselves.
+- Tree traversal row structs use `Option<T>` for nullable parent links while
+  field metadata keeps the underlying SQL type.
 - Common set-returning functions such as `generate_series` and `unnest` can be
   exposed as typed sources without raw SQL.
 - Lateral joins and raw sources declare exposed fields for outer typed queries.

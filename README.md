@@ -148,7 +148,8 @@ For HTTP response streams, pass a cloned pool handle into the owned streaming
 helpers: `fetch_stream_pool`, `fetch_stream_pool_as::<T>()`, or
 `fetch_stream_pool_scalar::<T>()`. The returned stream owns the built query and
 pool handle. `BuiltQuery::fetch_stream*` remains available when you build once
-and keep the built query alive yourself.
+and keep the built query alive yourself. HTTP handlers should still choose their
+own chunking policy; rqb yields rows, application code formats response chunks.
 
 ## Server-Owned SQL Shape
 
@@ -195,6 +196,11 @@ in application code; the REST sample shows `limit` / `offset` plus
 `Select::count()` for a matching count query, cursor pagination, and
 pool-owned streaming CSV responses into axum `Body::from_stream`.
 
+Postgres `MERGE ... RETURNING` reports rows affected by each executed action,
+including rows deleted by `WHEN NOT MATCHED BY SOURCE THEN DELETE`. If an API
+needs the final table state after that branch, run a follow-up `SELECT` with the
+same server-owned scope.
+
 For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
 and `Select::try_into_source` infer it from explicit field projections.
 Computed columns can use `rqb::field!`:
@@ -219,7 +225,7 @@ live outside the prelude so broad names like `left`, `right`, `lower`,
 needs:
 
 ```rust
-use rqb::dsl::{coalesce, count_all, date_trunc, sum};
+use rqb::dsl::{coalesce, count_all, date_trunc_part, sum, DatePart};
 use rqb::prelude::*;
 ```
 
@@ -230,16 +236,26 @@ Common helper families in the flat catalog:
 | Boolean predicates | `and`, `or`, `not`, `exists`, `true_`, `false_` |
 | Aggregates | `count_all`, `sum`, `sum_distinct`, `avg_distinct`, `jsonb_agg_object`, `percentile_cont` |
 | Arrays | `array`, `array_length`, `array_position`, `trim_array`, `unnest` |
-| Date and time | `now`, `date_trunc`, `date_bin`, `to_char`, `isfinite` |
+| Date and time | `now`, `date_trunc`, `date_trunc_part`, `date_bin`, `to_char`, `isfinite` |
 | Full-text search | `to_tsvector`, `phraseto_tsquery`, `ts_rank`, `ts_headline` |
 | JSON/JSONB | `json_build_object`, `jsonb_build_object`, `jsonb_pretty`, `array_to_json` |
 | Math | `round`, `sqrt`, `pow`, `random_between`, `width_bucket` |
 | Range | `range_lower`, `range_upper`, `range_merge`, `multirange_merge`, `isempty`, `lower_inc` |
-| Scalar expressions | `case`, `coalesce`, `null`, `greatest`, `current_user`, `scalar_subquery` |
+| Scalar expressions | `case`, `coalesce`, `null`, `literal`, `greatest`, `current_user`, `scalar_subquery` |
 | Set-returning sources | `generate_series_source`, `unnest_source`, `json_each_source`, `regexp_split_to_table_source`, `values_source` |
 | Text | `lower`, `format`, `translate`, `repeat`, `octet_length`, `encode` |
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
 | Window functions | `window`, `row_number`, `rank`, `lag`, `preceding`, `unbounded_preceding` |
+
+When PostgreSQL expects a stable SQL vocabulary literal rather than user data,
+use typed helpers or `literal(...)` instead of a bind parameter:
+
+```rust
+use rqb::dsl::{DatePart, date_trunc_part, literal};
+
+let day = date_trunc_part(DatePart::Day, schema::orders::CREATED_AT);
+let month = rqb::date_trunc(literal("month"), schema::orders::CREATED_AT);
+```
 
 ## JSON Search
 
@@ -272,6 +288,10 @@ let query = select(schema::order_search_view::view())
 
 Server filters are preserved and combined with the request filter using `AND`.
 Only fields with `Meta::json(...)` are visible to JSON requests.
+
+> Tenant and permission scope: install tenant, user, RBAC, and soft-delete
+> filters before calling `apply_search`. If a request is allowed to own the
+> entire search clause, start from a fresh `select(...)` and apply it there.
 
 Search failures are ordinary `rqb::Error` variants, so API boundaries can return
 stable client errors without parsing strings:
@@ -323,6 +343,11 @@ let extension_rows = raw_source(
     rqb::field!("id": uuid => uuid::Uuid, equality),
 );
 ```
+
+Generated schemas keep unknown extension columns as raw-only metadata constants
+such as `EMBEDDING_META`. Use `*_META.expr()` / `*_META.at("alias")` with
+`op(...)`, `cast(...)`, or raw helpers when a column is deliberately outside
+rqb's typed `Field<T>` catalog.
 
 ## Error Handling
 
@@ -483,6 +508,50 @@ insert(schema::products::table())
     ))
     .returning_all()
     .fetch_one_as::<ProductRow>(&pool)
+    .await?;
+```
+
+For sync-style batch inputs, expose the incoming rows as a `values_source`.
+`from_select_all(...)` uses that source metadata for both the target column list
+and the `SELECT` projection, and `set_from("alias")` copies fields from the
+same source in conflict updates:
+
+```rust
+let incoming = values_source(
+    [(sku, name, price_cents)],
+    "incoming",
+    (
+        schema::products::SKU,
+        schema::products::NAME,
+        schema::products::PRICE_CENTS,
+    ),
+);
+
+insert(schema::products::table())
+    .from_select_all(incoming)
+    .on_conflict(schema::products::SKU)
+    .do_update_set((
+        schema::products::NAME.set_from("incoming"),
+        schema::products::PRICE_CENTS.set_from("incoming"),
+    ))
+    .execute(&pool)
+    .await?;
+```
+
+Optimistic locking stays normal update SQL: include both the row id and expected
+version in `WHERE`, increment the version in `SET`, and use `RETURNING` to tell
+success from a version miss.
+
+```rust
+let updated = update(schema::orders::table())
+    .set_many((
+        schema::orders::STATUS.set("paid"),
+        schema::orders::VERSION.set_expr(schema::orders::VERSION.expr().op("+", 1)),
+    ))
+    .filter(schema::orders::ID.eq(order_id))
+    .filter(schema::orders::VERSION.eq(expected_version))
+    .returning_all()
+    .fetch_optional_as::<OrderRow>(&pool)
     .await?;
 ```
 

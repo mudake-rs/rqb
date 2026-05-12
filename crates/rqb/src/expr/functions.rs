@@ -34,9 +34,9 @@ pub use array_fn::{
 };
 pub use binary::{crc32, crc32c};
 pub use date::{
-    age, current_date, current_timestamp, date_bin, date_trunc, extract, isfinite, make_date,
-    make_time, make_timestamp, make_timestamptz, now, timezone, to_char, to_date, to_number,
-    to_timestamp,
+    DatePart, age, current_date, current_timestamp, date_bin, date_trunc, date_trunc_part, extract,
+    isfinite, make_date, make_time, make_timestamp, make_timestamptz, now, timezone, to_char,
+    to_date, to_number, to_timestamp,
 };
 pub use fts::{
     phraseto_tsquery, phraseto_tsquery_config, plainto_tsquery, to_tsquery, to_tsvector,
@@ -84,6 +84,15 @@ where
 /// Builds the SQL `NULL` literal.
 pub fn null() -> ValueExpr {
     ValueExpr::Null
+}
+
+/// Builds a server-owned static SQL string literal.
+///
+/// Runtime/user values must use bind parameters. This helper is for stable SQL
+/// vocabulary such as date parts (`'day'`) where PostgreSQL expects a literal
+/// and a bound parameter would make the rendered SQL shape noisier.
+pub fn literal(value: &'static str) -> ValueExpr {
+    ValueExpr::SqlLiteral(value)
 }
 
 /// Builds a server-owned raw value expression with rqb `?` placeholders.

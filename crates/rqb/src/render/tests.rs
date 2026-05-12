@@ -4,7 +4,7 @@ use crate::{
     count_all, count_distinct, cte, current_date, current_timestamp, delete_from, extract,
     function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont,
     raw_expr, raw_predicate, row, row_number, scalar_subquery, select, slice, subscript, table,
-    to_jsonb, true_, update, window,
+    to_jsonb, true_, update, values_source, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -244,6 +244,55 @@ fn null_value_expr_and_set_null_render_without_parameters() {
         "UPDATE \"public\".\"app_users\" SET \"email_address\" = NULL WHERE \"id\" = $1"
     );
     assert_eq!(updated.params.len(), 1);
+}
+
+#[test]
+fn sql_literal_and_typed_date_part_render_without_parameters() {
+    let bucket = crate::date_trunc_part(crate::DatePart::Day, current_timestamp());
+    let built = select(users())
+        .item(bucket.clone().alias("day_bucket"))
+        .item(count_all().alias("rows"))
+        .group_by(bucket.clone())
+        .order_asc(bucket)
+        .item(crate::date_trunc(crate::literal("author's"), current_date()).alias("quoted_part"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT date_trunc('day', CURRENT_TIMESTAMP) AS \"day_bucket\", count(*) AS \"rows\", date_trunc('author''s', CURRENT_DATE) AS \"quoted_part\" FROM \"public\".\"app_users\" GROUP BY date_trunc('day', CURRENT_TIMESTAMP) ORDER BY date_trunc('day', CURRENT_TIMESTAMP) ASC"
+    );
+    assert_eq!(built.params.len(), 0);
+}
+
+#[test]
+fn insert_from_select_all_projects_source_fields_and_set_from_uses_alias() {
+    let incoming = values_source([(1_i32, "egor@example.com")], "incoming", (ID, EMAIL));
+
+    let built = insert(users())
+        .from_select_all(incoming)
+        .on_conflict(ID)
+        .do_update_set([EMAIL.set_from("incoming")])
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") SELECT \"incoming\".\"id\", \"incoming\".\"email_address\" FROM (VALUES ($1, $2)) AS \"incoming\" (\"id\", \"email_address\") ON CONFLICT (\"id\") DO UPDATE SET \"email_address\" = \"incoming\".\"email_address\""
+    );
+    assert_eq!(built.params.len(), 2);
+}
+
+#[test]
+fn insert_from_select_all_handles_sources_without_explicit_alias() {
+    let staging = table("staging.app_users", &USERS_FIELDS);
+    let built = insert(users()).from_select_all(staging).build().unwrap();
+
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") SELECT \"id\", \"email_address\" FROM \"staging\".\"app_users\""
+    );
+    assert_eq!(built.params.len(), 0);
 }
 
 #[test]

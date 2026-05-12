@@ -179,6 +179,37 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(users::ID)
         .build()?;
 
+    // Bulk insert/update paths can expose an in-memory batch as a VALUES
+    // source. `from_select_all` uses the source metadata for both target
+    // columns and SELECT projection; `set_from` copies updated values from the
+    // source alias without repeating each field reference by hand.
+    let incoming_users = values_source(
+        [(
+            Uuid::nil(),
+            Uuid::nil(),
+            "grace@example.com",
+            "active",
+            "Grace",
+        )],
+        "incoming",
+        (
+            users::ID,
+            users::ORGANIZATION_ID,
+            users::EMAIL,
+            users::STATUS,
+            users::DISPLAY_NAME,
+        ),
+    );
+    let bulk_upsert_sql = insert(users::table())
+        .from_select_all(incoming_users)
+        .on_conflict(users::EMAIL)
+        .do_update_set((
+            users::STATUS.set_from("incoming"),
+            users::DISPLAY_NAME.set_from("incoming"),
+        ))
+        .returning(users::ID)
+        .build()?;
+
     assert_eq!(
         conditional_update_sql.sql,
         "UPDATE \"sample\".\"app_users\" SET \"status\" = $1, \"display_name\" = $2 WHERE \"id\" = $3"
@@ -186,6 +217,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         excluded_upsert_sql.sql,
         "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = EXCLUDED.\"status\" RETURNING \"id\""
+    );
+    assert_eq!(
+        bulk_upsert_sql.sql,
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") SELECT \"incoming\".\"id\", \"incoming\".\"organization_id\", \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"display_name\" FROM (VALUES ($1, $2, $3, $4, $5)) AS \"incoming\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") ON CONFLICT (\"email\") DO UPDATE SET \"status\" = \"incoming\".\"status\", \"display_name\" = \"incoming\".\"display_name\" RETURNING \"id\""
     );
 
     // Formatting and range helpers stay in the typed expression layer; no raw
@@ -219,6 +254,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("{}", clear_paid_sql.sql);
     println!("{}", conditional_update_sql.sql);
     println!("{}", excluded_upsert_sql.sql);
+    println!("{}", bulk_upsert_sql.sql);
     println!("{}", invoice_report_sql.sql);
     println!("{}", upsert_user_sql.sql);
     Ok(())

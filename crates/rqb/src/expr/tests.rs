@@ -86,6 +86,18 @@ fn null_value_expr_validates_without_params() {
 }
 
 #[test]
+fn static_sql_literal_validates_without_params() {
+    let expr = crate::literal("day");
+    expr.validate().unwrap();
+
+    let mut params = Vec::new();
+    expr.collect_params(&mut params);
+
+    assert!(matches!(expr, ValueExpr::SqlLiteral("day")));
+    assert!(params.is_empty());
+}
+
+#[test]
 fn aggregate_modifiers_reject_non_aggregate_expressions() {
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
     static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());

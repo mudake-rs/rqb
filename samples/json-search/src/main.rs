@@ -44,22 +44,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(merged.params.len(), 8);
 
-    let replacement_request: SearchRequest = serde_json::from_value(json!({
+    let standalone_request: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "status", "operator": "equals", "value": "open" },
         "limit": 5
     }))?;
-    // `replace_search` is for endpoints where the JSON request is the complete
-    // search clause. Use `apply_search` when server filters must be preserved.
-    let replaced = select(orders::view())
-        .filter(orders::ORGANIZATION_ID.eq(current_org))
-        .replace_search(replacement_request)?
+    // If the JSON request is allowed to own the whole search clause, start from
+    // a fresh select. Do not call this shape for tenant/user-scoped endpoints.
+    let standalone = select(orders::view())
+        .apply_search(standalone_request)?
         .build()?;
 
     assert_eq!(
-        replaced.sql,
+        standalone.sql,
         "SELECT \"id\", \"user_id\", \"organization_id\", \"organization_slug\", \"user_email\", \"status\", \"total_cents\", \"tags\", \"metadata\", \"created_at\", \"item_count\", \"event_count\", \"last_event_at\" FROM \"sample\".\"order_search_view\" WHERE \"status\" = $1 LIMIT $2"
     );
-    assert_eq!(replaced.params.len(), 2);
+    assert_eq!(standalone.params.len(), 2);
 
     let invalid_field: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "unknown", "operator": "equals", "value": "x" }
@@ -141,7 +140,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("{}", merged.sql);
-    println!("{}", replaced.sql);
+    println!("{}", standalone.sql);
     Ok(())
 }
 

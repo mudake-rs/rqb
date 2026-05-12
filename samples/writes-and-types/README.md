@@ -21,6 +21,9 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   then use `do_update_set_where(...)` for a filtered `DO UPDATE`.
 - `do_update_excluded((...))` updates several fields from `EXCLUDED` without
   repeating per-field `.set_excluded()` calls.
+- `values_source(...)` plus `from_select_all(...)` keeps batch upserts from
+  repeating target columns; `set_from("alias")` copies update values from the
+  incoming source.
 - Constraint conflict targets use `on_conflict_constraint(...).do_nothing()`.
 - `insert(...).columns((...)).from_select(...)` validates target column count
   against the server-owned select projection.

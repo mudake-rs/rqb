@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use rqb::dsl::{count_all, date_trunc, sum};
+use rqb::dsl::{DatePart, count_all, date_trunc_part, sum};
 use rqb::prelude::*;
 use rqb_sample_schema::orders;
 
@@ -11,7 +11,7 @@ pub async fn orders_by_day<'e>(
 ) -> rqb::Result<Vec<DailyOrderStats>> {
     let days = days.clamp(1, 90);
     let since = Utc::now() - Duration::days(days);
-    let day = date_trunc("day", orders::CREATED_AT);
+    let day = date_trunc_part(DatePart::Day, orders::CREATED_AT);
 
     // Derived expressions are regular AST nodes. Keep the expression in a
     // local variable when SELECT, GROUP BY, and ORDER BY must refer to the

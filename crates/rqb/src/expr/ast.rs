@@ -387,6 +387,8 @@ pub enum ValueExpr {
     Param(Param),
     /// SQL `NULL` literal.
     Null,
+    /// Server-owned static SQL string literal.
+    SqlLiteral(&'static str),
     /// SQL keyword expression such as `CURRENT_DATE`.
     Keyword(&'static str),
     /// Function call.

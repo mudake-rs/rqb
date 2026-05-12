@@ -23,12 +23,6 @@ impl SearchRequest {
         self.apply_page_and_sort(select)
     }
 
-    /// Applies this request to an existing select, replacing server filter, sort, and page clauses.
-    pub fn replace_in(&self, mut select: Select) -> Result<Select> {
-        select.filter = self.filter_expr(&select.source)?;
-        self.apply_page_and_sort(select)
-    }
-
     fn filter_expr(&self, source: &Source) -> Result<Option<BoolExpr>> {
         self.filter
             .as_ref()
@@ -299,12 +293,6 @@ impl Select {
     #[inline]
     pub fn apply_search(self, request: SearchRequest) -> Result<Self> {
         request.merge_in(self)
-    }
-
-    /// Applies a JSON search request, replacing filter, sort, limit, and offset.
-    #[inline]
-    pub fn replace_search(self, request: SearchRequest) -> Result<Self> {
-        request.replace_in(self)
     }
 }
 

@@ -29,6 +29,7 @@ pub fn router(pool: PgPool) -> Router {
         .route("/users", post(create_user))
         .route("/users/{id}/deactivate", post(deactivate_user))
         .route("/orders", get(list_orders_after))
+        .route("/orders/filter", get(filter_orders))
         .route("/orders/search", post(search_orders))
         .route("/orders/export.csv", get(export_orders_csv))
         .route("/orders/{id}/transition", post(transition_order))
@@ -50,6 +51,23 @@ struct OrderCursorQuery {
 #[derive(Debug, Deserialize)]
 struct OrderExportQuery {
     user_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+struct OrderFilterQuery {
+    user_id: Uuid,
+    status: Option<String>,
+    min_total: Option<String>,
+    from_date: Option<String>,
+    limit: Option<String>,
+}
+
+struct ParsedOrderFilterQuery {
+    user_id: Uuid,
+    status: Option<String>,
+    min_total: Option<i64>,
+    from_date: Option<chrono::DateTime<chrono::Utc>>,
+    limit: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,6 +152,26 @@ async fn search_orders(
     // filters and owns pagination/count semantics.
     let orders = orders::search(&state.pool, request).await?;
     Ok(Json(orders))
+}
+
+async fn filter_orders(
+    State(state): State<AppState>,
+    Query(query): Query<OrderFilterQuery>,
+) -> ApiResult<Json<Vec<OrderRow>>> {
+    // Query strings arrive as strings at the HTTP boundary. Parse them here so
+    // services receive typed Rust values and each bad field gets a clear 400.
+    let query = parse_order_filter_query(query)?;
+    let rows = orders::filter(
+        &state.pool,
+        query.user_id,
+        query.status,
+        query.min_total,
+        query.from_date,
+        query.limit,
+    )
+    .await?;
+
+    Ok(Json(rows))
 }
 
 async fn export_orders_csv(
@@ -249,4 +287,47 @@ fn validate_product(input: &UpsertProduct) -> ApiResult<()> {
         ));
     }
     Ok(())
+}
+
+fn parse_order_filter_query(raw: OrderFilterQuery) -> ApiResult<ParsedOrderFilterQuery> {
+    Ok(ParsedOrderFilterQuery {
+        user_id: raw.user_id,
+        status: raw.status,
+        min_total: parse_optional_i64(raw.min_total, "min_total")?,
+        from_date: parse_optional_rfc3339(raw.from_date, "from_date")?,
+        limit: parse_optional_u32(raw.limit, "limit")?.unwrap_or(50),
+    })
+}
+
+fn parse_optional_i64(value: Option<String>, field: &'static str) -> ApiResult<Option<i64>> {
+    value
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .map_err(|_| ApiError::BadRequest(format!("{field} must be an integer")))
+        })
+        .transpose()
+}
+
+fn parse_optional_u32(value: Option<String>, field: &'static str) -> ApiResult<Option<u32>> {
+    value
+        .map(|value| {
+            value
+                .parse::<u32>()
+                .map_err(|_| ApiError::BadRequest(format!("{field} must be a positive integer")))
+        })
+        .transpose()
+}
+
+fn parse_optional_rfc3339(
+    value: Option<String>,
+    field: &'static str,
+) -> ApiResult<Option<chrono::DateTime<chrono::Utc>>> {
+    value
+        .map(|value| {
+            chrono::DateTime::parse_from_rfc3339(&value)
+                .map(|value| value.with_timezone(&chrono::Utc))
+                .map_err(|_| ApiError::BadRequest(format!("{field} must be an RFC3339 timestamp")))
+        })
+        .transpose()
 }

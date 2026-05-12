@@ -1,6 +1,60 @@
 use crate::{BoolExpr, ValueExpr};
 
-use super::function;
+use super::{function, literal};
+
+/// Stable date/time part names accepted by helpers such as `date_trunc`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DatePart {
+    /// `microseconds`.
+    Microseconds,
+    /// `milliseconds`.
+    Milliseconds,
+    /// `second`.
+    Second,
+    /// `minute`.
+    Minute,
+    /// `hour`.
+    Hour,
+    /// `day`.
+    Day,
+    /// `week`.
+    Week,
+    /// `month`.
+    Month,
+    /// `quarter`.
+    Quarter,
+    /// `year`.
+    Year,
+    /// `decade`.
+    Decade,
+    /// `century`.
+    Century,
+    /// `millennium`.
+    Millennium,
+}
+
+impl DatePart {
+    /// Returns the PostgreSQL date/time field token.
+    #[inline]
+    pub const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Microseconds => "microseconds",
+            Self::Milliseconds => "milliseconds",
+            Self::Second => "second",
+            Self::Minute => "minute",
+            Self::Hour => "hour",
+            Self::Day => "day",
+            Self::Week => "week",
+            Self::Month => "month",
+            Self::Quarter => "quarter",
+            Self::Year => "year",
+            Self::Decade => "decade",
+            Self::Century => "century",
+            Self::Millennium => "millennium",
+        }
+    }
+}
 
 /// Builds `now()`.
 pub fn now() -> ValueExpr {
@@ -20,6 +74,11 @@ pub fn current_date() -> ValueExpr {
 /// Builds `date_trunc(part, expr)`.
 pub fn date_trunc(part: impl Into<ValueExpr>, expr: impl Into<ValueExpr>) -> ValueExpr {
     function("date_trunc", [part.into(), expr.into()])
+}
+
+/// Builds `date_trunc('part', expr)` with a typed static date part.
+pub fn date_trunc_part(part: DatePart, expr: impl Into<ValueExpr>) -> ValueExpr {
+    date_trunc(literal(part.as_sql()), expr)
 }
 
 /// Builds `date_bin(stride, source, origin)`.

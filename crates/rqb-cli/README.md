@@ -98,6 +98,11 @@ server-owned SQL expressions through `*_META.expr()` or `*_META.at("alias")`.
 This keeps extension columns available for server-owned operators without
 pretending they have a portable Rust `Field<T>` mapping.
 
+When raw-only columns are generated, `rqb-cli` prints a stderr summary with the
+relation, column, and Postgres type name. Treat that as a review queue for
+project-specific enums, domains, ranges, and extension types that may deserve
+manual raw helpers or future generator support.
+
 The generator annotates schema facts that matter at the `sqlx::FromRow` or
 write boundary:
 

@@ -12,6 +12,9 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - Multiple sort keys are applied in client order after the server-owned filter.
 - Unknown fields, hidden fields, bad operators, and bad JSON value shapes fail
   before rendering.
+- Pattern operators such as `contains`, `like`, and `regex` require
+  text-pattern field capability and reject very long client patterns before
+  rendering.
 - Search validation errors can be mapped into stable API error payloads without
   parsing display strings.
 - Client input can control filter/sort/page, but not joins, projection, raw SQL,

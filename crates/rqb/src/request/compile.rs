@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde_json::Value as JsonValue;
 
 use crate::{
@@ -11,30 +13,33 @@ use super::{
     SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, SortDirection,
 };
 
+const MAX_SEARCH_PATTERN_CHARS: usize = 1024;
+
 impl SearchRequest {
     /// Merges this request into an existing select, preserving server filters.
     pub fn merge_in(&self, mut select: Select) -> Result<Select> {
-        let request_filter = self.filter_expr(&select.source)?;
+        let index = SearchMetaIndex::new(&select.source);
+        let request_filter = self.filter_expr(&index)?;
         select.filter = match (select.filter, request_filter) {
             (Some(existing), Some(request)) => Some(BoolExpr::and_pair(existing, request)),
             (existing, None) => existing,
             (None, Some(request)) => Some(request),
         };
-        self.apply_page_and_sort(select)
+        self.apply_page_and_sort(select, &index)
     }
 
-    fn filter_expr(&self, source: &Source) -> Result<Option<BoolExpr>> {
+    fn filter_expr(&self, index: &SearchMetaIndex) -> Result<Option<BoolExpr>> {
         self.filter
             .as_ref()
-            .map(|filter| filter.to_expr(source))
+            .map(|filter| filter.to_expr(index))
             .transpose()
     }
 
-    fn apply_page_and_sort(&self, mut select: Select) -> Result<Select> {
+    fn apply_page_and_sort(&self, mut select: Select, index: &SearchMetaIndex) -> Result<Select> {
         select.order = self
             .sort
             .iter()
-            .map(|sort| sort.to_order_item(&select.source))
+            .map(|sort| sort.to_order_item(index))
             .collect::<Result<Vec<_>>>()?;
         select.limit = self.limit.map(|limit| Param::typed(i64::from(limit)));
         select.offset = self.offset.map(|offset| Param::typed(i64::from(offset)));
@@ -43,7 +48,7 @@ impl SearchRequest {
 }
 
 impl SearchFilter {
-    fn to_expr(&self, source: &Source) -> Result<BoolExpr> {
+    fn to_expr(&self, index: &SearchMetaIndex) -> Result<BoolExpr> {
         match self {
             Self::And(filters) => {
                 if filters.is_empty() {
@@ -52,7 +57,7 @@ impl SearchFilter {
                 Ok(BoolExpr::And(
                     filters
                         .iter()
-                        .map(|filter| filter.to_expr(source))
+                        .map(|filter| filter.to_expr(index))
                         .collect::<Result<Vec<_>>>()?,
                 ))
             }
@@ -63,28 +68,25 @@ impl SearchFilter {
                 Ok(BoolExpr::Or(
                     filters
                         .iter()
-                        .map(|filter| filter.to_expr(source))
+                        .map(|filter| filter.to_expr(index))
                         .collect::<Result<Vec<_>>>()?,
                 ))
             }
-            Self::Not(filter) => Ok(BoolExpr::Not(Box::new(filter.to_expr(source)?))),
-            Self::Predicate(predicate) => predicate.to_expr(source),
+            Self::Not(filter) => Ok(BoolExpr::Not(Box::new(filter.to_expr(index)?))),
+            Self::Predicate(predicate) => predicate.to_expr(index),
         }
     }
 }
 
 impl SearchPredicate {
-    fn to_expr(&self, source: &Source) -> Result<BoolExpr> {
-        let meta = find_json_meta(source, &self.field)?;
+    fn to_expr(&self, index: &SearchMetaIndex) -> Result<BoolExpr> {
+        let meta = index.json_meta(&self.field)?;
         let Some(json) = meta.json else {
             return Err(Error::SearchFieldNotExposed {
                 field: self.field.clone(),
             });
         };
-        let field = ValueExpr::Field {
-            meta,
-            qualifier: source.explicit_alias().map(str::to_owned),
-        };
+        let field = index.field_expr(meta);
         self.operator
             .to_expr(&self.field, meta, json, field, &self.value)
     }
@@ -116,10 +118,13 @@ impl SearchOperator {
             Self::Gte => comparison_expr(field_name, meta, "gte", BoolOp::Gte, field, json, value),
             Self::Lt => comparison_expr(field_name, meta, "lt", BoolOp::Lt, field, json, value),
             Self::Lte => comparison_expr(field_name, meta, "lte", BoolOp::Lte, field, json, value),
-            Self::IsNull | Self::IsNotNull => Ok(BoolExpr::IsNull {
-                expr: field,
-                negated: matches!(self, Self::IsNotNull),
-            }),
+            Self::IsNull | Self::IsNotNull => {
+                validate_search_capability(field_name, meta, self.as_name(), false)?;
+                Ok(BoolExpr::IsNull {
+                    expr: field,
+                    negated: matches!(self, Self::IsNotNull),
+                })
+            }
             Self::In | Self::NotIn => {
                 validate_search_capability(field_name, meta, self.as_name(), false)?;
                 let values = json_array(field_name, value, "array")?
@@ -154,10 +159,8 @@ impl SearchOperator {
             | Self::NotStartsWith
             | Self::EndsWith
             | Self::NotEndsWith => {
-                validate_search_like(field_name, meta, self.as_name())?;
-                let value = value
-                    .as_str()
-                    .ok_or_else(|| Error::invalid_search_value(field_name, "string"))?;
+                validate_search_pattern(field_name, meta, json, self.as_name())?;
+                let value = search_pattern_value(field_name, value)?;
                 let (prefix, suffix) = match self {
                     Self::Contains | Self::NotContains => ("%", "%"),
                     Self::StartsWith | Self::NotStartsWith => ("", "%"),
@@ -178,11 +181,10 @@ impl SearchOperator {
                 })
             }
             Self::Like | Self::NotLike | Self::ILike | Self::NotILike => {
-                validate_search_like(field_name, meta, self.as_name())?;
-                let pattern = value
-                    .as_str()
-                    .map(|value| ValueExpr::Param(Param::typed(value.to_owned())))
-                    .ok_or_else(|| Error::invalid_search_value(field_name, "string"))?;
+                validate_search_pattern(field_name, meta, json, self.as_name())?;
+                let pattern = ValueExpr::Param(Param::typed(
+                    search_pattern_value(field_name, value)?.to_owned(),
+                ));
                 Ok(BoolExpr::Like {
                     expr: field,
                     pattern,
@@ -192,11 +194,10 @@ impl SearchOperator {
                 })
             }
             Self::Regex | Self::NotRegex | Self::IRegex | Self::NotIRegex => {
-                validate_search_like(field_name, meta, self.as_name())?;
-                let pattern = value
-                    .as_str()
-                    .map(|value| ValueExpr::Param(Param::typed(value.to_owned())))
-                    .ok_or_else(|| Error::invalid_search_value(field_name, "string"))?;
+                validate_search_pattern(field_name, meta, json, self.as_name())?;
+                let pattern = ValueExpr::Param(Param::typed(
+                    search_pattern_value(field_name, value)?.to_owned(),
+                ));
                 Ok(BoolExpr::Regex {
                     expr: field,
                     pattern,
@@ -257,18 +258,15 @@ fn comparison_expr(
 }
 
 impl SearchSort {
-    fn to_order_item(&self, source: &Source) -> Result<OrderItem> {
-        let meta = find_json_meta(source, &self.field)?;
+    fn to_order_item(&self, index: &SearchMetaIndex) -> Result<OrderItem> {
+        let meta = index.json_meta(&self.field)?;
         if !meta.ops.ordering {
             return Err(Error::InvalidSort {
                 field: self.field.clone(),
             });
         }
         Ok(OrderItem {
-            expr: ValueExpr::Field {
-                meta,
-                qualifier: source.explicit_alias().map(str::to_owned),
-            },
+            expr: index.field_expr(meta),
             direction: self.dir.into(),
             nulls: None,
         })
@@ -290,30 +288,53 @@ impl Select {
     /// The request filter is AND-composed with existing server filters. Sort,
     /// limit, and offset are request-controlled clauses, so request values
     /// replace any existing builder values for those clauses.
+    ///
+    /// Search operators are gated by field metadata: equality and null tests
+    /// require equality capability, sort requires ordering capability, and
+    /// LIKE/regex-style pattern operators require text-pattern capability.
     #[inline]
     pub fn apply_search(self, request: SearchRequest) -> Result<Self> {
         request.merge_in(self)
     }
 }
 
-fn find_json_meta(source: &Source, field: &str) -> Result<Meta> {
-    let mut found = None;
-    source.for_each_field(|meta| {
-        if meta.api == field {
-            found = Some(*meta);
+struct SearchMetaIndex {
+    fields: BTreeMap<&'static str, Meta>,
+    qualifier: Option<String>,
+}
+
+impl SearchMetaIndex {
+    fn new(source: &Source) -> Self {
+        let mut fields = BTreeMap::new();
+        source.for_each_field(|meta| {
+            fields.insert(meta.api, *meta);
+        });
+        Self {
+            fields,
+            qualifier: source.explicit_alias().map(str::to_owned),
         }
-    });
-    let Some(meta) = found else {
-        return Err(Error::InvalidSearchField {
-            field: field.to_owned(),
-        });
-    };
-    if meta.json.is_none() {
-        return Err(Error::SearchFieldNotExposed {
-            field: field.to_owned(),
-        });
     }
-    Ok(meta)
+
+    fn json_meta(&self, field: &str) -> Result<Meta> {
+        let Some(meta) = self.fields.get(field).copied() else {
+            return Err(Error::InvalidSearchField {
+                field: field.to_owned(),
+            });
+        };
+        if meta.json.is_none() {
+            return Err(Error::SearchFieldNotExposed {
+                field: field.to_owned(),
+            });
+        }
+        Ok(meta)
+    }
+
+    fn field_expr(&self, meta: Meta) -> ValueExpr {
+        ValueExpr::Field {
+            meta,
+            qualifier: self.qualifier.clone(),
+        }
+    }
 }
 
 fn validate_search_capability(
@@ -333,9 +354,27 @@ fn validate_search_capability(
     Err(Error::invalid_search_operator(field, operator))
 }
 
-fn validate_search_like(field: &str, meta: Meta, operator: &'static str) -> Result<()> {
-    if matches!(meta.pg, "text" | "varchar" | "bpchar" | "citext") {
+fn validate_search_pattern(
+    field: &str,
+    meta: Meta,
+    json: JsonKind,
+    operator: &'static str,
+) -> Result<()> {
+    if json == JsonKind::Text && meta.ops.pattern {
         return Ok(());
     }
     Err(Error::invalid_search_operator(field, operator))
+}
+
+fn search_pattern_value<'a>(field: &str, value: &'a JsonValue) -> Result<&'a str> {
+    let value = value
+        .as_str()
+        .ok_or_else(|| Error::invalid_search_value(field, "string"))?;
+    if value.chars().count() <= MAX_SEARCH_PATTERN_CHARS {
+        return Ok(value);
+    }
+    Err(Error::invalid_search_value(
+        field,
+        "string up to 1024 characters",
+    ))
 }

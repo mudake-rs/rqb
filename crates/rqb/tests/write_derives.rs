@@ -4,11 +4,10 @@ mod users {
     use rqb::prelude::*;
 
     pub static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
-    pub static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
-    pub static STATUS_META: Meta = Meta::new("status", "status", "text").ops(OpSet::ordered());
-    pub static NICKNAME_META: Meta =
-        Meta::new("nickname", "nickname", "text").ops(OpSet::ordered());
-    pub static TYPE_META: Meta = Meta::new("type", "type", "text").ops(OpSet::ordered());
+    pub static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
+    pub static STATUS_META: Meta = Meta::new("status", "status", "text").ops(OpSet::text());
+    pub static NICKNAME_META: Meta = Meta::new("nickname", "nickname", "text").ops(OpSet::text());
+    pub static TYPE_META: Meta = Meta::new("type", "type", "text").ops(OpSet::text());
 
     pub const ID: Field<i32> = Field::new(&ID_META);
     pub const EMAIL: Field<String> = Field::new(&EMAIL_META);

@@ -3,6 +3,10 @@
 //! rqb is not an ORM. Application code owns SQL shape, rqb validates the typed
 //! AST before rendering, and values are passed to Postgres as sqlx bind
 //! arguments.
+//! It is not a complete compile-time SQL type system: typed fields and bind
+//! values make common service queries hard to mix up, but operator legality,
+//! statement shape, and raw bind counts are runtime validation checks that fail
+//! at `.build()?`.
 //!
 //! # Basic shape
 //!
@@ -77,13 +81,18 @@
 //! [`Select::apply_search`] to preserve tenant, permission, and other
 //! server-owned filters. When a request should own the whole search clause,
 //! start from a fresh `select(...)` and call [`Select::apply_search`] there.
+//! LIKE and regex-style search operators require text-pattern field capability
+//! and reject very long client patterns before SQL is rendered; still set
+//! statement timeouts at HTTP or job boundaries for public search endpoints.
 //!
 //! # Writes and raw SQL
 //!
 //! Writes use field assignments or `#[derive(Insertable)]` /
 //! `#[derive(Changeset)]`; there is no serde JSON write bridge. Raw SQL is still
 //! server-owned and stays parameterized through [`raw`], [`raw_expr`],
-//! [`raw_predicate`], and [`raw_source`].
+//! [`raw_predicate`], and [`raw_source`]. Raw placeholders are SQL-aware, but
+//! any raw fragment disables persistent prepared-statement caching for the whole
+//! built query.
 
 mod built;
 mod error;
@@ -102,7 +111,6 @@ mod tx;
 extern crate self as rqb;
 
 pub use built::BuiltQuery;
-pub use chrono;
 pub use error::{
     ColumnError, ConstraintError, CteShapeError, DatabaseFailure, DbErrorInfo, DbErrorPosition,
     Error, OperatorError, PgFailure, SearchValueError, WriteTargetError,
@@ -155,8 +163,6 @@ pub use request::{
     SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort, SortDirection,
 };
 pub use rqb_macros::{Changeset, Insertable, schema};
-pub use serde;
-pub use serde_json;
 pub use source::{
     Cte, CteMaterialization, FunctionSource, IntoFieldMetas, Join, JoinKind, Source, cte, cte_ref,
     function_source, generate_series_source, generate_series_step_source,
@@ -165,7 +171,6 @@ pub use source::{
     jsonb_object_keys_source, raw_source, regexp_split_to_table_source, subquery, table,
     unnest_source, values_source, view,
 };
-pub use sqlx;
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use stmt::{
     Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields,
@@ -176,7 +181,6 @@ pub use stmt::{
     Update, delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw,
     select, union, union_all, update,
 };
-pub use uuid;
 
 /// Creates a metadata-backed computed field for CTEs, subqueries, and projections.
 ///
@@ -224,6 +228,13 @@ macro_rules! field {
             ::std::sync::OnceLock::new();
         $crate::Field::<$ty>::new(__RQB_FIELD_META.get_or_init(|| {
             $crate::Meta::col($name, $pg).ops($crate::OpSet::ordered())
+        }))
+    }};
+    (@build $name:literal, $pg:expr, $ty:ty, text) => {{
+        static __RQB_FIELD_META: ::std::sync::OnceLock<$crate::Meta> =
+            ::std::sync::OnceLock::new();
+        $crate::Field::<$ty>::new(__RQB_FIELD_META.get_or_init(|| {
+            $crate::Meta::col($name, $pg).ops($crate::OpSet::text())
         }))
     }};
 }
@@ -387,7 +398,7 @@ mod tests {
 
     #[test]
     fn dsl_helpers_are_available_outside_the_core_prelude() {
-        static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+        static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
         static SPEND_META: Meta = Meta::new("spend", "spend", "int8").ops(OpSet::ordered());
         static FIELDS: [&Meta; 2] = [&EMAIL_META, &SPEND_META];
         const EMAIL: Field<String> = Field::new(&EMAIL_META);
@@ -409,10 +420,12 @@ mod tests {
     #[test]
     fn computed_field_macro_creates_static_metadata_once_per_site() {
         let item_count = crate::field!("item_count": int8 => i64, ordered);
+        let label = crate::field!("label": text => String, text);
 
         assert_eq!(item_count.meta.api, "item_count");
         assert_eq!(item_count.meta.pg, "int8");
         assert!(item_count.meta.ops.ordering);
+        assert!(label.meta.ops.pattern);
 
         let source = crate::raw_source(
             "SELECT ?::int8 AS item_count",

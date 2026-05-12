@@ -68,6 +68,7 @@ pub(crate) async fn introspect(
         SELECT c.relname AS table_name,
                a.attname AS column_name,
                t.typname AS udt_name,
+               pg_catalog.format_type(a.atttypid, a.atttypmod) AS pg_type,
                NOT a.attnotnull AS nullable,
                a.attgenerated::text AS generated,
                a.attidentity::text AS identity_generation
@@ -93,12 +94,17 @@ pub(crate) async fn introspect(
         };
         let name: String = row.try_get("column_name")?;
         let udt_name: String = row.try_get("udt_name")?;
+        let pg_type: String = row.try_get("pg_type")?;
         let nullable: bool = row.try_get("nullable")?;
         let generated: String = row.try_get("generated")?;
         let identity_generation: String = row.try_get("identity_generation")?;
+        let mut ty = map_column_type(&udt_name);
+        if let crate::model::ColumnType::RawOnly { pg } = &mut ty {
+            *pg = pg_type;
+        }
         relation.columns.push(Column {
             const_name: sanitize_ident(&name.to_shouty_snake_case()),
-            ty: map_column_type(&udt_name),
+            ty,
             nullable,
             generated: generated_kind(&generated, &identity_generation),
             name,

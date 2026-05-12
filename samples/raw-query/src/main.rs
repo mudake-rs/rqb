@@ -3,8 +3,9 @@ use rqb_sample_schema::orders;
 use uuid::Uuid;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    // Raw SQL uses `?` as a bind placeholder. Escape it as `??` when the SQL
-    // text itself needs a literal question mark.
+    // Raw SQL uses `?` as a bind placeholder outside quoted strings,
+    // dollar-quoted bodies, quoted identifiers, and comments. Escape SQL
+    // operator question marks as `??` when the SQL text itself needs one.
     let raw_stmt = raw("SELECT ?? AS marker, ?::uuid AS id")
         .bind(Uuid::nil())
         .build()?;

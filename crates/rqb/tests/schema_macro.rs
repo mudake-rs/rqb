@@ -82,6 +82,7 @@ fn schema_macro_generates_table_metadata_and_fields() {
     assert_eq!(users::FIELDS[8].api, "into");
     assert_eq!(users::ID.meta.json, Some(JsonKind::Uuid));
     assert!(users::EMAIL.meta.ops.ordering);
+    assert!(users::EMAIL.meta.ops.pattern);
 }
 
 #[test]

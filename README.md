@@ -39,6 +39,11 @@ actual API faster than prose.
 - Values bind through sqlx Postgres arguments directly. Writes do not pass
   through a serde JSON bridge.
 
+rqb gives Rust code typed field metadata, typed bind paths, and pre-render
+validation. It is not a full compile-time SQL type system: some shape and
+operator mistakes are rejected at `.build()?`, and PostgreSQL remains the final
+authority for name resolution, constraints, permissions, and query planning.
+
 ## Status
 
 Pre-crates.io, pre-1.0. The repository is public, but the crates are not
@@ -203,6 +208,11 @@ in application code; the REST sample shows `limit` / `offset` plus
 `Select::count()` for a matching count query, cursor pagination, and
 pool-owned streaming CSV responses into axum `Body::from_stream`.
 
+`Select::count()` is a matching-row count helper, not a locked-query replay. It
+removes ordering, page limits, `FETCH`, and row-lock clauses before wrapping the
+query in `count(*)`. For `FOR UPDATE SKIP LOCKED`-style workflows, count the
+locked result set explicitly in server-owned SQL if lock semantics matter.
+
 Postgres `MERGE ... RETURNING` reports rows affected by each executed action,
 including rows deleted by `WHEN NOT MATCHED BY SOURCE THEN DELETE`. If an API
 needs the final table state after that branch, run a follow-up `SELECT` with the
@@ -299,7 +309,12 @@ let query = select(schema::order_search_view::view())
 ```
 
 Server filters are preserved and combined with the request filter using `AND`.
-Only fields with `Meta::json(...)` are visible to JSON requests.
+Only fields with `Meta::json(...)` are visible to JSON requests. Operators are
+gated by field capabilities: equality/null tests require equality capability,
+sort requires ordering capability, and LIKE/regex/text-pattern operators require
+text-pattern capability such as `OpSet::text()`. Client-supplied LIKE and regex
+patterns are capped at 1024 Unicode scalar values; public APIs should still set
+a database `statement_timeout` appropriate for their workload.
 
 > Tenant and permission scope: install tenant, user, RBAC, and soft-delete
 > filters before calling `apply_search`. If a request is allowed to own the
@@ -333,9 +348,12 @@ rqb exposes raw constructors at the exact AST slot:
 | `raw_predicate(...)` | `BoolExpr` | A `WHERE`, `ON`, or `HAVING` predicate |
 | `raw_source(...)` | `Source` | A derived table or set-returning expression in `FROM` |
 
-Raw fragments use rqb `?` placeholders. Escape literal question marks as `??`,
-for example Postgres JSONB `?` operators. Raw fragments are validated for
-bind-count mismatches and numbered together with the surrounding typed query:
+Raw fragments use rqb `?` placeholders outside SQL quoted contexts. Question
+marks inside single-quoted strings, dollar-quoted bodies, quoted identifiers,
+and comments stay literal. Escape literal question marks in SQL operator
+positions as `??`, for example Postgres JSONB `?` operators. Raw fragments are
+validated for bind-count mismatches and numbered together with the surrounding
+typed query:
 
 ```rust
 use rqb::prelude::*;
@@ -355,6 +373,11 @@ let extension_rows = raw_source(
     rqb::field!("id": uuid => uuid::Uuid, equality),
 );
 ```
+
+Any raw fragment marks the whole built query as non-cacheable, so execution uses
+`sqlx` with persistent prepared-statement caching disabled for that query. Keep
+raw fragments for server-owned SQL that genuinely needs them; prefer typed DSL
+helpers when they express the same stable SQL shape.
 
 Generated schemas keep unknown extension columns as raw-only metadata constants
 such as `EMBEDDING_META`. Use `*_META.expr()` / `*_META.at("alias")` with

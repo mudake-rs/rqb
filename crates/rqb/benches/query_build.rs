@@ -1,23 +1,23 @@
 use std::hint::black_box;
 
+use chrono::{DateTime, Utc};
 use divan::Bencher;
-use rqb::chrono::{DateTime, Utc};
 use rqb::dsl::json_agg;
 use rqb::prelude::*;
-use rqb::serde_json::json;
-use rqb::uuid::Uuid;
+use serde_json::json;
+use uuid::Uuid;
 
 #[global_allocator]
 static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
 
 static USER_ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
-static USER_EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+static USER_EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
 static USER_ACTIVE_META: Meta = Meta::new("active", "active", "bool").ops(OpSet::equality());
 static USER_CREATED_AT_META: Meta =
     Meta::new("created_at", "created_at", "timestamptz").ops(OpSet::ordered());
 static ORDER_ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
 static ORDER_USER_ID_META: Meta = Meta::new("user_id", "user_id", "int4").ops(OpSet::ordered());
-static ORDER_STATUS_META: Meta = Meta::new("status", "status", "text").ops(OpSet::ordered());
+static ORDER_STATUS_META: Meta = Meta::new("status", "status", "text").ops(OpSet::text());
 static ORDER_TOTAL_META: Meta =
     Meta::new("total_cents", "total_cents", "int8").ops(OpSet::ordered());
 
@@ -25,13 +25,13 @@ static OLD_ID_META: Meta = Meta::new("id", "id", "uuid")
     .ops(OpSet::ordered())
     .json(JsonKind::Uuid);
 static OLD_EMAIL_META: Meta = Meta::new("email", "email", "text")
-    .ops(OpSet::ordered())
+    .ops(OpSet::text())
     .json(JsonKind::Text);
 static OLD_STATUS_META: Meta = Meta::new("status", "status", "text")
-    .ops(OpSet::ordered())
+    .ops(OpSet::text())
     .json(JsonKind::Text);
 static OLD_NAME_META: Meta = Meta::new("name", "name", "text")
-    .ops(OpSet::ordered())
+    .ops(OpSet::text())
     .json(JsonKind::Text);
 static OLD_CREATED_AT_META: Meta = Meta::new("createdAt", "created_at", "timestamptz")
     .ops(OpSet::ordered())

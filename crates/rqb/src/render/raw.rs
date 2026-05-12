@@ -8,20 +8,14 @@ impl Renderer {
         debug_assert_eq!(crate::raw::count_placeholders(sql), params.len());
         self.cacheable = false;
         let mut bind_index = 0usize;
-        let mut chars = sql.chars().peekable();
-        while let Some(ch) = chars.next() {
-            if ch != '?' {
-                self.sql.push(ch);
-                continue;
+        crate::raw::scan_raw_tokens(sql, |token| match token {
+            crate::raw::RawToken::Text(text) => self.sql.push_str(text),
+            crate::raw::RawToken::EscapedQuestion => self.sql.push('?'),
+            crate::raw::RawToken::Placeholder => {
+                self.push_param(params[bind_index].clone());
+                bind_index += 1;
             }
-            if chars.peek() == Some(&'?') {
-                chars.next();
-                self.sql.push('?');
-                continue;
-            }
-            self.push_param(params[bind_index].clone());
-            bind_index += 1;
-        }
+        });
         debug_assert_eq!(bind_index, params.len());
         Ok(())
     }

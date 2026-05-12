@@ -36,6 +36,8 @@ pub struct OpSet {
     pub equality: bool,
     /// Whether ordering-style operators are valid.
     pub ordering: bool,
+    /// Whether text pattern operators such as `LIKE`, `ILIKE`, and regex are valid.
+    pub pattern: bool,
 }
 
 impl OpSet {
@@ -44,6 +46,7 @@ impl OpSet {
         Self {
             equality: false,
             ordering: false,
+            pattern: false,
         }
     }
 
@@ -52,6 +55,7 @@ impl OpSet {
         Self {
             equality: true,
             ordering: false,
+            pattern: false,
         }
     }
 
@@ -60,6 +64,16 @@ impl OpSet {
         Self {
             equality: true,
             ordering: true,
+            pattern: false,
+        }
+    }
+
+    /// Equality, ordering, sorting, and text pattern operators are allowed.
+    pub const fn text() -> Self {
+        Self {
+            equality: true,
+            ordering: true,
+            pattern: true,
         }
     }
 }
@@ -157,6 +171,7 @@ mod tests {
             OpSet {
                 equality: false,
                 ordering: false,
+                pattern: false,
             }
         );
         assert_eq!(
@@ -164,6 +179,7 @@ mod tests {
             OpSet {
                 equality: true,
                 ordering: false,
+                pattern: false,
             }
         );
         assert_eq!(
@@ -171,6 +187,15 @@ mod tests {
             OpSet {
                 equality: true,
                 ordering: true,
+                pattern: false,
+            }
+        );
+        assert_eq!(
+            OpSet::text(),
+            OpSet {
+                equality: true,
+                ordering: true,
+                pattern: true,
             }
         );
     }

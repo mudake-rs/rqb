@@ -26,7 +26,7 @@ fn field_t_erases_to_bool_expr_with_sqlx_param() {
 
 #[test]
 fn field_is_copy_without_requiring_t_to_be_copy() {
-    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
     const EMAIL: Field<String> = Field::new(&EMAIL_META);
 
     let field = EMAIL;
@@ -100,7 +100,7 @@ fn static_sql_literal_validates_without_params() {
 #[test]
 fn aggregate_modifiers_reject_non_aggregate_expressions() {
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
-    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
     const ID: Field<i32> = Field::new(&ID_META);
     const EMAIL: Field<String> = Field::new(&EMAIL_META);
 
@@ -215,7 +215,7 @@ fn scalar_subquery_rejects_write_statement_context() {
 #[test]
 fn borrowed_field_refs_and_raw_metadata_convert_to_value_shapes() {
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
-    static EMAIL_META: Meta = Meta::new("email", "email_address", "text").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email_address", "text").ops(OpSet::text());
     const ID: Field<i32> = Field::new(&ID_META);
 
     let id = ID.at("u");
@@ -349,6 +349,21 @@ fn text_predicates_reject_non_text_fields() {
         err,
         crate::Error::InvalidOperator(err)
             if err.field == "id" && err.operator == "like"
+    ));
+
+    let err = BoolExpr::Regex {
+        expr: ID.expr(),
+        pattern: ValueExpr::from("^[0-9]+$"),
+        case_insensitive: false,
+        negated: false,
+    }
+    .validate()
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidOperator(err)
+            if err.field == "id" && err.operator == "regex"
     ));
 }
 

@@ -37,17 +37,17 @@ impl BoolExpr {
                 high.validate()
             }
             Self::Like { expr, pattern, .. } => {
-                validate_like_expr(expr)?;
+                validate_pattern_expr(expr, "like")?;
                 expr.validate()?;
                 pattern.validate()
             }
             Self::SimilarTo { expr, pattern, .. } => {
-                validate_like_expr(expr)?;
+                validate_pattern_expr(expr, "similar_to")?;
                 expr.validate()?;
                 pattern.validate()
             }
             Self::Regex { expr, pattern, .. } => {
-                validate_like_expr(expr)?;
+                validate_pattern_expr(expr, "regex")?;
                 expr.validate()?;
                 pattern.validate()
             }
@@ -276,14 +276,14 @@ fn validate_ordered_expr(expr: &ValueExpr, operator: &'static str) -> Result<()>
     Err(Error::invalid_operator(meta.api, operator))
 }
 
-fn validate_like_expr(expr: &ValueExpr) -> Result<()> {
+fn validate_pattern_expr(expr: &ValueExpr, operator: &'static str) -> Result<()> {
     let Some(meta) = expr.field_meta() else {
         return Ok(());
     };
-    if matches!(meta.pg, "text" | "varchar" | "bpchar" | "citext") {
+    if meta.ops.pattern {
         return Ok(());
     }
-    Err(Error::invalid_operator(meta.api, "like"))
+    Err(Error::invalid_operator(meta.api, operator))
 }
 
 fn validate_infix_expr(expr: &ValueExpr, op: &'static str) -> Result<()> {

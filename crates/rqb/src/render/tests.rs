@@ -2,13 +2,13 @@ use crate::{
     Assignment, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param, RawStmt, Select,
     SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce,
     count_all, count_distinct, cte, current_date, current_timestamp, delete_from, extract,
-    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont,
+    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont, raw,
     raw_expr, raw_predicate, row, row_number, scalar_subquery, select, slice, subscript, table,
     to_jsonb, true_, update, values_source, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
-static EMAIL_META: Meta = Meta::new("email", "email_address", "text").ops(OpSet::ordered());
+static EMAIL_META: Meta = Meta::new("email", "email_address", "text").ops(OpSet::text());
 static ACTIVE_META: Meta = Meta::new("active", "active", "bool").ops(OpSet::equality());
 static UUID_META: Meta = Meta::new("id", "id", "uuid").ops(OpSet::equality());
 static ORDER_USER_ID_META: Meta = Meta::new("user_id", "user_id", "int4").ops(OpSet::ordered());
@@ -113,6 +113,21 @@ fn raw_fragments_are_numbered_in_render_order() {
     );
     assert_eq!(built.params.len(), 3);
     assert!(!built.cacheable);
+}
+
+#[test]
+fn raw_fragments_only_replace_placeholders_outside_sql_contexts() {
+    let built = raw("SELECT '?' AS literal, \"?col\" AS ident, $$?$$ AS body, \
+         /* ? */ $tag$?$tag$ AS tagged, ?? AS escaped, ?::int4 AS bound -- ?")
+    .bind(42_i32)
+    .build()
+    .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT '?' AS literal, \"?col\" AS ident, $$?$$ AS body, /* ? */ $tag$?$tag$ AS tagged, ? AS escaped, $1::int4 AS bound -- ?"
+    );
+    assert_eq!(built.params.len(), 1);
 }
 
 #[test]
@@ -1420,7 +1435,7 @@ fn postgres_18_function_helpers_render_without_raw_sql() {
 
 #[test]
 fn values_and_srf_sources_render_without_raw_sql() {
-    static KEY_META: Meta = Meta::new("key", "key", "text").ops(OpSet::ordered());
+    static KEY_META: Meta = Meta::new("key", "key", "text").ops(OpSet::text());
     static IDX_META: Meta = Meta::new("idx", "idx", "int4").ops(OpSet::ordered());
     const KEY: Field<String> = Field::new(&KEY_META);
     const IDX: Field<i32> = Field::new(&IDX_META);

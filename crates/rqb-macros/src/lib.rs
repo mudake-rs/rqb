@@ -450,11 +450,20 @@ fn ops_tokens(pg: &str, typed: bool) -> proc_macro2::TokenStream {
     if !typed {
         return quote! { ::rqb::OpSet::none() };
     }
+    if is_text_pattern_pg(pg) {
+        return quote! { ::rqb::OpSet::text() };
+    }
     if is_equality_only_pg(pg) {
         quote! { ::rqb::OpSet::equality() }
     } else {
         quote! { ::rqb::OpSet::ordered() }
     }
+}
+
+fn is_text_pattern_pg(pg: &str) -> bool {
+    // `inet` and `cidr` deserialize from JSON strings, but pattern matching on
+    // network types is not a normal search capability.
+    matches!(pg, "text" | "varchar" | "bpchar" | "citext")
 }
 
 fn is_equality_only_pg(pg: &str) -> bool {

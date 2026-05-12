@@ -15,6 +15,7 @@ mod type_map;
 
 use codegen::render;
 use introspect::introspect;
+use model::{ColumnType, Relation};
 
 #[derive(Debug, Parser)]
 #[command(name = "rqb")]
@@ -114,6 +115,7 @@ async fn generate(
         bail!("no tables, views, or materialized views found in schema `{schema}`");
     }
     relations.sort_by(|a, b| a.name.cmp(&b.name));
+    report_raw_only_columns(&relations);
 
     let code = format_generated_code(&render(&relations)?, output.no_rustfmt)?;
     if output.stdout {
@@ -153,6 +155,48 @@ async fn generate(
     Ok(())
 }
 
+fn report_raw_only_columns(relations: &[Relation]) {
+    let raw_only = raw_only_columns(relations);
+    if raw_only.is_empty() {
+        return;
+    }
+
+    let shown = raw_only
+        .iter()
+        .take(12)
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let suffix = raw_only
+        .len()
+        .checked_sub(shown.len())
+        .filter(|remaining| *remaining > 0)
+        .map_or(String::new(), |remaining| format!("; and {remaining} more"));
+    eprintln!(
+        "rqb-cli: {} raw-only column(s): {}{}",
+        raw_only.len(),
+        shown.join(", "),
+        suffix
+    );
+}
+
+fn raw_only_columns(relations: &[Relation]) -> Vec<String> {
+    relations
+        .iter()
+        .flat_map(|relation| {
+            relation.columns.iter().filter_map(move |column| {
+                if let ColumnType::RawOnly { pg } = &column.ty {
+                    Some(format!(
+                        "{}.{}.{} ({pg})",
+                        relation.schema, relation.name, column.name
+                    ))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect()
+}
+
 fn format_generated_code(code: &str, no_rustfmt: bool) -> Result<String> {
     if no_rustfmt {
         return Ok(code.to_owned());
@@ -190,7 +234,8 @@ fn format_generated_code(code: &str, no_rustfmt: bool) -> Result<String> {
 mod tests {
     use clap::Parser;
 
-    use super::Cli;
+    use super::{Cli, raw_only_columns};
+    use crate::model::{Column, ColumnType, GeneratedKind, KnownType, Relation, RelationKind};
 
     #[test]
     fn stdout_and_check_conflict() {
@@ -257,5 +302,34 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn raw_only_column_report_lists_extension_columns() {
+        let columns = raw_only_columns(&[Relation {
+            schema: "public".to_owned(),
+            name: "documents".to_owned(),
+            kind: RelationKind::Table,
+            columns: vec![
+                Column {
+                    name: "id".to_owned(),
+                    const_name: "ID".to_owned(),
+                    ty: ColumnType::Known(KnownType::Uuid),
+                    nullable: false,
+                    generated: GeneratedKind::None,
+                },
+                Column {
+                    name: "embedding".to_owned(),
+                    const_name: "EMBEDDING".to_owned(),
+                    ty: ColumnType::RawOnly {
+                        pg: "vector(384)".to_owned(),
+                    },
+                    nullable: false,
+                    generated: GeneratedKind::None,
+                },
+            ],
+        }]);
+
+        assert_eq!(columns, ["public.documents.embedding (vector(384))"]);
     }
 }

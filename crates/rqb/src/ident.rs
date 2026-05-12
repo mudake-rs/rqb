@@ -17,6 +17,11 @@ pub(crate) fn write_quoted_ident(output: &mut String, ident: &str) {
     output.push('"');
 }
 
+/// Quotes a dot-separated Postgres path such as `schema.table`.
+///
+/// The input is a path, not a pre-quoted identifier. A literal dot inside an
+/// identifier is not representable through this helper; use schema metadata
+/// generated from ordinary Postgres relation names instead.
 pub(crate) fn write_quoted_qualified(output: &mut String, name: &str) {
     for (idx, part) in name.split('.').enumerate() {
         if idx > 0 {

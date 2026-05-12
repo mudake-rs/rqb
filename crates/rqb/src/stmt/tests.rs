@@ -278,7 +278,7 @@ fn select_filter_and_having_chain_with_and_semantics() {
 
 #[test]
 fn insert_from_select_rejects_projection_count_mismatch() {
-    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
     const EMAIL: Field<String> = Field::new(&EMAIL_META);
     let insert = insert(users())
         .columns((ID, EMAIL))
@@ -352,7 +352,7 @@ fn empty_conflict_constraint_name_is_rejected() {
 
 #[test]
 fn column_conflict_target_supports_multiple_fields_and_predicate() {
-    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::ordered());
+    static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
     const EMAIL: Field<String> = Field::new(&EMAIL_META);
 
     let built = insert(users())

@@ -68,8 +68,8 @@ pub mod organizations {
     use super::*;
 
     pub static ID_META: Meta = Meta::col("id", "uuid").ops(OpSet::equality());
-    pub static SLUG_META: Meta = Meta::col("slug", "text").ops(OpSet::ordered());
-    pub static NAME_META: Meta = Meta::col("name", "text").ops(OpSet::ordered());
+    pub static SLUG_META: Meta = Meta::col("slug", "text").ops(OpSet::text());
+    pub static NAME_META: Meta = Meta::col("name", "text").ops(OpSet::text());
 
     pub const ID: Field<Uuid> = Field::new(&ID_META);
     pub const SLUG: Field<String> = Field::new(&SLUG_META);
@@ -89,10 +89,10 @@ pub mod products {
         .ops(OpSet::equality())
         .json(JsonKind::Uuid);
     pub static SKU_META: Meta = Meta::col("sku", "text")
-        .ops(OpSet::ordered())
+        .ops(OpSet::text())
         .json(JsonKind::Text);
     pub static NAME_META: Meta = Meta::col("name", "text")
-        .ops(OpSet::ordered())
+        .ops(OpSet::text())
         .json(JsonKind::Text);
     pub static PRICE_CENTS_META: Meta = Meta::col("price_cents", "int8")
         .ops(OpSet::ordered())

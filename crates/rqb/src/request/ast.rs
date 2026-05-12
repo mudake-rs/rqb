@@ -142,11 +142,29 @@ pub enum SortDirection {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AndFilterWire {
+    and: Vec<SearchFilter>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrFilterWire {
+    or: Vec<SearchFilter>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NotFilterWire {
+    not: Box<SearchFilter>,
+}
+
+#[derive(Deserialize)]
 #[serde(untagged)]
 enum SearchFilterWire {
-    And { and: Vec<SearchFilter> },
-    Or { or: Vec<SearchFilter> },
-    Not { not: Box<SearchFilter> },
+    And(AndFilterWire),
+    Or(OrFilterWire),
+    Not(NotFilterWire),
     Predicate(SearchPredicate),
 }
 
@@ -157,9 +175,9 @@ impl<'de> Deserialize<'de> for SearchFilter {
     {
         let wire = SearchFilterWire::deserialize(deserializer)?;
         Ok(match wire {
-            SearchFilterWire::And { and } => Self::And(and),
-            SearchFilterWire::Or { or } => Self::Or(or),
-            SearchFilterWire::Not { not } => Self::Not(not),
+            SearchFilterWire::And(wire) => Self::And(wire.and),
+            SearchFilterWire::Or(wire) => Self::Or(wire.or),
+            SearchFilterWire::Not(wire) => Self::Not(wire.not),
             SearchFilterWire::Predicate(predicate) => Self::Predicate(predicate),
         })
     }

@@ -7,13 +7,18 @@ static ID_META: Meta = Meta::new("id", "id", "int4")
     .ops(OpSet::ordered())
     .json(JsonKind::Integer);
 static STATUS_META: Meta = Meta::new("status", "status", "text")
-    .ops(OpSet::ordered())
+    .ops(OpSet::text())
     .json(JsonKind::Text);
 static ACTIVE_META: Meta = Meta::new("active", "active", "bool")
     .ops(OpSet::equality())
     .json(JsonKind::Bool);
-static INTERNAL_META: Meta = Meta::new("internal", "internal", "text").ops(OpSet::ordered());
+static INTERNAL_META: Meta = Meta::new("internal", "internal", "text").ops(OpSet::text());
+static DOMAIN_TEXT_META: Meta = Meta::new("slug", "slug", "public.slug_domain")
+    .ops(OpSet::text())
+    .json(JsonKind::Text);
+static TEXT_NO_OPS_META: Meta = Meta::new("memo", "memo", "text").json(JsonKind::Text);
 static FIELDS: [&Meta; 4] = [&ID_META, &STATUS_META, &ACTIVE_META, &INTERNAL_META];
+static PATTERN_FIELDS: [&Meta; 2] = [&DOMAIN_TEXT_META, &TEXT_NO_OPS_META];
 const ID: Field<i32> = Field::new(&ID_META);
 
 static UUID_META: Meta = Meta::new("externalId", "external_id", "uuid")
@@ -74,6 +79,14 @@ fn extra_value_source() -> Source {
         name: "public.extra_values",
         alias: None,
         fields: &EXTRA_VALUE_FIELDS,
+    }
+}
+
+fn pattern_source() -> Source {
+    Source::Table {
+        name: "public.patterns",
+        alias: None,
+        fields: &PATTERN_FIELDS,
     }
 }
 
@@ -279,6 +292,18 @@ fn json_request_rejects_unknown_predicate_fields() {
 }
 
 #[test]
+fn json_filter_rejects_ambiguous_or_extra_logical_fields() {
+    for payload in [
+        json!({ "filter": { "and": [], "extra": "ignored" } }),
+        json!({ "filter": { "and": [], "field": "status", "operator": "equals", "value": "paid" } }),
+        json!({ "filter": { "and": [], "or": [] } }),
+    ] {
+        let err = serde_json::from_value::<SearchRequest>(payload).unwrap_err();
+        assert!(err.is_data());
+    }
+}
+
+#[test]
 fn json_request_rejects_unknown_operator_names() {
     let err = serde_json::from_value::<SearchRequest>(json!({
         "filter": { "field": "status", "operator": "containsAll", "value": "paid" }
@@ -286,6 +311,70 @@ fn json_request_rejects_unknown_operator_names() {
     .unwrap_err();
 
     assert!(err.is_data());
+}
+
+#[test]
+fn search_pattern_operators_use_metadata_capability_not_pg_whitelist() {
+    let request: SearchRequest = serde_json::from_value(json!({
+        "filter": { "field": "slug", "operator": "startsWith", "value": "acme" }
+    }))
+    .unwrap();
+
+    let built = crate::select(pattern_source())
+        .apply_search(request)
+        .unwrap()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"slug\", \"memo\" FROM \"public\".\"patterns\" WHERE \"slug\" ILIKE $1 ESCAPE '\\'"
+    );
+}
+
+#[test]
+fn search_operators_reject_json_fields_without_matching_opset_capability() {
+    let is_null: SearchRequest = serde_json::from_value(json!({
+        "filter": { "field": "memo", "operator": "isNull" }
+    }))
+    .unwrap();
+    let contains: SearchRequest = serde_json::from_value(json!({
+        "filter": { "field": "memo", "operator": "contains", "value": "x" }
+    }))
+    .unwrap();
+
+    assert!(matches!(
+        crate::select(pattern_source())
+            .apply_search(is_null)
+            .unwrap_err(),
+        crate::Error::InvalidSearchOperator(err)
+            if err.field == "memo" && err.operator == "isNull"
+    ));
+    assert!(matches!(
+        crate::select(pattern_source())
+            .apply_search(contains)
+            .unwrap_err(),
+        crate::Error::InvalidSearchOperator(err)
+            if err.field == "memo" && err.operator == "contains"
+    ));
+}
+
+#[test]
+fn search_pattern_values_have_a_length_limit() {
+    let request: SearchRequest = serde_json::from_value(json!({
+        "filter": {
+            "field": "status",
+            "operator": "regex",
+            "value": "x".repeat(1025)
+        }
+    }))
+    .unwrap();
+
+    assert!(matches!(
+        crate::select(source()).apply_search(request).unwrap_err(),
+        crate::Error::InvalidSearchValue(err)
+            if err.field == "status" && err.expected == "string up to 1024 characters"
+    ));
 }
 
 #[test]

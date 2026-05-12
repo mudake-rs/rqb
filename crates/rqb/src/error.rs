@@ -517,6 +517,11 @@ impl From<sqlx::Error> for Error {
         match error {
             sqlx::Error::RowNotFound => Self::NotFound,
             sqlx::Error::Database(db) => Self::from_sqlx_database_error(&*db),
+            sqlx::Error::Io(err) => Self::Connection(err.to_string()),
+            sqlx::Error::Tls(err) => Self::Connection(err.to_string()),
+            sqlx::Error::PoolTimedOut => Self::Connection("database pool timed out".to_owned()),
+            sqlx::Error::PoolClosed => Self::Connection("database pool is closed".to_owned()),
+            sqlx::Error::WorkerCrashed => Self::Connection("database worker crashed".to_owned()),
             other => Self::Sqlx(Box::new(other)),
         }
     }
@@ -607,10 +612,7 @@ impl Error {
 
     /// Returns true for retryable transaction errors and connection failures.
     pub fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            Self::SerializationFailure(_) | Self::DeadlockDetected(_)
-        ) || self.is_connection()
+        self.code().is_some_and(is_retryable_sqlstate) || self.is_connection()
     }
 
     /// Returns true for connection-level failures.
@@ -742,6 +744,10 @@ impl Error {
     }
 }
 
+fn is_retryable_sqlstate(code: &str) -> bool {
+    matches!(code, "40001" | "40P01" | "57P01" | "57P02" | "57P03")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -808,7 +814,7 @@ mod tests {
     }
 
     #[test]
-    fn retryable_errors_are_serialization_deadlock_or_connection_only() {
+    fn retryable_errors_include_transaction_shutdown_and_connection_failures() {
         assert!(
             Error::SerializationFailure(Box::new(PgFailure {
                 message: "could not serialize access".to_owned(),
@@ -828,6 +834,16 @@ mod tests {
             .is_retryable()
         );
         assert!(Error::Connection("connection closed".to_owned()).is_retryable());
+        for code in ["57P01", "57P02", "57P03"] {
+            assert!(
+                Error::Database(Box::new(DatabaseFailure::new(
+                    code,
+                    "transient server failure"
+                )))
+                .is_retryable(),
+                "{code} should be retryable"
+            );
+        }
         assert!(
             !Error::QueryCanceled(Box::new(PgFailure {
                 message: "canceling statement due to user request".to_owned(),
@@ -844,5 +860,19 @@ mod tests {
             }))
             .is_retryable()
         );
+    }
+
+    #[test]
+    fn connection_like_sqlx_errors_map_to_connection_variant() {
+        let pool_timed_out = Error::from(sqlx::Error::PoolTimedOut);
+        assert!(matches!(pool_timed_out, Error::Connection(_)));
+        assert!(pool_timed_out.is_retryable());
+
+        let io = Error::from(sqlx::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::ConnectionReset,
+            "connection reset",
+        )));
+        assert!(matches!(io, Error::Connection(_)));
+        assert!(io.is_retryable());
     }
 }

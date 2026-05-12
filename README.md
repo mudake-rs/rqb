@@ -11,6 +11,25 @@ JSON search is a constrained adapter for filters, sort, limit, and offset.
 Start with [`samples`](samples). They are short, compile-checked, and show the
 actual API faster than prose.
 
+## Contents
+
+- [Why rqb](#why-rqb)
+- [Status](#status)
+- [Install](#install)
+- [Basic Query](#basic-query)
+- [Execution](#execution)
+- [Server-Owned SQL Shape](#server-owned-sql-shape)
+- [JSON Search](#json-search)
+- [Raw Escape Hatches](#raw-escape-hatches)
+- [Error Handling](#error-handling)
+- [Writes](#writes)
+- [Transactions](#transactions)
+- [CLI](#cli)
+- [Migrations And Schema Drift](#migrations-and-schema-drift)
+- [Crates](#crates)
+- [Checks](#checks)
+- [License](#license)
+
 ## Why rqb
 
 - You write Postgres, not generic SQL. rqb does not hide the dialect.

@@ -90,6 +90,13 @@ Generated schema modules are normal Rust modules. `table()` / `view()` provide
 the source metadata, uppercase constants are typed fields, and `alias("u")`
 returns an alias-bound handle for join-heavy queries.
 
+Use alias handles as soon as a query or write has more than one source. rqb can
+validate field capabilities and query shape, but PostgreSQL owns final name
+resolution; unqualified columns that exist in both sources can still fail at
+execution with an ambiguous-column error. The same applies to `MERGE`: alias the
+target and incoming source when the `ON` clause or branch conditions compare
+same-named columns.
+
 ```rust
 use rqb::prelude::*;
 use uuid::Uuid;
@@ -200,6 +207,11 @@ Postgres `MERGE ... RETURNING` reports rows affected by each executed action,
 including rows deleted by `WHEN NOT MATCHED BY SOURCE THEN DELETE`. If an API
 needs the final table state after that branch, run a follow-up `SELECT` with the
 same server-owned scope.
+
+Grouped analytics can make non-null source columns nullable in result rows.
+`ROLLUP`, `CUBE`, and `GROUPING SETS` emit subtotal rows by replacing grouped
+dimension values with `NULL`, so downstream `sqlx::FromRow` structs should use
+`Option<T>` for those projected dimensions.
 
 For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
 and `Select::try_into_source` infer it from explicit field projections.

@@ -153,6 +153,19 @@ let rows = select(schema::users::table())
 Service functions usually accept `impl PgExecutor<'e>` so the same query can run
 against `&PgPool`, `&mut PgConnection`, or a transaction connection.
 
+Statement convenience methods such as `fetch_all_as::<T>(&pool)` build,
+validate, and render the SQL for that call. If a hot path executes the same
+server-owned query shape repeatedly, build once and reuse the `BuiltQuery`:
+
+```rust
+let query = select(schema::users::table())
+    .columns((schema::users::ID, schema::users::EMAIL))
+    .filter(schema::users::STATUS.eq("active"))
+    .build()?;
+
+let rows = query.fetch_all_as::<UserRow>(&pool).await?;
+```
+
 Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
 with `?` placeholders. `??` renders a literal question mark.
 

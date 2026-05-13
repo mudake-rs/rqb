@@ -747,6 +747,17 @@ impl Source {
         }
     }
 
+    pub(crate) fn field_count(&self) -> usize {
+        match self {
+            Self::Table { fields, .. } | Self::View { fields, .. } => fields.len(),
+            Self::Cte { fields, .. }
+            | Self::Subquery { fields, .. }
+            | Self::Raw { fields, .. }
+            | Self::Function { fields, .. }
+            | Self::Values { fields, .. } => fields.len(),
+        }
+    }
+
     pub(crate) fn for_each_field(&self, mut f: impl FnMut(&Meta)) {
         match self {
             Self::Table { fields, .. } | Self::View { fields, .. } => {

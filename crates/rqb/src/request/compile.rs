@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use serde_json::Value as JsonValue;
 
 use crate::{
@@ -20,12 +18,18 @@ impl SearchRequest {
     pub fn merge_in(&self, mut select: Select) -> Result<Select> {
         let index = SearchMetaIndex::new(&select.source);
         let request_filter = self.filter_expr(&index)?;
+        let order = self.order_items(&index)?;
+        let limit = self.limit.map(|limit| Param::typed(i64::from(limit)));
+        let offset = self.offset.map(|offset| Param::typed(i64::from(offset)));
         select.filter = match (select.filter, request_filter) {
             (Some(existing), Some(request)) => Some(BoolExpr::and_pair(existing, request)),
             (existing, None) => existing,
             (None, Some(request)) => Some(request),
         };
-        self.apply_page_and_sort(select, &index)
+        select.order = order;
+        select.limit = limit;
+        select.offset = offset;
+        Ok(select)
     }
 
     fn filter_expr(&self, index: &SearchMetaIndex) -> Result<Option<BoolExpr>> {
@@ -35,20 +39,16 @@ impl SearchRequest {
             .transpose()
     }
 
-    fn apply_page_and_sort(&self, mut select: Select, index: &SearchMetaIndex) -> Result<Select> {
-        select.order = self
-            .sort
+    fn order_items(&self, index: &SearchMetaIndex<'_>) -> Result<Vec<OrderItem>> {
+        self.sort
             .iter()
             .map(|sort| sort.to_order_item(index))
-            .collect::<Result<Vec<_>>>()?;
-        select.limit = self.limit.map(|limit| Param::typed(i64::from(limit)));
-        select.offset = self.offset.map(|offset| Param::typed(i64::from(offset)));
-        Ok(select)
+            .collect()
     }
 }
 
 impl SearchFilter {
-    fn to_expr(&self, index: &SearchMetaIndex) -> Result<BoolExpr> {
+    fn to_expr(&self, index: &SearchMetaIndex<'_>) -> Result<BoolExpr> {
         match self {
             Self::And(filters) => {
                 if filters.is_empty() {
@@ -79,13 +79,8 @@ impl SearchFilter {
 }
 
 impl SearchPredicate {
-    fn to_expr(&self, index: &SearchMetaIndex) -> Result<BoolExpr> {
-        let meta = index.json_meta(&self.field)?;
-        let Some(json) = meta.json else {
-            return Err(Error::SearchFieldNotExposed {
-                field: self.field.clone(),
-            });
-        };
+    fn to_expr(&self, index: &SearchMetaIndex<'_>) -> Result<BoolExpr> {
+        let (meta, json) = index.json_meta(&self.field)?;
         let field = index.field_expr(meta);
         self.operator
             .to_expr(&self.field, meta, json, field, &self.value)
@@ -258,8 +253,8 @@ fn comparison_expr(
 }
 
 impl SearchSort {
-    fn to_order_item(&self, index: &SearchMetaIndex) -> Result<OrderItem> {
-        let meta = index.json_meta(&self.field)?;
+    fn to_order_item(&self, index: &SearchMetaIndex<'_>) -> Result<OrderItem> {
+        let (meta, _) = index.json_meta(&self.field)?;
         if !meta.ops.ordering {
             return Err(Error::InvalidSort {
                 field: self.field.clone(),
@@ -298,41 +293,42 @@ impl Select {
     }
 }
 
-struct SearchMetaIndex {
-    fields: BTreeMap<&'static str, Meta>,
-    qualifier: Option<String>,
+struct SearchMetaIndex<'a> {
+    fields: Vec<(&'static str, Meta)>,
+    qualifier: Option<&'a str>,
 }
 
-impl SearchMetaIndex {
-    fn new(source: &Source) -> Self {
-        let mut fields = BTreeMap::new();
+impl<'a> SearchMetaIndex<'a> {
+    fn new(source: &'a Source) -> Self {
+        let mut fields = Vec::with_capacity(source.field_count());
         source.for_each_field(|meta| {
-            fields.insert(meta.api, *meta);
+            fields.push((meta.api, *meta));
         });
         Self {
             fields,
-            qualifier: source.explicit_alias().map(str::to_owned),
+            qualifier: source.explicit_alias(),
         }
     }
 
-    fn json_meta(&self, field: &str) -> Result<Meta> {
-        let Some(meta) = self.fields.get(field).copied() else {
+    fn json_meta(&self, field: &str) -> Result<(Meta, JsonKind)> {
+        let Some((_, meta)) = self.fields.iter().find(|(name, _)| *name == field) else {
             return Err(Error::InvalidSearchField {
                 field: field.to_owned(),
             });
         };
-        if meta.json.is_none() {
+        let meta = *meta;
+        let Some(json) = meta.json else {
             return Err(Error::SearchFieldNotExposed {
                 field: field.to_owned(),
             });
-        }
-        Ok(meta)
+        };
+        Ok((meta, json))
     }
 
     fn field_expr(&self, meta: Meta) -> ValueExpr {
         ValueExpr::Field {
             meta,
-            qualifier: self.qualifier.clone(),
+            qualifier: self.qualifier.map(str::to_owned),
         }
     }
 }
@@ -370,7 +366,8 @@ fn search_pattern_value<'a>(field: &str, value: &'a JsonValue) -> Result<&'a str
     let value = value
         .as_str()
         .ok_or_else(|| Error::invalid_search_value(field, "string"))?;
-    if value.chars().count() <= MAX_SEARCH_PATTERN_CHARS {
+    if value.len() <= MAX_SEARCH_PATTERN_CHARS || value.chars().count() <= MAX_SEARCH_PATTERN_CHARS
+    {
         return Ok(value);
     }
     Err(Error::invalid_search_value(

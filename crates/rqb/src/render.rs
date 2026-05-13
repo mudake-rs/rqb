@@ -24,7 +24,7 @@ impl Renderer {
     fn new() -> Self {
         Self {
             sql: String::with_capacity(256),
-            params: Vec::with_capacity(8),
+            params: Vec::new(),
             cacheable: true,
         }
     }
@@ -47,6 +47,9 @@ impl Renderer {
 impl Stmt {
     /// Validates and renders this statement into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
+        if let Self::Raw(raw) = self {
+            return raw.build();
+        }
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_stmt(self))
     }
@@ -104,6 +107,13 @@ impl RawStmt {
     /// Validates and renders this raw statement into parameterized SQL.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
+        if self.params.is_empty() && !self.sql.as_bytes().contains(&b'?') {
+            return Ok(BuiltQuery {
+                sql: self.sql.clone(),
+                params: Params::new(),
+                cacheable: false,
+            });
+        }
         Renderer::build_with(|renderer| renderer.render_raw_stmt(self))
     }
 }

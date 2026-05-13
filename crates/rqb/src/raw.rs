@@ -20,6 +20,9 @@ pub(crate) fn validate_bind_count(sql: &str, binds: usize) -> Result<()> {
 
 #[inline]
 pub(crate) fn count_placeholders(sql: &str) -> usize {
+    if !sql.as_bytes().contains(&b'?') {
+        return 0;
+    }
     let mut count = 0;
     scan_raw_tokens(sql, |token| {
         if matches!(token, RawToken::Placeholder) {
@@ -32,47 +35,55 @@ pub(crate) fn count_placeholders(sql: &str) -> usize {
 pub(crate) fn scan_raw_tokens<'a>(sql: &'a str, mut f: impl FnMut(RawToken<'a>)) {
     let mut pos = 0usize;
     let mut text_start = 0usize;
+    let bytes = sql.as_bytes();
 
     while pos < sql.len() {
-        if sql[pos..].starts_with('\'') {
-            pos = skip_single_quoted(sql, pos + 1, has_escape_string_prefix(sql, pos));
-            continue;
-        }
-        if sql[pos..].starts_with('"') {
-            pos = skip_double_quoted(sql, pos + 1);
-            continue;
-        }
-        if sql[pos..].starts_with("--") {
-            pos = skip_line_comment(sql, pos + 2);
-            continue;
-        }
-        if sql[pos..].starts_with("/*") {
-            pos = skip_block_comment(sql, pos + 2);
-            continue;
-        }
-        if sql.as_bytes()[pos] == b'$'
-            && let Some(open_end) = dollar_quote_open_end(sql, pos)
-        {
-            pos = skip_dollar_quoted(sql, pos, open_end);
-            continue;
-        }
-        if sql[pos..].starts_with('?') {
-            if text_start < pos {
-                f(RawToken::Text(&sql[text_start..pos]));
+        match bytes[pos] {
+            b'\'' => {
+                pos = skip_single_quoted(sql, pos + 1, has_escape_string_prefix(sql, pos));
+                continue;
             }
-            if sql[pos + 1..].starts_with('?') {
-                f(RawToken::EscapedQuestion);
+            b'"' => {
+                pos = skip_double_quoted(sql, pos + 1);
+                continue;
+            }
+            b'-' if bytes.get(pos + 1) == Some(&b'-') => {
                 pos += 2;
-            } else {
-                f(RawToken::Placeholder);
+                pos = skip_line_comment(sql, pos);
+                continue;
+            }
+            b'/' if bytes.get(pos + 1) == Some(&b'*') => {
+                pos += 2;
+                pos = skip_block_comment(sql, pos);
+                continue;
+            }
+            b'$' => {
+                if let Some(open_end) = dollar_quote_open_end(sql, pos) {
+                    pos = skip_dollar_quoted(sql, pos, open_end);
+                    continue;
+                }
                 pos += 1;
             }
-            text_start = pos;
-            continue;
+            b'?' => {
+                if text_start < pos {
+                    f(RawToken::Text(&sql[text_start..pos]));
+                }
+                if bytes.get(pos + 1) == Some(&b'?') {
+                    f(RawToken::EscapedQuestion);
+                    pos += 2;
+                } else {
+                    f(RawToken::Placeholder);
+                    pos += 1;
+                }
+                text_start = pos;
+                continue;
+            }
+            byte if byte.is_ascii() => pos += 1,
+            _ => {
+                let ch = sql[pos..].chars().next().expect("pos is in bounds");
+                pos += ch.len_utf8();
+            }
         }
-
-        let ch = sql[pos..].chars().next().expect("pos is in bounds");
-        pos += ch.len_utf8();
     }
 
     if text_start < sql.len() {
@@ -200,6 +211,7 @@ mod tests {
 
     #[test]
     fn question_mark_placeholders_support_escaped_literals() {
+        assert_eq!(count_placeholders("SELECT id, email FROM users"), 0);
         assert_eq!(count_placeholders("a = ? and b = ?"), 2);
         assert_eq!(count_placeholders("jsonb_col ?? 'key' and x = ?"), 1);
     }

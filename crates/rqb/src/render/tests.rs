@@ -131,6 +131,17 @@ fn raw_fragments_only_replace_placeholders_outside_sql_contexts() {
 }
 
 #[test]
+fn raw_stmt_without_placeholders_keeps_sql_and_disables_cache() {
+    let built = raw("SELECT id, email FROM app_users ORDER BY id")
+        .build()
+        .unwrap();
+
+    assert_eq!(built.sql, "SELECT id, email FROM app_users ORDER BY id");
+    assert!(built.params.is_empty());
+    assert!(!built.cacheable);
+}
+
+#[test]
 fn insert_renders_columns_values_and_returning() {
     let insert = Insert {
         target: users(),

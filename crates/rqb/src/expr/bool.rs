@@ -108,7 +108,8 @@ impl BoolExpr {
 }
 
 fn flatten_and(exprs: impl IntoIterator<Item = BoolExpr>) -> Vec<BoolExpr> {
-    let mut flattened = Vec::new();
+    let exprs = exprs.into_iter();
+    let mut flattened = Vec::with_capacity(exprs.size_hint().0);
     for expr in exprs {
         match expr {
             BoolExpr::And(inner) if !inner.is_empty() => flattened.extend(inner),
@@ -119,7 +120,8 @@ fn flatten_and(exprs: impl IntoIterator<Item = BoolExpr>) -> Vec<BoolExpr> {
 }
 
 fn flatten_or(exprs: impl IntoIterator<Item = BoolExpr>) -> Vec<BoolExpr> {
-    let mut flattened = Vec::new();
+    let exprs = exprs.into_iter();
+    let mut flattened = Vec::with_capacity(exprs.size_hint().0);
     for expr in exprs {
         match expr {
             BoolExpr::Or(inner) if !inner.is_empty() => flattened.extend(inner),

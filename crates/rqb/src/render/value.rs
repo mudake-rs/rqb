@@ -222,11 +222,15 @@ impl Renderer {
 
     fn render_sql_literal(&mut self, value: &str) {
         self.sql.push('\'');
-        for ch in value.chars() {
-            if ch == '\'' {
-                self.sql.push('\'');
+        if value.contains('\'') {
+            for ch in value.chars() {
+                if ch == '\'' {
+                    self.sql.push('\'');
+                }
+                self.sql.push(ch);
             }
-            self.sql.push(ch);
+        } else {
+            self.sql.push_str(value);
         }
         self.sql.push('\'');
     }

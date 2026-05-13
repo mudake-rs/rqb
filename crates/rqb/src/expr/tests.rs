@@ -441,6 +441,7 @@ fn range_infix_predicates_reject_plain_scalar_fields() {
 
 #[test]
 fn escaped_like_pattern_escapes_wildcards_and_backslashes() {
+    assert_eq!(escaped_like_pattern("paid", "%", "%"), "%paid%");
     assert_eq!(
         escaped_like_pattern("50%_\\done", "%", "%"),
         "%50\\%\\_\\\\done%"

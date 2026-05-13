@@ -430,6 +430,14 @@ impl FieldRef<String> {
 pub(crate) fn escaped_like_pattern(value: &str, prefix: &str, suffix: &str) -> String {
     let mut escaped = String::with_capacity(prefix.len() + value.len() + suffix.len());
     escaped.push_str(prefix);
+    if !value
+        .bytes()
+        .any(|byte| matches!(byte, b'\\' | b'%' | b'_'))
+    {
+        escaped.push_str(value);
+        escaped.push_str(suffix);
+        return escaped;
+    }
     for ch in value.chars() {
         if matches!(ch, '\\' | '%' | '_') {
             escaped.push('\\');

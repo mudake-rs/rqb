@@ -9,6 +9,10 @@ impl Renderer {
         // callers that bypass the validated build path.
         debug_assert_eq!(crate::raw::count_placeholders(sql), params.len());
         self.cacheable = false;
+        if params.is_empty() && !sql.as_bytes().contains(&b'?') {
+            self.sql.push_str(sql);
+            return Ok(());
+        }
         let mut bind_index = 0usize;
         crate::raw::scan_raw_tokens(sql, |token| match token {
             crate::raw::RawToken::Text(text) => self.sql.push_str(text),

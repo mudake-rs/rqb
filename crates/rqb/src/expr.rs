@@ -4,7 +4,6 @@ mod collection;
 mod field;
 mod field_ref;
 mod functions;
-mod params;
 mod text;
 mod validate;
 mod value;

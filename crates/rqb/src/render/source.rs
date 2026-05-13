@@ -83,7 +83,6 @@ impl Renderer {
             Source::Raw {
                 sql, alias, params, ..
             } => {
-                self.cacheable = false;
                 self.sql.push('(');
                 self.render_raw(sql, params)?;
                 self.sql.push_str(") AS ");

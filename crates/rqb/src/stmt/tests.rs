@@ -17,7 +17,7 @@ fn users() -> Source {
 }
 
 #[test]
-fn subquery_value_expr_collects_nested_params_at_expression_position() {
+fn subquery_value_expr_renders_nested_params_at_expression_position() {
     let subquery = crate::Stmt::Select(Box::new(Select {
         ctes: Vec::new(),
         source: users(),
@@ -39,10 +39,17 @@ fn subquery_value_expr_collects_nested_params_at_expression_position() {
     }));
     let outer = ValueExpr::Subquery(Box::new(subquery));
 
-    let mut params = Vec::new();
-    outer.collect_params(&mut params);
+    let built = select(users())
+        .expr(outer)
+        .filter(ID.eq(20))
+        .build()
+        .unwrap();
 
-    assert_eq!(params.len(), 1);
+    assert_eq!(
+        built.sql,
+        "SELECT (SELECT \"id\" FROM \"app_users\" WHERE \"id\" = $1) FROM \"app_users\" WHERE \"id\" = $2"
+    );
+    assert_eq!(built.params.len(), 2);
 }
 
 #[test]
@@ -77,10 +84,9 @@ fn select_params_follow_sql_text_order() {
         lock: None,
     }));
 
-    let params = stmt.params();
+    let params = stmt.build().unwrap().params;
 
     assert_eq!(params.len(), 5);
-    stmt.validate().unwrap();
 }
 
 #[test]

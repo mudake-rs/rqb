@@ -5,6 +5,8 @@ impl Renderer {
         self.render_raw(&raw.sql, &raw.params)
     }
     pub(super) fn render_raw(&mut self, sql: &str, params: &[Param]) -> Result<()> {
+        // Validation owns this check; keep the debug assertion to catch internal
+        // callers that bypass the validated build path.
         debug_assert_eq!(crate::raw::count_placeholders(sql), params.len());
         self.cacheable = false;
         let mut bind_index = 0usize;

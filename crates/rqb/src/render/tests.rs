@@ -855,7 +855,7 @@ fn scalar_subquery_renders_inside_delete_predicates() {
     );
     let built = crate::delete_from(orders())
         .filter(ORDER_USER_ID.eq(7))
-        .filter(TOTAL.lte_expr(cutoff_total))
+        .filter(TOTAL.expr().lte(cutoff_total))
         .build()
         .unwrap();
 

@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use super::escaped_like_pattern;
 use crate::{
-    BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, Params,
-    ValueExpr, ValueOp, raw_expr, raw_predicate, row,
+    BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, ValueExpr,
+    ValueOp, raw_expr, raw_predicate, row,
 };
 
 #[test]
@@ -11,17 +11,16 @@ fn field_t_erases_to_bool_expr_with_sqlx_param() {
     static ID_META: Meta = Meta::new("id", "id", "uuid")
         .ops(OpSet::equality())
         .json(JsonKind::Uuid);
+    static ID_FIELDS: [&Meta; 1] = [&ID_META];
     const ID: Field<Uuid> = Field::new(&ID_META);
 
-    let expr = ID.eq(Uuid::nil());
-    expr.validate().unwrap();
+    let built = crate::select(crate::table("public.users", &ID_FIELDS))
+        .filter(ID.eq(Uuid::nil()))
+        .build()
+        .unwrap();
 
-    let mut raw_params = Vec::new();
-    expr.collect_params(&mut raw_params);
-    let params = Params::from_vec(raw_params);
-
-    assert_eq!(params.len(), 1);
-    assert!(params.debug_names()[0].ends_with("uuid::Uuid"));
+    assert_eq!(built.params.len(), 1);
+    assert!(built.params.debug_names()[0].ends_with("uuid::Uuid"));
 }
 
 #[test]
@@ -78,11 +77,7 @@ fn null_value_expr_validates_without_params() {
     let expr = crate::null();
     expr.validate().unwrap();
 
-    let mut params = Vec::new();
-    expr.collect_params(&mut params);
-
     assert!(matches!(expr, ValueExpr::Null));
-    assert!(params.is_empty());
 }
 
 #[test]
@@ -90,11 +85,7 @@ fn static_sql_literal_validates_without_params() {
     let expr = crate::literal("day");
     expr.validate().unwrap();
 
-    let mut params = Vec::new();
-    expr.collect_params(&mut params);
-
     assert!(matches!(expr, ValueExpr::SqlLiteral("day")));
-    assert!(params.is_empty());
 }
 
 #[test]

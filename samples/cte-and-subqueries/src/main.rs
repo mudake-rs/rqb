@@ -151,7 +151,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // deletes typed without constructing `ValueExpr::Subquery` by hand.
     let retention_delete = delete_from(orders::table())
         .filter(orders::USER_ID.eq(Uuid::nil()))
-        .filter(orders::TOTAL_CENTS.lte_expr(scalar_subquery(
+        .filter(orders::TOTAL_CENTS.expr().lte(scalar_subquery(
             select(orders::table())
                 .column(orders::TOTAL_CENTS)
                 .filter(orders::USER_ID.eq(Uuid::nil()))

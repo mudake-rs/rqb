@@ -20,6 +20,7 @@ impl SelectItem {
 ///
 /// This lets heterogeneous field projections use tuple syntax, for example
 /// `select(users::table()).columns((users::ID, users::EMAIL))`.
+#[doc(hidden)]
 pub trait IntoSelectItems {
     /// Converts this value into projection items.
     fn into_select_items(self) -> Vec<SelectItem>;

@@ -140,6 +140,7 @@ pub struct Cte {
 ///
 /// This keeps CTE/subquery/raw-source calls from repeating `*field.meta` when
 /// the field already carries the metadata rqb needs.
+#[doc(hidden)]
 pub trait IntoFieldMetas {
     /// Converts this value into exposed field metadata.
     fn into_field_metas(self) -> Vec<Meta>;
@@ -583,13 +584,6 @@ impl Join {
             }),
         }
     }
-
-    pub(crate) fn collect_params(&self, params: &mut Vec<Param>) {
-        self.source.collect_from_params(params);
-        if let Some(on) = &self.on {
-            on.collect_params(params);
-        }
-    }
 }
 
 impl Cte {
@@ -672,10 +666,6 @@ impl Cte {
             ));
         }
         self.stmt.validate()
-    }
-
-    pub(crate) fn collect_params(&self, params: &mut Vec<Param>) {
-        self.stmt.collect_params(params);
     }
 }
 
@@ -848,28 +838,6 @@ impl Source {
                 Ok(())
             }
             Self::Table { .. } | Self::View { .. } => Ok(()),
-        }
-    }
-
-    pub(crate) fn collect_from_params(&self, params: &mut Vec<Param>) {
-        match self {
-            Self::Subquery { stmt, .. } => stmt.collect_params(params),
-            Self::Raw {
-                params: raw_params, ..
-            } => params.extend(raw_params.iter().cloned()),
-            Self::Function { args, .. } => {
-                for arg in args {
-                    arg.collect_params(params);
-                }
-            }
-            Self::Values { rows, .. } => {
-                for row in rows {
-                    for value in row {
-                        value.collect_params(params);
-                    }
-                }
-            }
-            Self::Table { .. } | Self::View { .. } | Self::Cte { .. } => {}
         }
     }
 }

@@ -121,6 +121,7 @@ pub struct Assignment {
 ///
 /// This supports tuple syntax for heterogeneous manual assignments:
 /// `insert(users::table()).set_many((users::ID.set(id), users::EMAIL.set(email)))`.
+#[doc(hidden)]
 pub trait IntoAssignments {
     /// Converts this value into write assignments.
     fn into_assignments(self) -> Vec<Assignment>;

@@ -153,6 +153,7 @@ pub fn row(values: impl IntoRowValues) -> ValueExpr {
 /// Iterator inputs are useful when every row value has the same Rust type.
 /// Tuple inputs keep cursor-pagination and composite-key comparisons concise
 /// when the row mixes different column/value types.
+#[doc(hidden)]
 pub trait IntoRowValues {
     /// Converts this input into row value expressions.
     fn into_row_values(self) -> Vec<ValueExpr>;

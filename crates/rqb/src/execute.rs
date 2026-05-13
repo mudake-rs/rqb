@@ -359,6 +359,9 @@ impl Stmt {
 
 impl Select {
     /// Executes a matching `count(*)` query for this select.
+    ///
+    /// The count query strips `ORDER BY`, `LIMIT`, `OFFSET`, `FETCH`, and row
+    /// locks before wrapping the select as a subquery.
     pub async fn count<'e>(&self, executor: impl PgExecutor<'e>) -> Result<i64> {
         self.build_count()?.fetch_one_scalar(executor).await
     }

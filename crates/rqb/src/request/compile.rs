@@ -20,9 +20,9 @@ impl SearchRequest {
     /// Sort, limit, and offset are client-owned request clauses, so they
     /// replace the builder's current values for those clauses.
     pub fn merge_in(&self, mut select: Select) -> Result<Select> {
-        let index = SearchMetaIndex::new(&select.source);
-        let request_filter = self.filter_expr(&index)?;
-        let order = self.order_items(&index)?;
+        let lookup = SearchMetaLookup::new(&select.source);
+        let request_filter = self.filter_expr(&lookup)?;
+        let order = self.order_items(&lookup)?;
         let limit = self.limit.map(|limit| Param::typed(i64::from(limit)));
         let offset = self.offset.map(|offset| Param::typed(i64::from(offset)));
         select.filter = match (select.filter, request_filter) {
@@ -36,23 +36,23 @@ impl SearchRequest {
         Ok(select)
     }
 
-    fn filter_expr(&self, index: &SearchMetaIndex) -> Result<Option<BoolExpr>> {
+    fn filter_expr(&self, lookup: &SearchMetaLookup) -> Result<Option<BoolExpr>> {
         self.filter
             .as_ref()
-            .map(|filter| filter.to_expr(index))
+            .map(|filter| filter.to_expr(lookup))
             .transpose()
     }
 
-    fn order_items(&self, index: &SearchMetaIndex<'_>) -> Result<Vec<OrderItem>> {
+    fn order_items(&self, lookup: &SearchMetaLookup<'_>) -> Result<Vec<OrderItem>> {
         self.sort
             .iter()
-            .map(|sort| sort.to_order_item(index))
+            .map(|sort| sort.to_order_item(lookup))
             .collect()
     }
 }
 
 impl SearchFilter {
-    fn to_expr(&self, index: &SearchMetaIndex<'_>) -> Result<BoolExpr> {
+    fn to_expr(&self, lookup: &SearchMetaLookup<'_>) -> Result<BoolExpr> {
         match self {
             Self::And(filters) => {
                 if filters.is_empty() {
@@ -61,7 +61,7 @@ impl SearchFilter {
                 Ok(BoolExpr::And(
                     filters
                         .iter()
-                        .map(|filter| filter.to_expr(index))
+                        .map(|filter| filter.to_expr(lookup))
                         .collect::<Result<Vec<_>>>()?,
                 ))
             }
@@ -72,20 +72,20 @@ impl SearchFilter {
                 Ok(BoolExpr::Or(
                     filters
                         .iter()
-                        .map(|filter| filter.to_expr(index))
+                        .map(|filter| filter.to_expr(lookup))
                         .collect::<Result<Vec<_>>>()?,
                 ))
             }
-            Self::Not(filter) => Ok(BoolExpr::Not(Box::new(filter.to_expr(index)?))),
-            Self::Predicate(predicate) => predicate.to_expr(index),
+            Self::Not(filter) => Ok(BoolExpr::Not(Box::new(filter.to_expr(lookup)?))),
+            Self::Predicate(predicate) => predicate.to_expr(lookup),
         }
     }
 }
 
 impl SearchPredicate {
-    fn to_expr(&self, index: &SearchMetaIndex<'_>) -> Result<BoolExpr> {
-        let (meta, json) = index.json_meta(&self.field)?;
-        let field = index.field_expr(meta);
+    fn to_expr(&self, lookup: &SearchMetaLookup<'_>) -> Result<BoolExpr> {
+        let (meta, json) = lookup.json_meta(&self.field)?;
+        let field = lookup.field_expr(meta);
         self.operator
             .to_expr(&self.field, meta, json, field, &self.value)
     }
@@ -257,15 +257,15 @@ fn comparison_expr(
 }
 
 impl SearchSort {
-    fn to_order_item(&self, index: &SearchMetaIndex<'_>) -> Result<OrderItem> {
-        let (meta, _) = index.json_meta(&self.field)?;
+    fn to_order_item(&self, lookup: &SearchMetaLookup<'_>) -> Result<OrderItem> {
+        let (meta, _) = lookup.json_meta(&self.field)?;
         if !meta.ops.ordering {
             return Err(Error::InvalidSort {
                 field: self.field.clone(),
             });
         }
         Ok(OrderItem {
-            expr: index.field_expr(meta),
+            expr: lookup.field_expr(meta),
             direction: self.dir.into(),
             nulls: None,
         })
@@ -297,30 +297,25 @@ impl Select {
     }
 }
 
-struct SearchMetaIndex<'a> {
-    fields: Vec<(&'static str, Meta)>,
+struct SearchMetaLookup<'a> {
+    source: &'a Source,
     qualifier: Option<&'a str>,
 }
 
-impl<'a> SearchMetaIndex<'a> {
+impl<'a> SearchMetaLookup<'a> {
     fn new(source: &'a Source) -> Self {
-        let mut fields = Vec::with_capacity(source.field_count());
-        source.for_each_field(|meta| {
-            fields.push((meta.api, *meta));
-        });
         Self {
-            fields,
+            source,
             qualifier: source.explicit_alias(),
         }
     }
 
     fn json_meta(&self, field: &str) -> Result<(Meta, JsonKind)> {
-        let Some((_, meta)) = self.fields.iter().find(|(name, _)| *name == field) else {
+        let Some(meta) = self.source.field_by_api(field) else {
             return Err(Error::InvalidSearchField {
                 field: field.to_owned(),
             });
         };
-        let meta = *meta;
         let Some(json) = meta.json else {
             return Err(Error::SearchFieldNotExposed {
                 field: field.to_owned(),

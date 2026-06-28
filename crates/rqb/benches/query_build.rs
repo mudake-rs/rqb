@@ -50,6 +50,19 @@ macro_rules! wide_text_meta {
     };
 }
 
+macro_rules! plain_text_meta {
+    ($name:ident, $db:literal) => {
+        static $name: Meta = Meta::new($db, $db, "text")
+            .ops(OpSet::text())
+            .json(JsonKind::Text);
+    };
+}
+
+wide_text_meta!(NARROW_00_META, "field00", "field_00");
+wide_text_meta!(NARROW_01_META, "field01", "field_01");
+wide_text_meta!(NARROW_02_META, "field02", "field_02");
+wide_text_meta!(NARROW_03_META, "field03", "field_03");
+
 wide_text_meta!(WIDE_00_META, "field00", "field_00");
 wide_text_meta!(WIDE_01_META, "field01", "field_01");
 wide_text_meta!(WIDE_02_META, "field02", "field_02");
@@ -70,6 +83,27 @@ wide_text_meta!(WIDE_16_META, "field16", "field_16");
 wide_text_meta!(WIDE_17_META, "field17", "field_17");
 wide_text_meta!(WIDE_18_META, "field18", "field_18");
 wide_text_meta!(WIDE_19_META, "field19", "field_19");
+
+plain_text_meta!(PLAIN_00_META, "field_00");
+plain_text_meta!(PLAIN_01_META, "field_01");
+plain_text_meta!(PLAIN_02_META, "field_02");
+plain_text_meta!(PLAIN_03_META, "field_03");
+plain_text_meta!(PLAIN_04_META, "field_04");
+plain_text_meta!(PLAIN_05_META, "field_05");
+plain_text_meta!(PLAIN_06_META, "field_06");
+plain_text_meta!(PLAIN_07_META, "field_07");
+plain_text_meta!(PLAIN_08_META, "field_08");
+plain_text_meta!(PLAIN_09_META, "field_09");
+plain_text_meta!(PLAIN_10_META, "field_10");
+plain_text_meta!(PLAIN_11_META, "field_11");
+plain_text_meta!(PLAIN_12_META, "field_12");
+plain_text_meta!(PLAIN_13_META, "field_13");
+plain_text_meta!(PLAIN_14_META, "field_14");
+plain_text_meta!(PLAIN_15_META, "field_15");
+plain_text_meta!(PLAIN_16_META, "field_16");
+plain_text_meta!(PLAIN_17_META, "field_17");
+plain_text_meta!(PLAIN_18_META, "field_18");
+plain_text_meta!(PLAIN_19_META, "field_19");
 
 static USER_FIELDS: [&Meta; 4] = [
     &USER_ID_META,
@@ -93,6 +127,12 @@ static OLD_ORDER_FIELDS: [&Meta; 8] = [
     &OLD_TAGS_META,
     &OLD_METADATA_META,
 ];
+static NARROW_FIELDS: [&Meta; 4] = [
+    &NARROW_00_META,
+    &NARROW_01_META,
+    &NARROW_02_META,
+    &NARROW_03_META,
+];
 static WIDE_FIELDS: [&Meta; 20] = [
     &WIDE_00_META,
     &WIDE_01_META,
@@ -114,6 +154,28 @@ static WIDE_FIELDS: [&Meta; 20] = [
     &WIDE_17_META,
     &WIDE_18_META,
     &WIDE_19_META,
+];
+static PLAIN_FIELDS: [&Meta; 20] = [
+    &PLAIN_00_META,
+    &PLAIN_01_META,
+    &PLAIN_02_META,
+    &PLAIN_03_META,
+    &PLAIN_04_META,
+    &PLAIN_05_META,
+    &PLAIN_06_META,
+    &PLAIN_07_META,
+    &PLAIN_08_META,
+    &PLAIN_09_META,
+    &PLAIN_10_META,
+    &PLAIN_11_META,
+    &PLAIN_12_META,
+    &PLAIN_13_META,
+    &PLAIN_14_META,
+    &PLAIN_15_META,
+    &PLAIN_16_META,
+    &PLAIN_17_META,
+    &PLAIN_18_META,
+    &PLAIN_19_META,
 ];
 
 const USER_ID: Field<i32> = Field::new(&USER_ID_META);
@@ -147,8 +209,16 @@ fn old_order_search() -> Source {
     view("order_search_view", &OLD_ORDER_FIELDS)
 }
 
+fn narrow_search() -> Source {
+    view("narrow_search_view", &NARROW_FIELDS).alias("n")
+}
+
 fn wide_search() -> Source {
     view("wide_search_view", &WIDE_FIELDS).alias("w")
+}
+
+fn plain_projection_source() -> Source {
+    view("plain_projection_view", &PLAIN_FIELDS).alias("p")
 }
 
 fn old_simple_select_typed_query() -> Select {
@@ -199,6 +269,38 @@ fn select_join_json_aggregate_query() -> Select {
         .filter(ORDER_TOTAL.at("o").gte(black_box(5_000_i64)))
         .group_by(USER_ID.at("u"))
         .group_by(USER_EMAIL.at("u"))
+}
+
+fn qualified_field_refs_query() -> Select {
+    select(users().alias("u"))
+        .column(USER_ID.at("u"))
+        .column(USER_EMAIL.at("u"))
+        .filter(USER_ACTIVE.at("u").eq(black_box(true)))
+        .filter(
+            USER_CREATED_AT
+                .at("u")
+                .gte(black_box("2026-01-01".to_owned())),
+        )
+        .group_by(USER_ID.at("u"))
+        .group_by(USER_EMAIL.at("u"))
+}
+
+fn unqualified_field_refs_query() -> Select {
+    select(users())
+        .column(USER_ID)
+        .column(USER_EMAIL)
+        .filter(USER_ACTIVE.eq(black_box(true)))
+        .filter(USER_CREATED_AT.gte(black_box("2026-01-01".to_owned())))
+        .group_by(USER_ID)
+        .group_by(USER_EMAIL)
+}
+
+fn select_columns_from(source: Source, fields: &'static [&'static Meta]) -> Select {
+    let mut query = select(source);
+    for field in fields {
+        query = query.column(*field);
+    }
+    query
 }
 
 fn make_old_json_search_request() -> SearchRequest {
@@ -278,6 +380,54 @@ fn make_wide_json_search_request() -> SearchRequest {
     }
 }
 
+fn search_request_one_eq(field: &str) -> SearchRequest {
+    SearchRequest {
+        filter: Some(SearchFilter::Predicate(SearchPredicate {
+            field: field.to_owned(),
+            operator: SearchOperator::Equals,
+            value: json!("value"),
+        })),
+        sort: Vec::new(),
+        limit: None,
+        offset: None,
+    }
+}
+
+fn search_request_page_only() -> SearchRequest {
+    SearchRequest {
+        filter: None,
+        sort: Vec::new(),
+        limit: Some(50),
+        offset: Some(100),
+    }
+}
+
+fn search_request_sort_only() -> SearchRequest {
+    SearchRequest {
+        filter: None,
+        sort: vec![
+            SearchSort {
+                field: "field05".to_owned(),
+                dir: SortDirection::Asc,
+            },
+            SearchSort {
+                field: "field15".to_owned(),
+                dir: SortDirection::Desc,
+            },
+        ],
+        limit: None,
+        offset: None,
+    }
+}
+
+fn search_request_wide_filter_only() -> SearchRequest {
+    let mut request = make_wide_json_search_request();
+    request.sort = Vec::new();
+    request.limit = None;
+    request.offset = None;
+    request
+}
+
 #[divan::bench]
 fn old_simple_select_typed_build_ast() -> Select {
     old_simple_select_typed_query()
@@ -335,6 +485,64 @@ fn phase_search_merge_small(bencher: Bencher) {
 }
 
 #[divan::bench]
+fn phase_search_merge_empty_narrow(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(narrow_search()), SearchRequest::default()))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
+fn phase_search_merge_empty_wide(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(wide_search()), SearchRequest::default()))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
+fn phase_search_merge_narrow_one_predicate(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(narrow_search()), search_request_one_eq("field00")))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
+fn phase_search_merge_wide_one_predicate_first_field(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(wide_search()), search_request_one_eq("field00")))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+// Position probes: allocations should match; only the noisy timing delta can
+// show the linear scan cost across source fields.
+#[divan::bench]
+fn phase_search_merge_wide_one_predicate_last_field(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(wide_search()), search_request_one_eq("field19")))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
+fn phase_search_merge_wide_page_only(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(wide_search()), search_request_page_only()))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
+fn phase_search_merge_wide_sort_only(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(wide_search()), search_request_sort_only()))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
+fn phase_search_merge_wide_filter_only(bencher: Bencher) {
+    bencher
+        .with_inputs(|| (select(wide_search()), search_request_wide_filter_only()))
+        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+}
+
+#[divan::bench]
 fn phase_search_merge_wide(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), make_wide_json_search_request()))
@@ -372,6 +580,52 @@ fn phase_sql_literal_render() -> BuiltQuery {
         )))
         .build()
         .unwrap()
+}
+
+#[divan::bench]
+fn phase_join_json_aggregate_build_ast() -> Select {
+    select_join_json_aggregate_query()
+}
+
+#[divan::bench]
+fn phase_join_json_aggregate_render_prebuilt(bencher: Bencher) {
+    bencher
+        .with_inputs(select_join_json_aggregate_query)
+        .bench_values(|query| query.build().unwrap());
+}
+
+#[divan::bench]
+fn phase_qualified_field_refs_build_ast() -> Select {
+    qualified_field_refs_query()
+}
+
+#[divan::bench]
+fn phase_unqualified_field_refs_build_ast() -> Select {
+    unqualified_field_refs_query()
+}
+
+#[divan::bench]
+fn phase_projection_default_renamed_render_prebuilt(bencher: Bencher) {
+    bencher
+        .with_inputs(|| select(wide_search()))
+        .bench_values(|query| query.build().unwrap());
+}
+
+#[divan::bench]
+fn phase_projection_default_plain_render_prebuilt(bencher: Bencher) {
+    bencher
+        .with_inputs(|| select(plain_projection_source()))
+        .bench_values(|query| query.build().unwrap());
+}
+
+#[divan::bench]
+fn phase_projection_explicit_renamed_build_ast() -> Select {
+    select_columns_from(wide_search(), &WIDE_FIELDS)
+}
+
+#[divan::bench]
+fn phase_projection_explicit_plain_build_ast() -> Select {
+    select_columns_from(plain_projection_source(), &PLAIN_FIELDS)
 }
 
 #[divan::bench]

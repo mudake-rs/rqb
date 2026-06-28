@@ -8,6 +8,19 @@ use sqlx::postgres::types::{PgInterval, PgRange, PgTimeTz};
 use sqlx::types::BigDecimal;
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "sample.invoice_state")]
+pub enum InvoiceState {
+    #[sqlx(rename = "draft")]
+    Draft,
+    #[sqlx(rename = "issued")]
+    Issued,
+    #[sqlx(rename = "paid")]
+    Paid,
+    #[sqlx(rename = "void")]
+    Void,
+}
+
 rqb::schema! {
     table sample.app_users {
         id: uuid = Uuid,
@@ -32,7 +45,7 @@ rqb::schema! {
         // Identity: always. Do not include in INSERT assignments; use OVERRIDING SYSTEM VALUE to override.
         invoice_no: int8 = i64,
         customer_id: uuid = Uuid,
-        state: invoice_state,
+        state: "sample.invoice_state" = InvoiceState,
         amount: numeric = BigDecimal,
         tax_rate: numeric = BigDecimal,
         amount_history: "numeric[]" = Vec<BigDecimal>,

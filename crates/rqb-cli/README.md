@@ -87,10 +87,35 @@ rqb::schema! {
 ```
 
 Known sqlx-supported Postgres types generate typed `Field<T>` constants.
-Unknown or extension types stay raw-only metadata, which can still be used in
-server-owned SQL expressions through `*_META.expr()` or `*_META.at("alias")`.
-This keeps extension columns available for server-owned operators without
-pretending they have a portable Rust `Field<T>` mapping.
+Postgres enum types generate Rust enums with `sqlx::Type`, then enum columns
+use those generated types:
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "public.invoice_state")]
+pub enum InvoiceState {
+    #[sqlx(rename = "draft")]
+    Draft,
+    #[sqlx(rename = "paid")]
+    Paid,
+}
+
+rqb::schema! {
+    table public.invoices {
+        state: "public.invoice_state" = InvoiceState,
+    }
+}
+```
+
+Schema crates that include generated enums need a direct `sqlx` dependency with
+the `derive` and `postgres` features enabled. Enum typing is scoped to the
+generated Postgres schema; enum types from other schemas safely fall back to
+raw-only metadata.
+
+Unknown domains and extension types stay raw-only metadata, which can still be
+used in server-owned SQL expressions through `*_META.expr()` or
+`*_META.at("alias")`. This keeps extension columns available for server-owned
+operators without pretending they have a portable Rust `Field<T>` mapping.
 
 When raw-only columns are generated, `rqb-cli` prints a stderr summary with the
 relation, column, and Postgres type name. Treat that as a review queue for

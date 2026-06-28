@@ -110,14 +110,14 @@ async fn generate(
         .await
         .context("failed to connect to Postgres")?;
 
-    let mut relations = introspect(&pool, schema, only_tables).await?;
-    if relations.is_empty() {
+    let mut schema_model = introspect(&pool, schema, only_tables).await?;
+    if schema_model.relations.is_empty() {
         bail!("no tables, views, or materialized views found in schema `{schema}`");
     }
-    relations.sort_by(|a, b| a.name.cmp(&b.name));
-    report_raw_only_columns(&relations);
+    schema_model.relations.sort_by(|a, b| a.name.cmp(&b.name));
+    report_raw_only_columns(&schema_model.relations);
 
-    let code = format_generated_code(&render(&relations)?, output.no_rustfmt)?;
+    let code = format_generated_code(&render(&schema_model)?, output.no_rustfmt)?;
     if output.stdout {
         print!("{code}");
         return Ok(());
@@ -149,7 +149,7 @@ async fn generate(
     fs::write(out, code).with_context(|| format!("failed to write {}", out.display()))?;
     println!(
         "rqb-cli: generated {} relation(s) to {}",
-        relations.len(),
+        schema_model.relations.len(),
         out.display()
     );
     Ok(())

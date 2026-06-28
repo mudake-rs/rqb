@@ -3,6 +3,7 @@ use std::str::FromStr;
 use chrono::{DateTime, NaiveDate, Utc};
 use rqb::dsl::{isempty, range_lower, to_char};
 use rqb::prelude::*;
+use rqb_sample_schema::InvoiceState;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::invoices;
 use rqb_sample_schema::orders;
@@ -75,6 +76,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .filter(invoices::ID.eq(invoice_id))
         .returning(invoices::ID)
         .build()?;
+
+    // PostgreSQL enum columns are generated as typed sqlx-backed Rust enums.
+    let paid_invoices_sql = select(invoices::table())
+        .filter(invoices::STATE.eq(InvoiceState::Paid))
+        .build()?;
+    assert!(invoices::STATE.meta.json.is_none());
 
     let delete_sql = delete_from(invoices::table())
         .filter(invoices::ID.eq(invoice_id))
@@ -150,6 +157,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         clear_paid_sql.sql,
         "UPDATE \"sample\".\"invoices\" SET \"paid_at\" = NULL WHERE \"id\" = $1 RETURNING \"id\""
     );
+    assert_eq!(
+        paid_invoices_sql.sql,
+        "SELECT \"id\", \"invoice_no\", \"customer_id\", \"state\", \"amount\", \"tax_rate\", \"amount_history\", \"due_on\", \"issued_at\", \"paid_at\", \"reminder_time\", \"cutoff_time\", \"grace_period\", \"service_days\", \"billing_window\", \"client_ip\", \"client_network\", \"pdf\", \"tags\", \"metadata\" FROM \"sample\".\"invoices\" WHERE \"state\" = $1"
+    );
+    assert_eq!(paid_invoices_sql.params.len(), 1);
     assert_eq!(
         delete_sql.sql,
         "DELETE FROM \"sample\".\"invoices\" WHERE \"id\" = $1 RETURNING \"id\""

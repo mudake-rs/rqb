@@ -718,9 +718,15 @@ rqb generate \
 ```
 
 Known sqlx-supported Postgres types generate typed `Field<T>` constants.
-Unknown extension types stay raw-only metadata: they can be part of server-owned
-SQL shape, but they are hidden from JSON requests by default. Server-owned
-extension operators can be built from raw-only metadata:
+Postgres enum types generate Rust enums with `sqlx::Type`, and enum columns
+use those generated types in `Field<T>`. Schema crates that contain generated
+enums need a direct `sqlx` dependency with the `derive` and `postgres` features.
+Enum typing is scoped to the generated Postgres schema; enum types from other
+schemas safely fall back to raw-only metadata.
+
+Unknown domains and extension types stay raw-only metadata: they can be part of
+server-owned SQL shape, but they are hidden from JSON requests by default.
+Server-owned extension operators can be built from raw-only metadata:
 
 ```rust
 let embedding = vector_documents::EMBEDDING_META.expr();

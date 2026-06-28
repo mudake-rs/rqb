@@ -1,4 +1,17 @@
 #[derive(Debug, Clone)]
+pub(crate) struct SchemaModel {
+    pub(crate) enums: Vec<PgEnum>,
+    pub(crate) relations: Vec<Relation>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PgEnum {
+    pub(crate) schema: String,
+    pub(crate) name: String,
+    pub(crate) variants: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Relation {
     pub(crate) schema: String,
     pub(crate) name: String,
@@ -33,7 +46,15 @@ pub(crate) enum GeneratedKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ColumnType {
     Known(KnownType),
-    RawOnly { pg: String },
+    PgEnum {
+        schema: String,
+        name: String,
+        pg: String,
+        array: bool,
+    },
+    RawOnly {
+        pg: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

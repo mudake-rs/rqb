@@ -1,4 +1,4 @@
-use crate::{BindValue, Meta, OrderItem, Param, SelectItem};
+use crate::{BindValue, Meta, OrderItem, Param, SelectItem, WindowSpec};
 
 use super::{BoolExpr, BoolOp, CaseBuilder, ValueExpr, ValueOp};
 
@@ -184,10 +184,25 @@ impl ValueExpr {
 
     /// Adds aggregate-local `ORDER BY`.
     #[inline]
-    pub fn aggregate_order_by(mut self, item: OrderItem) -> Self {
-        if let Self::Aggregate { order_by, .. } = &mut self {
+    pub fn aggregate_order_by(self, item: OrderItem) -> Self {
+        if let Self::Aggregate {
+            name,
+            args,
+            distinct,
+            mut order_by,
+            filter,
+            over: None,
+        } = self
+        {
             order_by.push(item);
-            return self;
+            return Self::Aggregate {
+                name,
+                args,
+                distinct,
+                order_by,
+                filter,
+                over: None,
+            };
         }
 
         Self::InvalidAggregateModifier {
@@ -216,12 +231,14 @@ impl ValueExpr {
                 distinct,
                 order_by,
                 filter,
+                over,
             } => Self::Aggregate {
                 name,
                 args,
                 distinct,
                 order_by,
                 filter: combine_aggregate_filters(filter, next_filter),
+                over,
             },
             Self::OrderedSetAggregate {
                 name,
@@ -238,6 +255,35 @@ impl ValueExpr {
                 expr: Box::new(expr),
                 modifier: "aggregate_filter",
             },
+        }
+    }
+
+    /// Adds `OVER (...)` to an aggregate function call.
+    ///
+    /// PostgreSQL aggregate window calls use `ORDER BY` inside `OVER (...)`;
+    /// aggregate-local `DISTINCT` and `ORDER BY` are rejected for this modifier.
+    #[inline]
+    pub fn over(mut self, spec: WindowSpec) -> Self {
+        if let Self::Aggregate {
+            distinct,
+            order_by,
+            over,
+            ..
+        } = &mut self
+        {
+            if *distinct || !order_by.is_empty() {
+                return Self::InvalidAggregateModifier {
+                    expr: Box::new(self),
+                    modifier: "over",
+                };
+            }
+            *over = Some(Box::new(spec));
+            return self;
+        }
+
+        Self::InvalidAggregateModifier {
+            expr: Box::new(self),
+            modifier: "over",
         }
     }
 

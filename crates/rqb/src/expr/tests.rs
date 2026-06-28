@@ -116,6 +116,36 @@ fn aggregate_modifiers_reject_non_aggregate_expressions() {
             modifier: "aggregate_order_by"
         }
     ));
+
+    let over_err = crate::lower(EMAIL)
+        .over(crate::window())
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        over_err,
+        crate::Error::InvalidAggregateModifier { modifier: "over" }
+    ));
+
+    let distinct_over_err = crate::count_distinct(EMAIL)
+        .over(crate::window())
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        distinct_over_err,
+        crate::Error::InvalidAggregateModifier { modifier: "over" }
+    ));
+
+    let aggregate_order_over_err = crate::array_agg(EMAIL)
+        .over(crate::window())
+        .aggregate_order_desc(ID)
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        aggregate_order_over_err,
+        crate::Error::InvalidAggregateModifier {
+            modifier: "aggregate_order_by"
+        }
+    ));
 }
 
 #[test]

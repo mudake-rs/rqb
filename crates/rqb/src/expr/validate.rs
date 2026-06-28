@@ -99,6 +99,8 @@ impl ValueExpr {
                 filter,
                 args,
                 order_by,
+                over,
+                distinct,
                 ..
             } => {
                 for arg in args {
@@ -109,6 +111,12 @@ impl ValueExpr {
                 }
                 if let Some(filter) = filter {
                     filter.validate()?;
+                }
+                if let Some(spec) = over {
+                    if *distinct || !order_by.is_empty() {
+                        return Err(Error::InvalidAggregateModifier { modifier: "over" });
+                    }
+                    spec.validate()?;
                 }
                 Ok(())
             }
@@ -181,16 +189,7 @@ impl ValueExpr {
                 for arg in args {
                     arg.validate()?;
                 }
-                for expr in &spec.partition_by {
-                    expr.validate()?;
-                }
-                for item in &spec.order_by {
-                    item.validate()?;
-                }
-                if let Some(frame) = &spec.frame {
-                    frame.validate()?;
-                }
-                Ok(())
+                spec.validate()
             }
             Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
             Self::Subquery(stmt) => stmt
@@ -223,6 +222,21 @@ impl super::WindowFrame {
         self.start.validate()?;
         if let Some(end) = &self.end {
             end.validate()?;
+        }
+        Ok(())
+    }
+}
+
+impl super::WindowSpec {
+    fn validate(&self) -> Result<()> {
+        for expr in &self.partition_by {
+            expr.validate()?;
+        }
+        for item in &self.order_by {
+            item.validate()?;
+        }
+        if let Some(frame) = &self.frame {
+            frame.validate()?;
         }
         Ok(())
     }

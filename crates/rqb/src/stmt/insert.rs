@@ -4,13 +4,22 @@ impl Insert {
     /// Creates an insert statement for a table or view source.
     pub(crate) fn into(target: impl Into<Source>) -> Self {
         Self {
+            ctes: Vec::new(),
             target: target.into(),
             columns: Vec::new(),
             assignments: Vec::new(),
             source: None,
+            default_values: false,
             conflict: None,
             returning: Vec::new(),
         }
+    }
+
+    /// Adds a CTE to the insert statement.
+    #[inline]
+    pub fn with(mut self, cte: Cte) -> Self {
+        self.ctes.push(cte);
+        self
     }
 
     /// Adds one column assignment. If the same database column was assigned
@@ -85,7 +94,11 @@ impl Insert {
         I: IntoIterator<Item = R>,
         R: Insertable,
     {
-        if !self.columns.is_empty() || !self.assignments.is_empty() || self.source.is_some() {
+        if !self.columns.is_empty()
+            || !self.assignments.is_empty()
+            || self.source.is_some()
+            || self.default_values
+        {
             return Err(Error::InvalidInsertShape {
                 message: "batch insert cannot be combined with existing insert values or source",
             });
@@ -114,8 +127,13 @@ impl Insert {
             values.push(
                 assignments
                     .into_iter()
-                    .map(|assignment| assignment.value)
-                    .collect(),
+                    .map(|assignment| match assignment.value {
+                        AssignmentValue::Expr(expr) => Ok(expr),
+                        AssignmentValue::Default => Err(Error::InvalidInsertShape {
+                            message: "batch insert rows cannot use DEFAULT assignments",
+                        }),
+                    })
+                    .collect::<Result<Vec<_>>>()?,
             );
         }
 
@@ -170,6 +188,18 @@ impl Insert {
         let mut select = Select::from(source);
         select.projection = projection;
         self.source = Some(Box::new(select));
+        self
+    }
+
+    /// Uses PostgreSQL `DEFAULT VALUES` instead of explicit insert values.
+    ///
+    /// This is for rows where every target column should be populated by its
+    /// database default or remain nullable. It can still be combined with
+    /// `RETURNING` and `ON CONFLICT`; validation rejects mixing it with
+    /// `set(...)`, `values(...)`, or `from_select(...)`.
+    #[inline]
+    pub fn default_values(mut self) -> Self {
+        self.default_values = true;
         self
     }
 

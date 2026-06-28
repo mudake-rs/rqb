@@ -99,9 +99,10 @@ fn insertable_derive_outputs_expected_assignments() {
 
     assert_eq!(fields, ["email", "status", "type", "nickname"]);
     assert!(
-        assignments
-            .iter()
-            .all(|assignment| matches!(assignment.value, ValueExpr::Param(_)))
+        assignments.iter().all(|assignment| matches!(
+            assignment.value,
+            AssignmentValue::Expr(ValueExpr::Param(_))
+        ))
     );
 }
 
@@ -263,9 +264,10 @@ fn changeset_derive_outputs_expected_assignments() {
 
     assert_eq!(fields, ["email", "nickname"]);
     assert!(
-        assignments
-            .iter()
-            .all(|assignment| matches!(assignment.value, ValueExpr::Param(_)))
+        assignments.iter().all(|assignment| matches!(
+            assignment.value,
+            AssignmentValue::Expr(ValueExpr::Param(_))
+        ))
     );
 }
 

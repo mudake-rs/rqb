@@ -127,22 +127,34 @@ impl Select {
 impl Insert {
     /// Validates target, assignments, conflict handling, and returning list.
     pub fn validate(&self) -> Result<()> {
+        validate_cte_names(&self.ctes)?;
+        for cte in &self.ctes {
+            cte.validate()?;
+        }
         validate_table_target("insert", &self.target)?;
-        match (&self.source, self.assignments.is_empty()) {
-            (Some(source), true) => {
-                validate_nonempty_columns("insert-select", &self.columns)?;
-                validate_insert_select_columns(&self.columns, source)?;
-                source.validate()?;
-            }
-            (Some(_), false) => {
+        if self.default_values {
+            if self.source.is_some() || !self.assignments.is_empty() || !self.columns.is_empty() {
                 return Err(Error::InvalidInsertShape {
-                    message: "insert-select cannot also contain VALUES assignments",
+                    message: "DEFAULT VALUES cannot be combined with insert values or source",
                 });
             }
-            (None, true) => validate_nonempty_assignments("insert", &self.assignments)?,
-            (None, false) => {
-                for assignment in &self.assignments {
-                    assignment.value.validate()?;
+        } else {
+            match (&self.source, self.assignments.is_empty()) {
+                (Some(source), true) => {
+                    validate_nonempty_columns("insert-select", &self.columns)?;
+                    validate_insert_select_columns(&self.columns, source)?;
+                    source.validate()?;
+                }
+                (Some(_), false) => {
+                    return Err(Error::InvalidInsertShape {
+                        message: "insert-select cannot also contain VALUES assignments",
+                    });
+                }
+                (None, true) => validate_nonempty_assignments("insert", &self.assignments)?,
+                (None, false) => {
+                    for assignment in &self.assignments {
+                        validate_assignment_value(&assignment.value)?;
+                    }
                 }
             }
         }
@@ -176,7 +188,7 @@ impl ConflictClause {
         {
             validate_nonempty_assignments("conflict update", assignments)?;
             for assignment in assignments {
-                assignment.value.validate()?;
+                validate_assignment_value(&assignment.value)?;
             }
             if let Some(filter) = filter {
                 filter.validate()?;
@@ -196,7 +208,7 @@ impl Update {
         validate_table_target("update", &self.target)?;
         validate_nonempty_assignments("update", &self.assignments)?;
         for assignment in &self.assignments {
-            assignment.value.validate()?;
+            validate_assignment_value(&assignment.value)?;
         }
         for source in &self.from {
             source.validate()?;
@@ -269,6 +281,13 @@ fn validate_nonempty_assignments(
     Ok(())
 }
 
+fn validate_assignment_value(value: &AssignmentValue) -> Result<()> {
+    match value {
+        AssignmentValue::Expr(expr) => expr.validate(),
+        AssignmentValue::Default => Ok(()),
+    }
+}
+
 fn validate_nonempty_columns(statement: &'static str, columns: &[Meta]) -> Result<()> {
     if columns.is_empty() {
         return Err(Error::EmptyColumns { statement });
@@ -296,7 +315,7 @@ impl MergeAction {
                 }
                 validate_nonempty_assignments("merge-insert", assignments)?;
                 for assignment in assignments {
-                    assignment.value.validate()?;
+                    validate_assignment_value(&assignment.value)?;
                 }
                 Ok(())
             }
@@ -310,7 +329,7 @@ impl MergeAction {
                 }
                 validate_nonempty_assignments("merge-update", assignments)?;
                 for assignment in assignments {
-                    assignment.value.validate()?;
+                    validate_assignment_value(&assignment.value)?;
                 }
                 Ok(())
             }

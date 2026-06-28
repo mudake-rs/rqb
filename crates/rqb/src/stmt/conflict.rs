@@ -125,7 +125,7 @@ fn excluded_assignments(fields: impl IntoFieldMetas) -> Vec<Assignment> {
         .into_iter()
         .map(|field| Assignment {
             field,
-            value: ValueExpr::Excluded(field),
+            value: crate::AssignmentValue::Expr(ValueExpr::Excluded(field)),
         })
         .collect()
 }

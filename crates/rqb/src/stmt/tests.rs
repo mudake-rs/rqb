@@ -527,8 +527,23 @@ fn cte_accepts_raw_statement_without_manual_stmt_variant() {
 
 #[test]
 fn update_and_delete_accept_empty_cte_lists_and_reject_duplicate_names() {
+    insert(users()).set(ID.set(1)).validate().unwrap();
     update(users()).set(ID.set(1)).validate().unwrap();
     delete_from(users()).filter(ID.eq(1)).validate().unwrap();
+
+    let first = cte("dupe", select(users()).column(ID), ID);
+    let second = cte("dupe", select(users()).column(ID), ID);
+    let err = insert(users())
+        .with(first)
+        .with(second)
+        .set(ID.set(1))
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::Error::InvalidCteShape(err) if err.name == "dupe" && err.message == "duplicate CTE name"
+    ));
 
     let first = cte("dupe", select(users()).column(ID), ID);
     let second = cte("dupe", select(users()).column(ID), ID);
@@ -556,6 +571,40 @@ fn update_and_delete_accept_empty_cte_lists_and_reject_duplicate_names() {
     assert!(matches!(
         err,
         crate::Error::InvalidCteShape(err) if err.name == "dupe" && err.message == "duplicate CTE name"
+    ));
+}
+
+#[test]
+fn insert_default_values_rejects_explicit_values_or_source() {
+    insert(users()).default_values().validate().unwrap();
+    insert(users())
+        .default_values()
+        .returning(ID)
+        .validate()
+        .unwrap();
+
+    let err = insert(users())
+        .default_values()
+        .set(ID.set(1))
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        crate::Error::InvalidInsertShape {
+            message: "DEFAULT VALUES cannot be combined with insert values or source"
+        }
+    ));
+
+    let err = insert(users())
+        .default_values()
+        .from_select(select(users()).column(ID))
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        crate::Error::InvalidInsertShape {
+            message: "DEFAULT VALUES cannot be combined with insert values or source"
+        }
     ));
 }
 

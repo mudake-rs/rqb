@@ -177,13 +177,13 @@ pub use source::{
 };
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use stmt::{
-    Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields,
-    ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert,
-    Insertable, IntoAssignments, IntoSelectItems, LockMode, LockWait, MatchedMergeBuilder, Merge,
-    MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
-    OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt,
-    Update, delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw,
-    select, union, union_all, update,
+    Assignment, AssignmentValue, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause,
+    ConflictFields, ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem,
+    Insert, Insertable, IntoAssignments, IntoSelectItems, LockMode, LockWait, MatchedMergeBuilder,
+    Merge, MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder,
+    NullsPosition, OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator,
+    SetQuery, Stmt, Update, delete_from, except, except_all, insert, intersect, intersect_all,
+    merge_into, raw, select, union, union_all, update,
 };
 
 /// Creates a metadata-backed computed field for CTEs, subqueries, and projections.
@@ -326,13 +326,14 @@ pub mod dsl {
 /// `Result` signatures.
 pub mod prelude {
     pub use crate::{
-        Assignment, BindValue, BoolExpr, BuiltQuery, Changeset, Cte, Delete, Error, Field,
-        FieldRef, Insert, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params, PgConnection,
-        PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate, SearchRequest,
-        SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, and, cte,
-        cte_ref, delete_from, except, except_all, field, insert, intersect, intersect_all,
-        jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate, raw_source, schema,
-        select, subquery, table, tx, union, union_all, update, values_source, view,
+        Assignment, AssignmentValue, BindValue, BoolExpr, BuiltQuery, Changeset, Cte, Delete,
+        Error, Field, FieldRef, Insert, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params,
+        PgConnection, PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate,
+        SearchRequest, SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update,
+        ValueExpr, and, cte, cte_ref, delete_from, except, except_all, field, insert, intersect,
+        intersect_all, jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate,
+        raw_source, schema, select, subquery, table, tx, union, union_all, update, values_source,
+        view,
     };
 }
 
@@ -453,7 +454,7 @@ mod tests {
         let source = crate::table("public.users", &[]);
         let assignment = crate::Assignment {
             field: Meta::col("id", "int4"),
-            value: crate::ValueExpr::from(1_i32),
+            value: crate::AssignmentValue::Expr(crate::ValueExpr::from(1_i32)),
         };
 
         assert!(matches!(source, crate::Source::Table { .. }));

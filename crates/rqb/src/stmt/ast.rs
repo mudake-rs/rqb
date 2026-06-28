@@ -113,8 +113,25 @@ pub struct RowLock {
 pub struct Assignment {
     /// Target field metadata.
     pub field: Meta,
-    /// Assigned value expression.
-    pub value: ValueExpr,
+    /// Assigned value.
+    pub value: AssignmentValue,
+}
+
+/// Value accepted by write assignments.
+#[derive(Clone, Debug)]
+#[must_use]
+#[non_exhaustive]
+pub enum AssignmentValue {
+    /// A normal expression or bind parameter.
+    Expr(ValueExpr),
+    /// SQL `DEFAULT` for this target column.
+    Default,
+}
+
+impl From<ValueExpr> for AssignmentValue {
+    fn from(value: ValueExpr) -> Self {
+        Self::Expr(value)
+    }
 }
 
 /// Converts one or more write assignments into a vector.
@@ -462,6 +479,8 @@ pub struct Select {
 #[must_use]
 #[non_exhaustive]
 pub struct Insert {
+    /// CTEs attached to this insert.
+    pub ctes: Vec<Cte>,
     /// Target table or view.
     pub target: Source,
     /// Target columns in insert order.
@@ -470,6 +489,8 @@ pub struct Insert {
     pub assignments: Vec<Assignment>,
     /// Optional `INSERT ... SELECT` source.
     pub source: Option<Box<Select>>,
+    /// Whether to render `INSERT ... DEFAULT VALUES`.
+    pub default_values: bool,
     /// Optional conflict handling clause.
     pub conflict: Option<ConflictClause>,
     /// Optional `RETURNING` projection.

@@ -35,11 +35,17 @@ impl Renderer {
                 distinct,
                 order_by,
                 filter,
+                over,
             } => {
                 self.render_aggregate(name, args, *distinct, order_by)?;
                 if let Some(filter) = filter {
                     self.sql.push_str(" FILTER (WHERE ");
                     self.render_bool(filter)?;
+                    self.sql.push(')');
+                }
+                if let Some(spec) = over {
+                    self.sql.push_str(" OVER (");
+                    self.render_window_spec(spec)?;
                     self.sql.push(')');
                 }
                 Ok(())
@@ -155,42 +161,7 @@ impl Renderer {
                     self.render_value(arg)?;
                 }
                 self.sql.push_str(") OVER (");
-                let mut needs_space = false;
-                if !spec.partition_by.is_empty() {
-                    self.sql.push_str("PARTITION BY ");
-                    for (idx, expr) in spec.partition_by.iter().enumerate() {
-                        if idx > 0 {
-                            self.sql.push_str(", ");
-                        }
-                        self.render_value(expr)?;
-                    }
-                    needs_space = true;
-                }
-                if !spec.order_by.is_empty() {
-                    if needs_space {
-                        self.sql.push(' ');
-                    }
-                    self.sql.push_str("ORDER BY ");
-                    for (idx, item) in spec.order_by.iter().enumerate() {
-                        if idx > 0 {
-                            self.sql.push_str(", ");
-                        }
-                        self.render_value(&item.expr)?;
-                        self.sql.push(' ');
-                        self.sql.push_str(item.direction.as_sql());
-                        if let Some(nulls) = item.nulls {
-                            self.sql.push(' ');
-                            self.sql.push_str(nulls.as_sql());
-                        }
-                    }
-                    needs_space = true;
-                }
-                if let Some(frame) = &spec.frame {
-                    if needs_space {
-                        self.sql.push(' ');
-                    }
-                    self.render_window_frame(frame)?;
-                }
+                self.render_window_spec(spec)?;
                 self.sql.push(')');
                 Ok(())
             }
@@ -304,6 +275,46 @@ impl Renderer {
             }
         }
         self.sql.push(')');
+        Ok(())
+    }
+
+    pub(super) fn render_window_spec(&mut self, spec: &WindowSpec) -> Result<()> {
+        let mut needs_space = false;
+        if !spec.partition_by.is_empty() {
+            self.sql.push_str("PARTITION BY ");
+            for (idx, expr) in spec.partition_by.iter().enumerate() {
+                if idx > 0 {
+                    self.sql.push_str(", ");
+                }
+                self.render_value(expr)?;
+            }
+            needs_space = true;
+        }
+        if !spec.order_by.is_empty() {
+            if needs_space {
+                self.sql.push(' ');
+            }
+            self.sql.push_str("ORDER BY ");
+            for (idx, item) in spec.order_by.iter().enumerate() {
+                if idx > 0 {
+                    self.sql.push_str(", ");
+                }
+                self.render_value(&item.expr)?;
+                self.sql.push(' ');
+                self.sql.push_str(item.direction.as_sql());
+                if let Some(nulls) = item.nulls {
+                    self.sql.push(' ');
+                    self.sql.push_str(nulls.as_sql());
+                }
+            }
+            needs_space = true;
+        }
+        if let Some(frame) = &spec.frame {
+            if needs_space {
+                self.sql.push(' ');
+            }
+            self.render_window_frame(frame)?;
+        }
         Ok(())
     }
 

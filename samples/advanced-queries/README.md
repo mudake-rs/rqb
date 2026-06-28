@@ -1,7 +1,7 @@
 # Advanced Queries
 
 Shows a larger server-owned query with CTEs, joins, lateral subqueries, window
-functions, CASE, aggregate filters, and JSON aggregation.
+functions, aggregate windows, CASE, aggregate filters, and JSON aggregation.
 
 Execution mode: renders SQL and asserts it. No database connection is opened.
 
@@ -9,8 +9,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 
 - A realistic report query can stay server-owned and still be built from typed
   pieces.
-- CTEs, aliases, lateral joins, JSON aggregation, windows, CASE, `GROUP BY`,
-  `HAVING`, and `FETCH WITH TIES` compose in one query.
+- CTEs, aliases, lateral joins, JSON aggregation, windows, aggregate windows,
+  CASE, `GROUP BY`, `HAVING`, and `FETCH WITH TIES` compose in one query.
 - `case()` reads like SQL without exposing raw AST construction.
 - Reporting helpers such as `to_char`, `width_bucket`, `json_typeof`, and
   `current_user` keep common dashboard expressions out of raw SQL.

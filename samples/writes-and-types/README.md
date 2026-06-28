@@ -16,6 +16,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   predicates.
 - `Field<T>::set_null()` writes SQL `NULL` explicitly when application state
   needs to clear a nullable column.
+- `Field<T>::set_default()` and `insert(...).default_values()` delegate column
+  defaults to PostgreSQL.
 - `set_if(...)` and `set_option(...)` keep conditional assignments in the
   builder chain.
 - `returning_all()` uses generated metadata for explicit `RETURNING` columns.

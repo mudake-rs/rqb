@@ -138,7 +138,7 @@ impl<T> Field<T> {
     pub fn set_expr(self, value: impl Into<ValueExpr>) -> crate::Assignment {
         crate::Assignment {
             field: *self.meta,
-            value: value.into(),
+            value: crate::AssignmentValue::Expr(value.into()),
         }
     }
 
@@ -148,6 +148,15 @@ impl<T> Field<T> {
         self.set_expr(ValueExpr::Null)
     }
 
+    /// Creates an assignment that writes SQL `DEFAULT`.
+    #[inline]
+    pub fn set_default(self) -> crate::Assignment {
+        crate::Assignment {
+            field: *self.meta,
+            value: crate::AssignmentValue::Default,
+        }
+    }
+
     /// Creates an assignment from the same field exposed by another source alias.
     ///
     /// This keeps sync-style updates and `MERGE` actions from repeating both
@@ -155,7 +164,7 @@ impl<T> Field<T> {
     pub fn set_from(self, alias: impl Into<String>) -> crate::Assignment {
         crate::Assignment {
             field: *self.meta,
-            value: self.at(alias).expr(),
+            value: crate::AssignmentValue::Expr(self.at(alias).expr()),
         }
     }
 
@@ -164,7 +173,7 @@ impl<T> Field<T> {
     pub fn set_excluded(self) -> crate::Assignment {
         crate::Assignment {
             field: *self.meta,
-            value: self.excluded(),
+            value: crate::AssignmentValue::Expr(self.excluded()),
         }
     }
 

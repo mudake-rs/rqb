@@ -160,7 +160,7 @@ impl Assignment {
     pub fn new<T>(field: Field<T>, value: impl Into<ValueExpr>) -> Self {
         Self {
             field: *field.meta,
-            value: value.into(),
+            value: crate::AssignmentValue::Expr(value.into()),
         }
     }
 }

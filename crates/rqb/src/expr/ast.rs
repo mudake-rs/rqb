@@ -411,6 +411,8 @@ pub enum ValueExpr {
         order_by: Vec<OrderItem>,
         /// Aggregate `FILTER`.
         filter: Option<Box<BoolExpr>>,
+        /// Optional window specification for aggregate window functions.
+        over: Option<Box<WindowSpec>>,
     },
     /// Ordered-set aggregate function call.
     OrderedSetAggregate {

@@ -87,6 +87,18 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(invoices::ID)
         .build()?;
 
+    // DEFAULT writes let Postgres apply column defaults without modeling them as
+    // Rust values.
+    let default_invoice_sql = insert(invoices::table())
+        .default_values()
+        .returning(invoices::ID)
+        .build()?;
+    let reset_state_sql = update(invoices::table())
+        .set(invoices::STATE.set_default())
+        .filter(invoices::ID.eq(invoice_id))
+        .returning(invoices::ID)
+        .build()?;
+
     // PostgreSQL enum columns are generated as typed sqlx-backed Rust enums.
     let paid_invoices_sql = select(invoices::table())
         .filter(invoices::STATE.eq(InvoiceState::Paid))
@@ -167,6 +179,16 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         clear_paid_sql.sql,
         "UPDATE \"sample\".\"invoices\" SET \"paid_at\" = NULL WHERE \"id\" = $1 RETURNING \"id\""
     );
+    assert_eq!(
+        default_invoice_sql.sql,
+        "INSERT INTO \"sample\".\"invoices\" DEFAULT VALUES RETURNING \"id\""
+    );
+    assert_eq!(default_invoice_sql.params.len(), 0);
+    assert_eq!(
+        reset_state_sql.sql,
+        "UPDATE \"sample\".\"invoices\" SET \"state\" = DEFAULT WHERE \"id\" = $1 RETURNING \"id\""
+    );
+    assert_eq!(reset_state_sql.params.len(), 1);
     assert_eq!(
         paid_invoices_sql.sql,
         "SELECT \"id\", \"invoice_no\", \"customer_id\", \"state\", \"amount\", \"tax_rate\", \"amount_history\", \"due_on\", \"issued_at\", \"paid_at\", \"reminder_time\", \"cutoff_time\", \"grace_period\", \"service_days\", \"billing_window\", \"client_ip\", \"client_network\", \"pdf\", \"tags\", \"metadata\" FROM \"sample\".\"invoices\" WHERE \"state\" = $1"

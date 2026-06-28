@@ -1,10 +1,10 @@
 use crate::{
-    Assignment, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param, RawStmt, Select,
-    SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case, coalesce,
-    count_all, count_distinct, cte, current_date, current_timestamp, delete_from, extract,
-    function_source, insert, json_agg, json_get_text, lag, merge_into, param, percentile_cont, raw,
-    raw_expr, raw_predicate, row, row_number, scalar_subquery, select, slice, subscript, table,
-    to_jsonb, true_, update, values_source, window,
+    Assignment, AssignmentValue, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param,
+    RawStmt, Select, SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case,
+    coalesce, count_all, count_distinct, cte, current_date, current_timestamp, delete_from,
+    extract, function_source, insert, json_agg, json_get_text, lag, merge_into, param,
+    percentile_cont, raw, raw_expr, raw_predicate, row, row_number, scalar_subquery, select, slice,
+    subscript, table, to_jsonb, true_, update, values_source, window,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -144,13 +144,17 @@ fn raw_stmt_without_placeholders_keeps_sql_and_disables_cache() {
 #[test]
 fn insert_renders_columns_values_and_returning() {
     let insert = Insert {
+        ctes: Vec::new(),
         target: users(),
         columns: Vec::new(),
         assignments: vec![Assignment {
             field: EMAIL_META,
-            value: ValueExpr::Param(Param::typed("egor@example.com".to_owned())),
+            value: AssignmentValue::Expr(ValueExpr::Param(Param::typed(
+                "egor@example.com".to_owned(),
+            ))),
         }],
         source: None,
+        default_values: false,
         conflict: None,
         returning: vec![SelectItem {
             expr: ID.expr(),
@@ -273,6 +277,44 @@ fn null_value_expr_and_set_null_render_without_parameters() {
 }
 
 #[test]
+fn default_write_values_render_without_parameters() {
+    let inserted = insert(users())
+        .set(ID.set(1))
+        .set(EMAIL.set_default())
+        .returning(ID)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        inserted.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") VALUES ($1, DEFAULT) RETURNING \"id\""
+    );
+    assert_eq!(inserted.params.len(), 1);
+
+    let default_row = insert(users())
+        .default_values()
+        .returning(ID)
+        .build()
+        .unwrap();
+    assert_eq!(
+        default_row.sql,
+        "INSERT INTO \"public\".\"app_users\" DEFAULT VALUES RETURNING \"id\""
+    );
+    assert_eq!(default_row.params.len(), 0);
+
+    let updated = update(users())
+        .set(EMAIL.set_default())
+        .filter(ID.eq(1))
+        .build()
+        .unwrap();
+    assert_eq!(
+        updated.sql,
+        "UPDATE \"public\".\"app_users\" SET \"email_address\" = DEFAULT WHERE \"id\" = $1"
+    );
+    assert_eq!(updated.params.len(), 1);
+}
+
+#[test]
 fn sql_literal_and_typed_date_part_render_without_parameters() {
     let bucket = crate::date_trunc_part(crate::DatePart::Day, current_timestamp());
     let built = select(users())
@@ -307,6 +349,24 @@ fn insert_from_select_all_projects_source_fields_and_set_from_uses_alias() {
         "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") SELECT \"incoming\".\"id\", \"incoming\".\"email_address\" FROM (VALUES ($1, $2)) AS \"incoming\" (\"id\", \"email_address\") ON CONFLICT (\"id\") DO UPDATE SET \"email_address\" = \"incoming\".\"email_address\""
     );
     assert_eq!(built.params.len(), 2);
+}
+
+#[test]
+fn insert_with_cte_renders_before_insert_and_preserves_bind_order() {
+    let ids = cte("ids", raw("SELECT ?::int4 AS id").bind(1_i32), ID);
+    let ids_source = ids.source();
+
+    let built = insert(users())
+        .with(ids)
+        .from_select_all(ids_source)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "WITH \"ids\" (\"id\") AS (SELECT $1::int4 AS id) INSERT INTO \"public\".\"app_users\" (\"id\") SELECT \"id\" FROM \"ids\""
+    );
+    assert_eq!(built.params.len(), 1);
 }
 
 #[test]
@@ -877,6 +937,40 @@ fn insert_on_conflict_renders_update_and_do_nothing_actions() {
 }
 
 #[test]
+fn default_assignments_render_in_conflict_and_merge_actions() {
+    let conflict = insert(users())
+        .set(ID.set(1))
+        .on_conflict(ID)
+        .do_update_set(EMAIL.set_default())
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        conflict.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\") VALUES ($1) ON CONFLICT (\"id\") DO UPDATE SET \"email_address\" = DEFAULT"
+    );
+    assert_eq!(conflict.params.len(), 1);
+
+    let merge = merge_into(
+        users().alias("u"),
+        orders().alias("incoming"),
+        ID.at("u").eq_field(ORDER_USER_ID.at("incoming")),
+    )
+    .when_matched()
+    .update(EMAIL.set_default())
+    .when_not_matched()
+    .insert((ID.set(1), EMAIL.set_default()))
+    .build()
+    .unwrap();
+
+    assert_eq!(
+        merge.sql,
+        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"incoming\" ON \"u\".\"id\" = \"incoming\".\"user_id\" WHEN MATCHED THEN UPDATE SET \"email_address\" = DEFAULT WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($1, DEFAULT)"
+    );
+    assert_eq!(merge.params.len(), 1);
+}
+
+#[test]
 fn set_queries_render_with_order_limit_and_param_order() {
     let left = select(users()).column(ID).filter(ID.gt(10));
     let right = select(users()).column(ID).filter(ID.lt(3));
@@ -1083,6 +1177,32 @@ fn window_helpers_render_over_partition_and_order_specs() {
     assert_eq!(
         built.sql,
         "SELECT \"id\", row_number() OVER (PARTITION BY \"email_address\" ORDER BY \"id\" DESC) AS \"row_no\", lag(\"email_address\", $1) OVER (ORDER BY \"id\" ASC) AS \"previous_email\" FROM \"public\".\"app_users\""
+    );
+    assert_eq!(built.params.len(), 1);
+}
+
+#[test]
+fn aggregate_helpers_render_over_window_specs() {
+    let built = select(orders())
+        .column(ORDER_USER_ID)
+        .item(
+            crate::sum(TOTAL)
+                .over(window().partition_by(ORDER_USER_ID).order_desc(TOTAL))
+                .alias("running_total"),
+        )
+        .item(
+            count_all()
+                .aggregate_filter(TOTAL.gt(0))
+                .over(window().partition_by(ORDER_USER_ID))
+                .alias("positive_user_rows"),
+        )
+        .item(count_all().over(window()).alias("all_rows"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"user_id\", sum(\"total_cents\") OVER (PARTITION BY \"user_id\" ORDER BY \"total_cents\" DESC) AS \"running_total\", count(*) FILTER (WHERE \"total_cents\" > $1) OVER (PARTITION BY \"user_id\") AS \"positive_user_rows\", count(*) OVER () AS \"all_rows\" FROM \"public\".\"orders\""
     );
     assert_eq!(built.params.len(), 1);
 }

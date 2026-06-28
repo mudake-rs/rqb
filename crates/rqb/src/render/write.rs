@@ -2,31 +2,36 @@ use super::*;
 
 impl Renderer {
     pub(super) fn render_insert(&mut self, insert: &Insert) -> Result<()> {
+        self.render_ctes(&insert.ctes)?;
         self.sql.push_str("INSERT INTO ");
         self.render_write_target(&insert.target);
-        self.sql.push(' ');
-        if insert.source.is_some() {
-            self.render_parenthesized_idents(insert.columns.iter().map(|field| field.db));
+        if insert.default_values {
+            self.sql.push_str(" DEFAULT VALUES");
         } else {
-            self.render_parenthesized_idents(
-                insert
-                    .assignments
-                    .iter()
-                    .map(|assignment| assignment.field.db),
-            );
-        }
-        if let Some(source) = &insert.source {
             self.sql.push(' ');
-            self.render_select(source)?;
-        } else {
-            self.sql.push_str(" VALUES (");
-            for (idx, assignment) in insert.assignments.iter().enumerate() {
-                if idx > 0 {
-                    self.sql.push_str(", ");
-                }
-                self.render_value(&assignment.value)?;
+            if insert.source.is_some() {
+                self.render_parenthesized_idents(insert.columns.iter().map(|field| field.db));
+            } else {
+                self.render_parenthesized_idents(
+                    insert
+                        .assignments
+                        .iter()
+                        .map(|assignment| assignment.field.db),
+                );
             }
-            self.sql.push(')');
+            if let Some(source) = &insert.source {
+                self.sql.push(' ');
+                self.render_select(source)?;
+            } else {
+                self.sql.push_str(" VALUES (");
+                for (idx, assignment) in insert.assignments.iter().enumerate() {
+                    if idx > 0 {
+                        self.sql.push_str(", ");
+                    }
+                    self.render_assignment_value(&assignment.value)?;
+                }
+                self.sql.push(')');
+            }
         }
         if let Some(conflict) = &insert.conflict {
             self.render_conflict(conflict)?;
@@ -100,7 +105,7 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    self.render_value(&assignment.value)?;
+                    self.render_assignment_value(&assignment.value)?;
                 }
                 self.sql.push(')');
                 Ok(())
@@ -168,9 +173,19 @@ impl Renderer {
             }
             write_quoted_ident(&mut self.sql, assignment.field.db);
             self.sql.push_str(" = ");
-            self.render_value(&assignment.value)?;
+            self.render_assignment_value(&assignment.value)?;
         }
         Ok(())
+    }
+
+    pub(super) fn render_assignment_value(&mut self, value: &AssignmentValue) -> Result<()> {
+        match value {
+            AssignmentValue::Expr(expr) => self.render_value(expr),
+            AssignmentValue::Default => {
+                self.sql.push_str("DEFAULT");
+                Ok(())
+            }
+        }
     }
 
     pub(super) fn render_returning(&mut self, returning: &[SelectItem]) -> Result<()> {

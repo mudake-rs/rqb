@@ -85,10 +85,10 @@ mod update;
 mod validate;
 
 pub use ast::{
-    Assignment, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause, ConflictFields,
-    ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem, Insert,
-    Insertable, IntoAssignments, LockMode, LockWait, MatchedMergeBuilder, Merge, MergeAction,
-    MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
+    Assignment, AssignmentValue, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause,
+    ConflictFields, ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem,
+    Insert, Insertable, IntoAssignments, LockMode, LockWait, MatchedMergeBuilder, Merge,
+    MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, NullsPosition,
     OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator, SetQuery, Stmt,
     Update,
 };

@@ -12,6 +12,7 @@ pub fn aggregate(
         distinct,
         order_by: Vec::new(),
         filter: None,
+        over: None,
     }
 }
 

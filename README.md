@@ -321,7 +321,7 @@ live outside the prelude so broad names like `left`, `right`, `lower`,
 needs:
 
 ```rust
-use rqb::dsl::{coalesce, count_all, date_trunc_part, sum, DatePart};
+use rqb::dsl::{coalesce, count_all, date_trunc_part, sum, window, DatePart};
 use rqb::prelude::*;
 ```
 
@@ -342,6 +342,18 @@ Common helper families in the flat catalog:
 | Text | `lower`, `format`, `translate`, `repeat`, `octet_length`, `encode` |
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
 | Window functions | `window`, `row_number`, `rank`, `lag`, `preceding`, `unbounded_preceding` |
+
+Aggregate calls can also be used as PostgreSQL window functions:
+
+```rust
+select(schema::orders::table())
+    .column(schema::orders::USER_ID)
+    .item(
+        sum(schema::orders::TOTAL_CENTS)
+            .over(window().partition_by(schema::orders::USER_ID))
+            .alias("user_total_cents"),
+    );
+```
 
 When PostgreSQL expects a stable SQL vocabulary literal rather than user data,
 use typed helpers or `literal(...)` instead of a bind parameter:
@@ -533,7 +545,8 @@ let changed = update(schema::users::table())
     .await?;
 ```
 
-Use `set_null()` when an application intentionally writes SQL `NULL`:
+Use `set_null()` when an application intentionally writes SQL `NULL`, and
+`set_default()` when PostgreSQL should apply the column default:
 
 ```rust
 update(schema::invoices::table())
@@ -541,10 +554,26 @@ update(schema::invoices::table())
     .filter(schema::invoices::ID.eq(invoice_id))
     .execute(&pool)
     .await?;
+
+update(schema::invoices::table())
+    .set(schema::invoices::STATE.set_default())
+    .filter(schema::invoices::ID.eq(invoice_id))
+    .execute(&pool)
+    .await?;
 ```
 
 rqb renders the assignment; PostgreSQL still enforces `NOT NULL` constraints at
 execution time.
+
+For a row populated entirely by database defaults, use `DEFAULT VALUES`:
+
+```rust
+let id = insert(schema::jobs::table())
+    .default_values()
+    .returning(schema::jobs::ID)
+    .fetch_one_scalar::<Uuid>(&pool)
+    .await?;
+```
 
 Conditional write helpers keep service code linear when a field depends on
 application state:
@@ -559,7 +588,7 @@ update(schema::users::table())
     .await?;
 ```
 
-`UPDATE` and `DELETE` also accept CTEs, so write statements can stay in the
+`INSERT`, `UPDATE`, and `DELETE` also accept CTEs, so write statements can stay in the
 typed builder instead of falling back to raw SQL:
 
 ```rust

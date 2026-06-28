@@ -56,6 +56,10 @@ impl Insert {
     }
 
     /// Adds assignments produced by an [`Insertable`] DTO.
+    ///
+    /// The assignments participate in the same replacement rules as `set`.
+    /// Call `values(&dto)` first, then `set(...)` for IDs, tenant fields, or
+    /// other values owned by the server.
     pub fn values(mut self, values: impl Insertable) -> Self {
         extend_insert_assignments(
             &mut self.columns,
@@ -112,6 +116,9 @@ impl Insert {
     }
 
     /// Starts an `ON CONFLICT (columns...)` clause.
+    ///
+    /// Use this for column/index targets. For a named database constraint, use
+    /// [`Insert::on_conflict_constraint`] with a generated constraint constant.
     pub fn on_conflict(self, fields: impl ConflictFields) -> ColumnConflictBuilder {
         let mut target_fields = Vec::with_capacity(fields.conflict_field_count());
         fields.push_conflict_fields(&mut target_fields);
@@ -123,6 +130,9 @@ impl Insert {
     }
 
     /// Starts an `ON CONFLICT ON CONSTRAINT` clause.
+    ///
+    /// Generated schema exposes unique constraint names under
+    /// `relation::constraints`.
     pub fn on_conflict_constraint(
         self,
         constraint: impl Into<String>,

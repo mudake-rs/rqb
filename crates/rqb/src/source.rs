@@ -239,7 +239,8 @@ pub fn subquery(
 /// Creates a raw SQL source with explicit exposed field metadata.
 ///
 /// Raw source SQL is server-owned. rqb validates bind counts and renders the
-/// exposed field list as the derived-table column list.
+/// exposed field list as the derived-table column list. Use `?` for bind
+/// placeholders and `??` for literal question marks in the raw SQL text.
 pub fn raw_source(
     sql: impl Into<String>,
     alias: impl Into<String>,
@@ -255,6 +256,10 @@ pub fn raw_source(
 }
 
 /// Creates a table-valued function source with explicit exposed fields.
+///
+/// The field list is the metadata rqb exposes to later projection/filter code;
+/// include ordinality there too when using [`FunctionSource::with_ordinality`]
+/// and callers need to read it.
 pub fn function_source(
     name: &'static str,
     args: impl Into<Vec<ValueExpr>>,
@@ -395,6 +400,9 @@ pub fn jsonb_array_elements_source(
 }
 
 /// Creates a `FROM (VALUES ...) AS alias(columns...)` source.
+///
+/// `fields` defines the derived table column list and the metadata exposed to
+/// downstream rqb expressions.
 pub fn values_source<R>(
     rows: impl IntoIterator<Item = R>,
     alias: impl Into<String>,

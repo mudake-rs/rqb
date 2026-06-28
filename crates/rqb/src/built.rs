@@ -4,6 +4,10 @@ use crate::Params;
 use crate::Result;
 
 /// Rendered SQL plus its bind parameters.
+///
+/// Builders expose convenience `fetch_*` methods that call `build()` each time.
+/// Keep a `BuiltQuery` when you want to inspect SQL, log the generated shape,
+/// or execute the same validated query more than once with the same binds.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
@@ -13,11 +17,17 @@ pub struct BuiltQuery {
     /// Bind parameters in placeholder order.
     pub params: Params,
     /// Whether this query is safe to reuse as a stable prepared statement shape.
+    ///
+    /// Raw SQL fragments make the query non-cacheable because rqb cannot prove
+    /// that their text is a stable statement shape.
     pub cacheable: bool,
 }
 
 impl BuiltQuery {
-    /// Converts stored parameters into sqlx Postgres arguments.
+    /// Converts stored parameters into sqlx Postgres arguments for one execution.
+    ///
+    /// sqlx argument buffers are consumed by execution, so each execute/fetch
+    /// path creates a fresh `PgArguments` value from the stored params.
     pub fn arguments(&self) -> Result<PgArguments> {
         self.params.arguments()
     }

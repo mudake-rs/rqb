@@ -21,6 +21,9 @@ impl Update {
     }
 
     /// Adds or replaces one `SET` assignment.
+    ///
+    /// Later assignments for the same database column replace earlier ones, so
+    /// service code can layer server-owned values after a request changeset.
     #[inline]
     pub fn set(mut self, assignment: Assignment) -> Self {
         push_assignment(&mut self.assignments, assignment);
@@ -28,6 +31,8 @@ impl Update {
     }
 
     /// Adds or replaces multiple `SET` assignments.
+    ///
+    /// Later assignments for the same database column replace earlier ones.
     pub fn set_many(mut self, assignments: impl IntoAssignments) -> Self {
         extend_assignments(&mut self.assignments, assignments.into_assignments());
         self
@@ -52,6 +57,10 @@ impl Update {
     }
 
     /// Applies assignments produced by a partial update [`Changeset`] DTO.
+    ///
+    /// Assignments are merged with replacement semantics. Call `patch(&dto)`
+    /// first, then `set(...)` for authenticated/server-owned values that must
+    /// override request data.
     pub fn patch(mut self, changes: impl Changeset) -> Self {
         extend_assignments(&mut self.assignments, changes.changeset_assignments());
         self

@@ -26,6 +26,10 @@ pub fn merge_into(target: impl Into<Source>, using: impl Into<Source>, on: BoolE
 }
 
 /// Starts a server-owned raw SQL statement.
+///
+/// Raw SQL is still parameterized: use `?` placeholders with
+/// [`RawStmt::bind`](crate::RawStmt::bind), and `??` when the SQL text needs a
+/// literal question mark.
 pub fn raw(sql: impl Into<String>) -> RawStmt {
     RawStmt::new(sql)
 }
@@ -62,6 +66,9 @@ pub fn except_all(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
 
 impl Stmt {
     /// Creates a raw SQL statement variant.
+    ///
+    /// Prefer the free [`raw`] constructor for normal use; this exists for code
+    /// that is already working with the enum form.
     pub fn raw(sql: impl Into<String>) -> Self {
         Self::Raw(Box::new(RawStmt::new(sql)))
     }

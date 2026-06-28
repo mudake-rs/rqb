@@ -9,6 +9,7 @@ use serde_json::Value as JsonValue;
 /// [`Error::InvalidSearchField`], [`Error::SearchFieldNotExposed`],
 /// [`Error::InvalidSearchOperator`], [`Error::InvalidSearchValue`],
 /// [`Error::InvalidSort`], and [`Error::EmptySearchLogical`].
+/// Unknown JSON keys are rejected during deserialization.
 ///
 /// [`Error::EmptySearchLogical`]: crate::Error::EmptySearchLogical
 /// [`Error::InvalidSearchField`]: crate::Error::InvalidSearchField
@@ -25,12 +26,18 @@ pub struct SearchRequest {
     #[serde(default)]
     pub filter: Option<SearchFilter>,
     /// Sort keys applied in order.
+    ///
+    /// Applying a request replaces any sort already present on the select.
     #[serde(default)]
     pub sort: Vec<SearchSort>,
     /// Maximum number of rows to return.
+    ///
+    /// Applying a request replaces any existing builder limit.
     #[serde(default)]
     pub limit: Option<u32>,
     /// Number of rows to skip before returning results.
+    ///
+    /// Applying a request replaces any existing builder offset.
     #[serde(default)]
     pub offset: Option<u32>,
 }
@@ -63,6 +70,11 @@ pub struct SearchPredicate {
 }
 
 /// Operators supported by the JSON search API.
+///
+/// Availability is checked against [`Meta::ops`](crate::Meta::ops): equality
+/// enables equality, null, list, and membership operators; ordering enables
+/// range comparisons and sorting; pattern enables LIKE/regex operators on text
+/// JSON fields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]

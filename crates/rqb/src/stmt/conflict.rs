@@ -9,7 +9,9 @@ impl ColumnConflictBuilder {
 
     /// Adds an index predicate to an `ON CONFLICT (columns...)` target.
     ///
-    /// Repeated calls are AND-combined, matching repeated `filter(...)` calls.
+    /// This is for partial unique indexes. Repeated calls are AND-combined,
+    /// matching repeated `filter(...)` calls. Constraint targets do not support
+    /// target predicates.
     #[inline]
     pub fn target_where(mut self, predicate: BoolExpr) -> Self {
         self.predicate = Some(Box::new(BoolExpr::and_option(

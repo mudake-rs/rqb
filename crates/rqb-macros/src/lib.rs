@@ -36,6 +36,19 @@ use syn::{
 /// only, which is useful for extension or user-defined PostgreSQL types that
 /// should remain raw-only.
 ///
+/// Each generated relation module contains:
+/// - `*_META` values for all columns;
+/// - typed field constants for columns with a Rust type;
+/// - `FIELDS`, used by default projection and JSON search metadata lookup;
+/// - `table()` or `view()` source constructors;
+/// - `alias("u")` handles with alias-bound field methods;
+/// - optional `constraints::*` string constants for unique constraints.
+///
+/// `ops = ...` controls which typed/search operators are accepted for a field.
+/// `json = ...` exposes the field to `rqb::SearchRequest` with that client
+/// wire shape; `json = none` keeps it hidden from client search even if it
+/// remains usable from Rust builder code.
+///
 /// Generated metadata intentionally uses database column names as public API
 /// names. HTTP/JSON casing belongs in application DTOs, not generated schema.
 ///
@@ -72,6 +85,10 @@ pub fn schema(input: TokenStream) -> TokenStream {
 /// By default, a Rust field named `display_name` maps to the generated schema
 /// constant `DISPLAY_NAME` in the configured table module.
 ///
+/// Builder assignments use replacement semantics, so application code can call
+/// `insert(table).values(&dto).set(server_field.set(value))` to let
+/// server-owned values override DTO fields.
+///
 /// Field attributes:
 /// - `#[rqb(field = TABLE::FIELD)]` maps a Rust field to a differently named
 ///   generated schema field.
@@ -107,6 +124,10 @@ pub fn derive_insertable(input: TokenStream) -> TokenStream {
 /// `Option<T>` fields naturally model PATCH semantics: `Some(value)` sets the
 /// column and `None` leaves it unchanged. Non-optional fields always produce an
 /// assignment.
+///
+/// Builder assignments use replacement semantics, so call `patch(&dto)` before
+/// `set(...)` when authenticated/server-owned values must override request
+/// fields.
 ///
 /// The same `#[rqb(table = ...)]`, `#[rqb(field = ...)]`, and `#[rqb(skip)]`
 /// attributes supported by [`Insertable`] are available here.
@@ -287,17 +308,32 @@ impl RelationInput {
     fn expand(self) -> proc_macro2::TokenStream {
         let module = self.module;
         let qualified_name = self.qualified_name;
+        let module_doc = Literal::string(&format!("Generated rqb schema for `{qualified_name}`."));
+        let fields_doc = Literal::string(&format!(
+            "Root field metadata for the default `{qualified_name}` projection."
+        ));
+        let alias_doc = Literal::string(&format!(
+            "Creates an alias-bound handle for `{qualified_name}`."
+        ));
+        let alias_struct_doc = Literal::string(&format!(
+            "Alias-bound accessors for `{qualified_name}` fields."
+        ));
+        let source_doc = Literal::string(&format!(
+            "Returns `{qualified_name}` as a source with this alias."
+        ));
         let constructor = match self.kind {
             RelationKind::Table => quote! { ::rqb::table(#qualified_name, &FIELDS) },
             RelationKind::View => quote! { ::rqb::view(#qualified_name, &FIELDS) },
         };
         let constructor_fn = match self.kind {
             RelationKind::Table => quote! {
+                #[doc = "Creates the table source for this relation."]
                 pub fn table() -> ::rqb::Source {
                     #constructor
                 }
             },
             RelationKind::View => quote! {
+                #[doc = "Creates the view source for this relation."]
                 pub fn view() -> ::rqb::Source {
                     #constructor
                 }
@@ -319,6 +355,7 @@ impl RelationInput {
         let constraints = expand_constraints(self.constraints);
 
         quote! {
+            #[doc = #module_doc]
             pub mod #module {
                 // Bring caller-scope Rust types into the generated module.
                 #[allow(unused_imports)]
@@ -327,23 +364,27 @@ impl RelationInput {
                 #(#metas)*
                 #(#fields)*
 
+                #[doc = #fields_doc]
                 pub static FIELDS: [&'static ::rqb::Meta; #field_count] = [#(&#meta_idents),*];
 
                 #constructor_fn
                 #constraints
 
+                #[doc = #alias_doc]
                 pub fn alias(alias: impl Into<String>) -> Alias {
                     Alias {
                         alias: alias.into(),
                     }
                 }
 
+                #[doc = #alias_struct_doc]
                 #[derive(Clone, Debug)]
                 pub struct Alias {
                     alias: String,
                 }
 
                 impl Alias {
+                    #[doc = #source_doc]
                     pub fn source(&self) -> ::rqb::Source {
                         (#constructor).alias(self.alias.clone())
                     }
@@ -422,21 +463,27 @@ impl ColumnInput {
             &sanitize_alias_method_ident(&const_ident.to_string().to_snake_case()),
             const_ident.span(),
         );
+        let meta_doc = Literal::string(&format!("Metadata for `{db}` (`{pg}`)."));
+        let field_doc = Literal::string(&format!("Typed field for `{db}` (`{pg}`)."));
+        let alias_method_doc = Literal::string(&format!("Returns `{db}` bound to this alias."));
 
         let mut meta_expr = quote! { ::rqb::Meta::col(#db, #pg).ops(#ops) };
         if let Some(json) = json {
             meta_expr = quote! { #meta_expr.json(#json) };
         }
         let meta = quote! {
+            #[doc = #meta_doc]
             pub static #meta_ident: ::rqb::Meta = #meta_expr;
         };
 
         let (field, alias_method) = match self.rust_ty {
             Some(rust_ty) => {
                 let field = quote! {
+                    #[doc = #field_doc]
                     pub const #const_ident: ::rqb::Field<#rust_ty> = ::rqb::Field::new(&#meta_ident);
                 };
                 let alias_method = quote! {
+                    #[doc = #alias_method_doc]
                     pub fn #method_ident(&self) -> ::rqb::FieldRef<#rust_ty> {
                         #const_ident.at(self.alias.clone())
                     }
@@ -495,12 +542,18 @@ fn expand_constraints(constraints: Vec<ConstraintInput>) -> proc_macro2::TokenSt
     let items = constraints.into_iter().map(|constraint| {
         let const_ident = constraint.const_ident;
         let name = Literal::string(&constraint.name);
+        let doc = Literal::string(&format!(
+            "Database unique constraint `{}`.",
+            constraint.name
+        ));
         quote! {
+            #[doc = #doc]
             pub const #const_ident: &str = #name;
         }
     });
 
     quote! {
+        #[doc = "Database unique constraint names for this relation."]
         pub mod constraints {
             #(#items)*
         }

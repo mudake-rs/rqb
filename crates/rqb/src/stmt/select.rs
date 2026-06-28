@@ -83,6 +83,10 @@ impl Select {
     }
 
     /// Adds an expression without an output alias.
+    ///
+    /// Adding any projection item switches the select out of default root-field
+    /// projection. Use [`Select::default_columns`] first when you want the
+    /// default row plus computed expressions.
     pub fn expr(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.projection.push(SelectItem {
             expr: expr.into(),
@@ -110,6 +114,10 @@ impl Select {
     }
 
     /// Adds a fully specified projection item, usually an aliased expression.
+    ///
+    /// Adding any projection item switches the select out of default root-field
+    /// projection. Use [`Select::default_columns`] first when you want to append
+    /// computed columns to the default row.
     #[inline]
     pub fn item(mut self, item: SelectItem) -> Self {
         self.projection.push(item);

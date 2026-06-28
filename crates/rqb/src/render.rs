@@ -46,6 +46,10 @@ impl Renderer {
 
 impl Stmt {
     /// Validates and renders this statement into parameterized SQL.
+    ///
+    /// Use this when you need a reusable [`BuiltQuery`] or want to inspect SQL
+    /// before execution. The convenience `fetch_*` and `execute` methods build
+    /// on each call.
     pub fn build(&self) -> Result<BuiltQuery> {
         if let Self::Raw(raw) = self {
             return raw.build();
@@ -57,6 +61,9 @@ impl Stmt {
 
 impl Select {
     /// Validates and renders this select into parameterized SQL.
+    ///
+    /// Default projection is expanded during render when no explicit projection
+    /// items were added.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_select(self))
@@ -65,6 +72,9 @@ impl Select {
 
 impl SetQuery {
     /// Validates and renders this set query into parameterized SQL.
+    ///
+    /// Validation checks both sides before rendering the set operator, ordering,
+    /// and row-limit clauses.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_set(self))
@@ -73,6 +83,9 @@ impl SetQuery {
 
 impl Insert {
     /// Validates and renders this insert into parameterized SQL.
+    ///
+    /// Validation rejects empty insert shapes and write targets that are not
+    /// table/view sources before SQL is produced.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_insert(self))
@@ -81,6 +94,9 @@ impl Insert {
 
 impl crate::Update {
     /// Validates and renders this update into parameterized SQL.
+    ///
+    /// Validation rejects empty `SET` assignments and non-table/view targets
+    /// before SQL is produced.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_update(self))
@@ -89,6 +105,10 @@ impl crate::Update {
 
 impl Delete {
     /// Validates and renders this delete into parameterized SQL.
+    ///
+    /// Deletes require a `WHERE` predicate; validation returns
+    /// [`Error::DeleteWithoutFilter`](crate::Error::DeleteWithoutFilter) before
+    /// any SQL is rendered.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_delete(self))
@@ -97,6 +117,9 @@ impl Delete {
 
 impl Merge {
     /// Validates and renders this merge into parameterized SQL.
+    ///
+    /// Branch/action legality is checked at build time, including which actions
+    /// are valid for each `WHEN` branch.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         Renderer::build_with(|renderer| renderer.render_merge(self))
@@ -105,6 +128,10 @@ impl Merge {
 
 impl RawStmt {
     /// Validates and renders this raw statement into parameterized SQL.
+    ///
+    /// `?` placeholders are converted into Postgres `$N` binds. `??` renders a
+    /// literal question mark, and placeholder-like text inside SQL strings,
+    /// quoted identifiers, dollar quotes, and comments is ignored.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
         if self.params.is_empty() && !self.sql.as_bytes().contains(&b'?') {

@@ -6,6 +6,9 @@ use super::{BoolExpr, Field, FieldRef, ValueExpr};
 
 impl<T> Field<Vec<T>> {
     /// Builds an array overlap predicate (`&&`) from a SQL array expression.
+    ///
+    /// Use the `_expr` variants when the right-hand array is built in SQL.
+    /// Bind-value variants require sqlx [`PgHasArrayType`].
     pub fn overlaps_expr(self, values: impl Into<ValueExpr>) -> BoolExpr {
         self.reference().overlaps_expr(values)
     }
@@ -35,7 +38,10 @@ impl<T> Field<Vec<T>>
 where
     T: BindValue + PgHasArrayType,
 {
-    /// Builds an array overlap predicate (`&&`).
+    /// Builds an array overlap predicate (`&&`) from a Rust bind value.
+    ///
+    /// This requires sqlx array encoding support for `T`. Use
+    /// [`Field::overlaps_expr`] for server-owned array expressions.
     pub fn overlaps(self, values: Vec<T>) -> BoolExpr {
         self.reference().overlaps(values)
     }

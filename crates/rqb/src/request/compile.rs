@@ -15,6 +15,10 @@ const MAX_SEARCH_PATTERN_CHARS: usize = 1024;
 
 impl SearchRequest {
     /// Merges this request into an existing select, preserving server filters.
+    ///
+    /// The request filter is AND-composed with the select's existing filter.
+    /// Sort, limit, and offset are client-owned request clauses, so they
+    /// replace the builder's current values for those clauses.
     pub fn merge_in(&self, mut select: Select) -> Result<Select> {
         let index = SearchMetaIndex::new(&select.source);
         let request_filter = self.filter_expr(&index)?;

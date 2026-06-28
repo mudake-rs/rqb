@@ -299,6 +299,13 @@ impl CteShapeError {
 }
 
 /// Error type returned by rqb builders and sqlx execution helpers.
+///
+/// Builder/search validation errors are returned before SQL is rendered.
+/// Execution errors preserve sqlx/Postgres detail and map common SQLSTATE
+/// classes to structured variants such as [`Error::UniqueViolation`] and
+/// [`Error::NotNullViolation`]. HTTP adapters typically map search/validation
+/// errors to 400, `NotFound` to 404, constraint conflicts to 409, and other
+/// database failures to 500 unless the application has a narrower policy.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {

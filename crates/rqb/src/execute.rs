@@ -274,6 +274,9 @@ impl BuiltQuery {
 
 impl Stmt {
     /// Builds and executes the statement.
+    ///
+    /// This is a convenience path; call `build()` first when you need to
+    /// inspect SQL or reuse the same validated query.
     pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
         self.build()?.execute(executor).await
     }
@@ -294,11 +297,17 @@ impl Stmt {
     }
 
     /// Builds the statement and streams raw rows from an owned pool-backed query.
+    ///
+    /// For borrowed executor streams, call `build()` and use
+    /// [`BuiltQuery::fetch_stream`].
     pub fn fetch_stream_pool(self, pool: PgPool) -> Result<BoxStream<'static, Result<PgRow>>> {
         self.build()?.fetch_stream_pool(pool)
     }
 
     /// Builds the statement and fetches all rows into a `sqlx::FromRow` type.
+    ///
+    /// Use scalar helpers when the query returns one column instead of a row
+    /// struct/tuple.
     pub async fn fetch_all_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
@@ -323,6 +332,9 @@ impl Stmt {
     }
 
     /// Builds the statement and streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
+    ///
+    /// For borrowed executor streams, call `build()` and use
+    /// [`BuiltQuery::fetch_stream_as`].
     pub fn fetch_stream_pool_as<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'static,
@@ -358,6 +370,9 @@ impl Stmt {
     }
 
     /// Builds the statement and streams scalar values from an owned pool-backed query.
+    ///
+    /// For borrowed executor streams, call `build()` and use
+    /// [`BuiltQuery::fetch_stream_scalar`].
     pub fn fetch_stream_pool_scalar<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
     where
         T: ScalarValue + 'static,
@@ -392,6 +407,9 @@ macro_rules! impl_statement_execute {
     ($ty:ty) => {
         impl $ty {
             /// Builds and executes the statement.
+            ///
+            /// This is a convenience path; call `build()` first when you need
+            /// to inspect SQL or reuse the same validated query.
             pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
                 self.build()?.execute(executor).await
             }
@@ -415,6 +433,9 @@ macro_rules! impl_statement_execute {
             }
 
             /// Builds the statement and streams raw rows from an owned pool-backed query.
+            ///
+            /// For borrowed executor streams, call `build()` and use
+            /// [`BuiltQuery::fetch_stream`].
             pub fn fetch_stream_pool(
                 self,
                 pool: PgPool,
@@ -423,6 +444,9 @@ macro_rules! impl_statement_execute {
             }
 
             /// Builds the statement and fetches all rows into a `sqlx::FromRow` type.
+            ///
+            /// Use scalar helpers when the query returns one column instead of
+            /// a row struct/tuple.
             pub async fn fetch_all_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
             where
                 T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
@@ -450,6 +474,9 @@ macro_rules! impl_statement_execute {
             }
 
             /// Builds the statement and streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
+            ///
+            /// For borrowed executor streams, call `build()` and use
+            /// [`BuiltQuery::fetch_stream_as`].
             pub fn fetch_stream_pool_as<T>(
                 self,
                 pool: PgPool,
@@ -488,6 +515,9 @@ macro_rules! impl_statement_execute {
             }
 
             /// Builds the statement and streams scalar values from an owned pool-backed query.
+            ///
+            /// For borrowed executor streams, call `build()` and use
+            /// [`BuiltQuery::fetch_stream_scalar`].
             pub fn fetch_stream_pool_scalar<T>(
                 self,
                 pool: PgPool,

@@ -19,7 +19,7 @@ macro_rules! field_text_delegates {
 }
 
 field_text_delegates! {
-    /// Builds a `LIKE` predicate.
+    /// Builds a `LIKE` predicate using PostgreSQL pattern syntax.
     like(pattern: impl AsRef<str>);
     /// Builds a `LIKE` predicate from a SQL pattern expression.
     like_expr(pattern: impl Into<ValueExpr>);
@@ -27,7 +27,7 @@ field_text_delegates! {
     not_like(pattern: impl AsRef<str>);
     /// Builds a negated `LIKE` predicate from a SQL pattern expression.
     not_like_expr(pattern: impl Into<ValueExpr>);
-    /// Builds an `ILIKE` predicate.
+    /// Builds an `ILIKE` predicate using PostgreSQL pattern syntax.
     ilike(pattern: impl AsRef<str>);
     /// Builds an `ILIKE` predicate from a SQL pattern expression.
     ilike_expr(pattern: impl Into<ValueExpr>);
@@ -43,7 +43,7 @@ field_text_delegates! {
     not_similar_to(pattern: impl AsRef<str>);
     /// Builds a negated `SIMILAR TO` predicate from a SQL pattern expression.
     not_similar_to_expr(pattern: impl Into<ValueExpr>);
-    /// Builds an escaped case-insensitive contains predicate.
+    /// Builds an escaped case-insensitive contains predicate for a literal value.
     contains(value: impl AsRef<str>);
     /// Builds an escaped case-insensitive contains predicate from a SQL expression.
     ///
@@ -57,7 +57,7 @@ field_text_delegates! {
     /// LIKE metacharacters (`%`, `_`, `\`) are escaped server-side with
     /// `replace(...)`, so the expression value is matched literally.
     not_contains_expr(value: impl Into<ValueExpr>);
-    /// Builds an escaped case-insensitive prefix predicate.
+    /// Builds an escaped case-insensitive prefix predicate for a literal value.
     starts_with(value: impl AsRef<str>);
     /// Builds an escaped case-insensitive prefix predicate from a SQL expression.
     ///
@@ -71,7 +71,7 @@ field_text_delegates! {
     /// LIKE metacharacters (`%`, `_`, `\`) are escaped server-side with
     /// `replace(...)`, so the expression value is matched literally.
     not_starts_with_expr(value: impl Into<ValueExpr>);
-    /// Builds an escaped case-insensitive suffix predicate.
+    /// Builds an escaped case-insensitive suffix predicate for a literal value.
     ends_with(value: impl AsRef<str>);
     /// Builds an escaped case-insensitive suffix predicate from a SQL expression.
     ///
@@ -112,7 +112,7 @@ field_text_delegates! {
 }
 
 impl FieldRef<String> {
-    /// Builds a `LIKE` predicate.
+    /// Builds a `LIKE` predicate using PostgreSQL pattern syntax.
     pub fn like(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, false, false)
     }
@@ -132,7 +132,7 @@ impl FieldRef<String> {
         self.like_expr_predicate(pattern, false, true)
     }
 
-    /// Builds an `ILIKE` predicate.
+    /// Builds an `ILIKE` predicate using PostgreSQL pattern syntax.
     pub fn ilike(self, pattern: impl AsRef<str>) -> BoolExpr {
         self.like_predicate(pattern, true, false)
     }
@@ -172,7 +172,7 @@ impl FieldRef<String> {
         self.similar_expr_predicate(pattern, true)
     }
 
-    /// Builds an escaped case-insensitive contains predicate.
+    /// Builds an escaped case-insensitive contains predicate for a literal value.
     pub fn contains(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "%", "%", false)
     }
@@ -198,7 +198,7 @@ impl FieldRef<String> {
         self.affix_expr_predicate(value, "%", "%", true)
     }
 
-    /// Builds an escaped case-insensitive prefix predicate.
+    /// Builds an escaped case-insensitive prefix predicate for a literal value.
     pub fn starts_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "", "%", false)
     }
@@ -224,7 +224,7 @@ impl FieldRef<String> {
         self.affix_expr_predicate(value, "", "%", true)
     }
 
-    /// Builds an escaped case-insensitive suffix predicate.
+    /// Builds an escaped case-insensitive suffix predicate for a literal value.
     pub fn ends_with(self, value: impl AsRef<str>) -> BoolExpr {
         self.affix_predicate(value, "%", "", false)
     }

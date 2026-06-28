@@ -98,7 +98,9 @@ pub fn literal(value: &'static str) -> ValueExpr {
 /// Builds a server-owned raw value expression with rqb `?` placeholders.
 ///
 /// Use this for PostgreSQL syntax that is intentionally outside the typed DSL.
-/// Placeholder numbering is still composed with the surrounding query.
+/// Placeholder numbering is still composed with the surrounding query. Use
+/// `??` for a literal question mark; placeholder scanning ignores SQL strings,
+/// quoted identifiers, dollar quotes, and comments.
 pub fn raw_expr(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> ValueExpr {
     ValueExpr::Raw {
         sql: sql.into(),
@@ -109,7 +111,9 @@ pub fn raw_expr(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> ValueE
 /// Builds a server-owned raw predicate with rqb `?` placeholders.
 ///
 /// Use this for PostgreSQL predicates that are intentionally outside the typed
-/// DSL. Placeholder numbering is still composed with the surrounding query.
+/// DSL. Placeholder numbering is still composed with the surrounding query. Use
+/// `??` for a literal question mark; bind-count mismatches fail validation
+/// before rendering or execution.
 pub fn raw_predicate(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> BoolExpr {
     BoolExpr::Raw {
         sql: sql.into(),

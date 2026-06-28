@@ -5,6 +5,10 @@ use crate::{BindValue, Meta, Param, SelectItem};
 use super::{BoolExpr, BoolOp, ValueExpr};
 
 /// Typed database field generated from schema metadata.
+///
+/// Generated schema exposes `Field<T>` constants for unqualified columns. Use
+/// `field.at("alias")` or the generated `alias("u").field()` handle when the
+/// same relation appears in joins or subqueries.
 #[derive(Debug, PartialEq, Eq)]
 #[must_use]
 pub struct Field<T> {
@@ -14,6 +18,9 @@ pub struct Field<T> {
 }
 
 /// Qualified typed database field, usually created through an alias handle.
+///
+/// `FieldRef<T>` keeps the same metadata as the base field but renders with a
+/// table/source qualifier.
 #[derive(Debug, PartialEq, Eq)]
 #[must_use]
 pub struct FieldRef<T> {
@@ -95,11 +102,18 @@ impl<T> Field<T> {
     }
 
     /// Builds a custom value operator expression for this field.
+    ///
+    /// This is an escape hatch for server-owned PostgreSQL operators not yet
+    /// modeled by rqb. Bound values inside the right-hand expression remain
+    /// parameters, but PostgreSQL is the final authority on operator validity.
     pub fn op(self, op: &'static str, right: impl Into<ValueExpr>) -> ValueExpr {
         self.expr().op(op, right)
     }
 
     /// Builds a custom boolean infix predicate for this field.
+    ///
+    /// This is an escape hatch for server-owned PostgreSQL operators not yet
+    /// modeled by rqb. Prefer typed helpers when one exists.
     pub fn predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
         self.expr().predicate(op, right)
     }

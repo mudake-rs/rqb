@@ -434,7 +434,10 @@ pub struct Select {
     pub distinct: bool,
     /// Expressions for `DISTINCT ON`.
     pub distinct_on: Vec<ValueExpr>,
-    /// Projection list. Empty means default root-source projection.
+    /// Projection list.
+    ///
+    /// Empty means the renderer selects the root source's exposed fields.
+    /// Joined fields and computed expressions are never added implicitly.
     pub projection: Vec<SelectItem>,
     /// Optional `WHERE` predicate.
     pub filter: Option<BoolExpr>,
@@ -504,6 +507,9 @@ pub struct Delete {
     /// Optional `USING` sources.
     pub using: Vec<Source>,
     /// Required `WHERE` predicate.
+    ///
+    /// Validation rejects unfiltered deletes with
+    /// [`Error::DeleteWithoutFilter`](crate::Error::DeleteWithoutFilter).
     pub filter: Option<BoolExpr>,
     /// Optional `RETURNING` projection.
     pub returning: Vec<SelectItem>,
@@ -522,6 +528,10 @@ pub enum MergeWhen {
 }
 
 /// Action inside a PostgreSQL `MERGE` statement.
+///
+/// rqb validates branch/action legality at build time: `WHEN MATCHED` supports
+/// update/delete/do nothing, `WHEN NOT MATCHED` supports insert/do nothing, and
+/// `WHEN NOT MATCHED BY SOURCE` supports update/delete/do nothing.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
@@ -561,6 +571,10 @@ pub enum MergeAction {
 }
 
 /// Typed PostgreSQL `MERGE` statement.
+///
+/// Actions are rendered in the order they are added. Build-time validation
+/// rejects missing actions and branch/action combinations PostgreSQL does not
+/// allow.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]

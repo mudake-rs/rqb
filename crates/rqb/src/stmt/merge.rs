@@ -33,6 +33,8 @@ impl Merge {
     }
 
     /// Starts a `WHEN MATCHED` branch.
+    ///
+    /// This branch can finish with `update`, `delete`, or `do_nothing`.
     #[inline]
     pub fn when_matched(self) -> MatchedMergeBuilder {
         MatchedMergeBuilder {
@@ -51,6 +53,8 @@ impl Merge {
     }
 
     /// Starts a `WHEN NOT MATCHED` branch.
+    ///
+    /// This branch can finish with `insert` or `do_nothing`.
     #[inline]
     pub fn when_not_matched(self) -> NotMatchedMergeBuilder {
         NotMatchedMergeBuilder {
@@ -69,6 +73,8 @@ impl Merge {
     }
 
     /// Starts a `WHEN NOT MATCHED BY SOURCE` branch.
+    ///
+    /// This branch can finish with `update`, `delete`, or `do_nothing`.
     #[inline]
     pub fn when_not_matched_by_source(self) -> NotMatchedBySourceMergeBuilder {
         NotMatchedBySourceMergeBuilder {

@@ -1,4 +1,8 @@
 /// JSON value kind accepted by a field in [`SearchRequest`](crate::SearchRequest).
+///
+/// This describes the client wire shape, not the SQL type itself. For example,
+/// `NumericString` accepts a JSON string so decimal values do not lose
+/// precision while being decoded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum JsonKind {
@@ -29,6 +33,12 @@ pub enum JsonKind {
 }
 
 /// Operator capability flags for a field.
+///
+/// These flags are the source of truth for JSON search operators. They also
+/// drive typed builder validation: equality gates equality/list/subquery
+/// predicates, ordering gates range predicates and sorting, and pattern gates
+/// text pattern predicates. Rust-side null checks remain valid for any field
+/// whose inner expression is valid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct OpSet {
@@ -79,6 +89,10 @@ impl OpSet {
 }
 
 /// Field metadata used for validation, rendering, and JSON search exposure.
+///
+/// Generated schema stores one `Meta` per database column. `ops` controls which
+/// operators are valid, while `json` decides whether a field is visible to
+/// client-supplied [`SearchRequest`](crate::SearchRequest) values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Meta {
@@ -112,6 +126,9 @@ impl Meta {
     }
 
     /// Marks the field as visible to JSON search with the given JSON kind.
+    ///
+    /// This only controls JSON request decoding/exposure; it does not change
+    /// the SQL type rendered for the field.
     pub const fn json(mut self, kind: JsonKind) -> Self {
         self.json = Some(kind);
         self

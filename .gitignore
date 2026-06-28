@@ -38,5 +38,6 @@ local/
 .ignore
 .codex/
 .claude/
+.agents/
 AGENTS.md
 CLAUDE.md

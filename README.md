@@ -151,8 +151,45 @@ let rows = select(schema::users::table())
     .await?;
 ```
 
-Service functions usually accept `impl PgExecutor<'e>` so the same query can run
-against `&PgPool`, `&mut PgConnection`, or a transaction connection.
+Service functions can usually accept `&PgPool`. When a query must be reused
+inside a transaction, prefer reusing the query shape instead of making the async
+service function generic over an executor:
+
+```rust
+fn find_user_query(id: Uuid) -> Select {
+    select(schema::users::table())
+        .filter(schema::users::ID.eq(id))
+}
+
+async fn find_user(pool: &PgPool, id: Uuid) -> rqb::Result<UserRow> {
+    find_user_query(id).fetch_one_as::<UserRow>(pool).await
+}
+
+tx!(&pool, |conn| {
+    let user = find_user_query(id)
+        .fetch_one_as::<UserRow>(&mut *conn)
+        .await?;
+    Ok(user)
+})
+.await?;
+```
+
+Use `impl PgExecutor<'_>` for small helpers that should execute directly from
+both pool-backed code and transaction code:
+
+```rust
+async fn cancel_open_orders(db: impl PgExecutor<'_>, user_id: Uuid) -> rqb::Result<u64> {
+    update(schema::orders::table())
+        .set(schema::orders::STATUS.set("canceled"))
+        .filter(schema::orders::USER_ID.eq(user_id))
+        .filter(schema::orders::STATUS.eq("open"))
+        .execute(db)
+        .await
+}
+```
+
+When passing a sqlx transaction or pool connection to an executor helper, use
+sqlx's reborrow pattern: `&mut *tx` or `&mut *conn`.
 
 Statement convenience methods such as `fetch_all_as::<T>(&pool)` build,
 validate, and render the SQL for that call. If a hot path executes the same

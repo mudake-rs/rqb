@@ -9,8 +9,8 @@ transaction flows without opening a database connection.
 ## What This Shows
 
 - `tx!(&pool, |conn| { ... })` runs several async statements in one transaction.
-- Service functions accept `impl PgExecutor<'e>`, so the same query works with a
-  pool, connection, or transaction connection.
+- Transaction-reused service helpers accept `impl PgExecutor<'_>`, so the same
+  query works with a pool, connection, or transaction connection.
 - The focused sample is compile-checked without a database, but the transaction
   function contains the real `.await?` flow used by applications.
 - Explicit `pool.begin().await?` remains available when closure scope is not

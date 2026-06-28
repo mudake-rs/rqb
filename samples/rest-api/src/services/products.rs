@@ -4,10 +4,7 @@ use uuid::Uuid;
 
 use crate::types::{ProductRow, UpsertProduct};
 
-pub async fn upsert<'e>(
-    db: impl PgExecutor<'e>,
-    input: UpsertProduct,
-) -> rqb::Result<ProductRow> {
+pub async fn upsert(db: &PgPool, input: UpsertProduct) -> rqb::Result<ProductRow> {
     // Catalog sync endpoints usually want "insert new SKU, otherwise refresh
     // mutable product data". `do_update_excluded((...))` keeps that common
     // Postgres pattern from becoming four repeated `field.set_excluded()` calls.

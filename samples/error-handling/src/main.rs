@@ -64,7 +64,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn create_user_and_match_db_error<'e>(db: impl PgExecutor<'e>) -> rqb::Result<()> {
+async fn create_user_and_match_db_error(db: impl PgExecutor<'_>) -> rqb::Result<()> {
     match insert(users::table())
         .set_many((
             users::ID.set(Uuid::nil()),

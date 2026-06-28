@@ -29,8 +29,9 @@ service code:
 ## What This Shows
 
 - Handlers own HTTP validation and response shaping.
-- Services own database query shape and accept `impl PgExecutor<'e>` where they
-  should be reusable with a pool or transaction connection.
+- Services own database query shape. Route-only services accept `&PgPool`;
+  `users::find_query` shows reusable query shape inside `tx!`; small helpers
+  that should execute directly in either context use `impl PgExecutor<'_>`.
 - Write DTOs derive `Insertable` or `Changeset` directly when the public request
   shape and the database write shape match. Split them only when they diverge.
 - REST pagination is application code: `limit`, `offset`, and `Select::count()`

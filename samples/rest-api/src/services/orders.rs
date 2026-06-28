@@ -19,14 +19,16 @@ type StreamResult<T> = std::result::Result<T, rqb::Error>;
 
 pub async fn checkout(pool: &PgPool, input: CreateOrder) -> rqb::Result<CheckoutResponse> {
     tx!(pool, |conn| {
-        let user = users::find(&mut *conn, input.user_id).await?;
+        let user = users::find_query(input.user_id)
+            .fetch_one_as(&mut *conn)
+            .await?;
         let order = create(&mut *conn, input).await?;
         Ok(CheckoutResponse { user, order })
     })
     .await
 }
 
-async fn create<'e>(db: impl PgExecutor<'e>, input: CreateOrder) -> rqb::Result<OrderRow> {
+async fn create(db: impl PgExecutor<'_>, input: CreateOrder) -> rqb::Result<OrderRow> {
     insert(orders::table())
         .set_many((orders::ID.set(Uuid::new_v4()), orders::STATUS.set("open")))
         .values(&input)
@@ -35,8 +37,8 @@ async fn create<'e>(db: impl PgExecutor<'e>, input: CreateOrder) -> rqb::Result<
         .await
 }
 
-pub async fn list_after<'e>(
-    db: impl PgExecutor<'e>,
+pub async fn list_after(
+    db: &PgPool,
     user_id: Uuid,
     cursor: Option<OrderCursor>,
     limit: u32,
@@ -77,8 +79,8 @@ pub async fn list_after<'e>(
     })
 }
 
-pub async fn filter<'e>(
-    db: impl PgExecutor<'e>,
+pub async fn filter(
+    db: &PgPool,
     user_id: Uuid,
     status: Option<String>,
     min_total: Option<i64>,
@@ -96,10 +98,7 @@ pub async fn filter<'e>(
         .await
 }
 
-pub async fn cancel_open_for_user<'e>(
-    db: impl PgExecutor<'e>,
-    user_id: Uuid,
-) -> rqb::Result<()> {
+pub async fn cancel_open_for_user(db: impl PgExecutor<'_>, user_id: Uuid) -> rqb::Result<()> {
     update(orders::table())
         .set(orders::STATUS.set("canceled"))
         .filter(orders::USER_ID.eq(user_id))
@@ -212,7 +211,7 @@ pub fn export_csv_stream(
     })
 }
 
-pub async fn summary<'e>(db: impl PgExecutor<'e>) -> rqb::Result<Vec<UserOrderSummaryRow>> {
+pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
     let u = user_fields::alias("u");
     let o = orders::alias("o");
     let e = events::alias("e");

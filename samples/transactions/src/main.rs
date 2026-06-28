@@ -35,9 +35,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// `PgExecutor` keeps service functions reusable: callers can pass a pool, a
+// `PgExecutor<'_>` keeps service helpers reusable: callers can pass a pool,
 // connection, or the connection borrowed from a transaction.
-async fn deactivate_user<'e>(db: impl PgExecutor<'e>, user_id: Uuid) -> rqb::Result<u64> {
+async fn deactivate_user(db: impl PgExecutor<'_>, user_id: Uuid) -> rqb::Result<u64> {
     update(users::table())
         .set(users::ACTIVE.set(false))
         .filter(users::ID.eq(user_id))
@@ -45,7 +45,7 @@ async fn deactivate_user<'e>(db: impl PgExecutor<'e>, user_id: Uuid) -> rqb::Res
         .await
 }
 
-async fn cancel_open_orders<'e>(db: impl PgExecutor<'e>, user_id: Uuid) -> rqb::Result<u64> {
+async fn cancel_open_orders(db: impl PgExecutor<'_>, user_id: Uuid) -> rqb::Result<u64> {
     update(orders::table())
         .set(orders::STATUS.set("canceled"))
         .filter(orders::USER_ID.eq(user_id))

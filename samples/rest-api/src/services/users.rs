@@ -5,17 +5,15 @@ use uuid::Uuid;
 use crate::services::orders;
 use crate::types::{CreateUser, PatchUser, UserRow};
 
-pub async fn find<'e>(db: impl PgExecutor<'e>, id: Uuid) -> rqb::Result<UserRow> {
-    select(users::table())
-        .filter(users::ID.eq(id))
-        .fetch_one_as::<UserRow>(db)
-        .await
+pub fn find_query(id: Uuid) -> Select {
+    select(users::table()).filter(users::ID.eq(id))
 }
 
-pub async fn search<'e>(
-    db: impl PgExecutor<'e>,
-    request: SearchRequest,
-) -> rqb::Result<Vec<UserRow>> {
+pub async fn find(db: &PgPool, id: Uuid) -> rqb::Result<UserRow> {
+    find_query(id).fetch_one_as::<UserRow>(db).await
+}
+
+pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Vec<UserRow>> {
     select(users::table())
         .filter(users::ACTIVE.eq(true))
         .apply_search(request)?
@@ -23,7 +21,7 @@ pub async fn search<'e>(
         .await
 }
 
-pub async fn create<'e>(db: impl PgExecutor<'e>, input: CreateUser) -> rqb::Result<UserRow> {
+pub async fn create(db: &PgPool, input: CreateUser) -> rqb::Result<UserRow> {
     // DTO-derived values and explicit server-owned assignments compose in one
     // insert. Later assignments for the same field intentionally win.
     insert(users::table())
@@ -35,11 +33,7 @@ pub async fn create<'e>(db: impl PgExecutor<'e>, input: CreateUser) -> rqb::Resu
         .await
 }
 
-pub async fn patch<'e>(
-    db: impl PgExecutor<'e>,
-    id: Uuid,
-    input: PatchUser,
-) -> rqb::Result<UserRow> {
+pub async fn patch(db: &PgPool, id: Uuid, input: PatchUser) -> rqb::Result<UserRow> {
     // `Changeset` is the REST PATCH bridge: only `Some(...)` fields become
     // assignments, so omitted JSON fields do not accidentally overwrite data.
     update(users::table())
@@ -51,8 +45,8 @@ pub async fn patch<'e>(
 }
 
 pub async fn deactivate(pool: &PgPool, id: Uuid) -> rqb::Result<()> {
-    // `tx!` gives the closure a transaction connection; the same service
-    // functions accept it through `PgExecutor`.
+    // `tx!` gives the closure a transaction connection; transaction-reused
+    // helpers accept it through `PgExecutor<'_>`.
     tx!(pool, |conn| {
         update(users::table())
             .set(users::ACTIVE.set(false))

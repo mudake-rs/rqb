@@ -5,10 +5,7 @@ use rqb_sample_schema::orders;
 
 use crate::types::DailyOrderStats;
 
-pub async fn orders_by_day<'e>(
-    db: impl PgExecutor<'e>,
-    days: i64,
-) -> rqb::Result<Vec<DailyOrderStats>> {
+pub async fn orders_by_day(db: &PgPool, days: i64) -> rqb::Result<Vec<DailyOrderStats>> {
     let days = days.clamp(1, 90);
     let since = Utc::now() - Duration::days(days);
     let day = date_trunc_part(DatePart::Day, orders::CREATED_AT);

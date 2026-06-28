@@ -68,8 +68,10 @@
 //!     .await?;
 //! ```
 //!
-//! Service functions can accept `impl PgExecutor<'e>` so the same query works
-//! with a pool, connection, or transaction. Pool-owned streaming helpers are
+//! Service functions can accept `&PgPool` by default. Reuse query-shape helper
+//! functions when the same statement should run inside a transaction. Use
+//! `impl PgExecutor<'_>` for small helpers that should execute directly from
+//! both pool-backed code and transaction code. Pool-owned streaming helpers are
 //! available for HTTP response streams where the returned stream must own the
 //! built query.
 //!

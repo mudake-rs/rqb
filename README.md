@@ -741,6 +741,9 @@ rust = "crate::types::PgU256"
 ops = "ordered"
 json = "text"
 array = true
+
+[raw_only]
+allow = ["public.vector_documents.embedding"]
 ```
 
 ```bash
@@ -757,6 +760,22 @@ Custom mappings are not exposed to JSON search unless `json` is set explicitly.
 Array columns remain hidden from JSON search even when their scalar type mapping
 sets `json`; rqb does not currently define client JSON semantics for array
 filters.
+
+Use `--report` to see generated schema counts, raw-only columns, and unused
+`type_map` entries. CI can fail on unexpected raw-only columns or stale custom
+type mappings:
+
+```bash
+rqb generate \
+  --database-url "$DATABASE_URL" \
+  --schema public \
+  --config rqb.toml \
+  --out src/schema.rs \
+  --check \
+  --report \
+  --deny-raw-only \
+  --deny-unused-type-map
+```
 
 Generated primary-key and unique constraints are exposed inside each relation's
 `constraints` module for conflict handling:

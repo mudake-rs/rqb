@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -13,6 +13,7 @@ pub(crate) type TypeMappings = BTreeMap<(String, String), TypeMapping>;
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GeneratorConfig {
     pub(crate) type_map: TypeMappings,
+    pub(crate) raw_only: RawOnlyConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -23,10 +24,16 @@ pub(crate) struct TypeMapping {
     pub(crate) array: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RawOnlyConfig {
+    pub(crate) allow: BTreeSet<String>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct RawConfig {
     type_map: BTreeMap<String, RawTypeMapping>,
+    raw_only: RawOnlySection,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +46,12 @@ struct RawTypeMapping {
     json: Option<FieldJson>,
     #[serde(default)]
     array: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawOnlySection {
+    allow: Vec<String>,
 }
 
 impl GeneratorConfig {
@@ -73,7 +86,18 @@ impl TryFrom<RawConfig> for GeneratorConfig {
                 },
             );
         }
-        Ok(Self { type_map })
+        let mut raw_only_allow = BTreeSet::new();
+        for key in raw.raw_only.allow {
+            validate_raw_only_key(&key)?;
+            raw_only_allow.insert(key);
+        }
+
+        Ok(Self {
+            type_map,
+            raw_only: RawOnlyConfig {
+                allow: raw_only_allow,
+            },
+        })
     }
 }
 
@@ -83,6 +107,14 @@ fn parse_type_key(key: &str) -> Result<(String, String)> {
         bail!("type_map key `{key}` must be schema-qualified as `schema.type`");
     }
     Ok((parts[0].to_owned(), parts[1].to_owned()))
+}
+
+fn validate_raw_only_key(key: &str) -> Result<()> {
+    let parts = key.split('.').collect::<Vec<_>>();
+    if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+        bail!("raw_only.allow entry `{key}` must be `schema.relation.column`");
+    }
+    Ok(())
 }
 
 fn validate_rust_type(key: &str, rust: &str) -> Result<()> {
@@ -133,6 +165,27 @@ mod tests {
     }
 
     #[test]
+    fn parses_raw_only_allowlist() {
+        let config: GeneratorConfig = toml::from_str::<RawConfig>(
+            r#"
+            [raw_only]
+            allow = ["sample.vector_documents.embedding"]
+            "#,
+        )
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+        assert!(config.type_map.is_empty());
+        assert!(
+            config
+                .raw_only
+                .allow
+                .contains("sample.vector_documents.embedding")
+        );
+    }
+
+    #[test]
     fn custom_type_map_defaults_to_no_json_exposure() {
         let config: GeneratorConfig = toml::from_str::<RawConfig>(
             r#"
@@ -165,5 +218,19 @@ mod tests {
 
         let err = GeneratorConfig::try_from(raw).unwrap_err();
         assert!(err.to_string().contains("must be qualified"));
+    }
+
+    #[test]
+    fn rejects_malformed_raw_only_allowlist_entries() {
+        let raw = toml::from_str::<RawConfig>(
+            r#"
+            [raw_only]
+            allow = ["documents.embedding"]
+            "#,
+        )
+        .unwrap();
+
+        let err = GeneratorConfig::try_from(raw).unwrap_err();
+        assert!(err.to_string().contains("schema.relation.column"));
     }
 }

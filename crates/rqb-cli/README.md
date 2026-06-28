@@ -77,6 +77,19 @@ rqb generate \
   --check
 ```
 
+Add `--report` when CI logs should show generation counts, raw-only columns,
+and unused `type_map` entries:
+
+```bash
+rqb generate \
+  --database-url "$DATABASE_URL" \
+  --schema public \
+  --config rqb.toml \
+  --out src/schema.rs \
+  --check \
+  --report
+```
+
 Generated code is formatted with `rustfmt` by default. Pass `--no-rustfmt` when
 `rustfmt` is not available on `PATH` or when you want raw generator output.
 For drift checks, prefer the default formatted mode; `--check --no-rustfmt`
@@ -139,6 +152,11 @@ array = true           # also map bitcoin.uint256[] to Vec<crate::types::PgU256>
 [type_map."public.vector"]
 rust = "pgvector::Vector"
 ops = "none"
+
+[raw_only]
+allow = [
+  "public.vector_documents.search_index",
+]
 ```
 
 `rust` must be a qualified Rust type path and is emitted inline; the generator
@@ -152,6 +170,13 @@ When raw-only columns are generated, `rqb-cli` prints a stderr summary with the
 relation, column, and Postgres type name. Treat that as a review queue for
 project-specific enums, domains, ranges, and extension types that may deserve
 manual raw helpers or future generator support.
+
+`--deny-raw-only` turns that review queue into a CI failure unless every
+raw-only column is listed in `[raw_only].allow` as `schema.relation.column`.
+`--deny-unused-type-map` fails when a configured `[type_map."schema.type"]`
+entry is not used by the selected `--schema` / `--table` scope. By default,
+unused entries are warnings so stale config is visible without breaking local
+generation.
 
 The generator annotates schema facts that matter at the `sqlx::FromRow` or
 write boundary:

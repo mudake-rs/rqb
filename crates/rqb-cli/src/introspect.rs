@@ -17,7 +17,7 @@ pub(crate) async fn introspect(
     schema: &str,
     only_tables: &[String],
     type_mappings: &TypeMappings,
-) -> Result<SchemaModel> {
+) -> Result<Introspection> {
     let rows = sqlx::query(
         r#"
         SELECT c.relname AS relation_name,
@@ -75,6 +75,7 @@ pub(crate) async fn introspect(
         .map(|enum_type| (enum_type.schema.clone(), enum_type.name.clone()))
         .collect::<BTreeSet<_>>();
     let mut used_enums = BTreeSet::<(String, String)>::new();
+    let mut used_type_mappings = BTreeSet::<(String, String)>::new();
 
     let column_rows = sqlx::query(
         r#"
@@ -139,6 +140,7 @@ pub(crate) async fn introspect(
             },
             &enum_keys,
             &mut used_enums,
+            &mut used_type_mappings,
             type_mappings,
         );
         relation.columns.push(Column {
@@ -155,10 +157,18 @@ pub(crate) async fn introspect(
     });
     introspect_unique_constraints(pool, schema, &mut relations).await?;
     assign_unique_names(&mut relations);
-    Ok(SchemaModel {
-        enums,
-        relations: relations.into_values().collect(),
+    Ok(Introspection {
+        schema: SchemaModel {
+            enums,
+            relations: relations.into_values().collect(),
+        },
+        used_type_mappings,
     })
+}
+
+pub(crate) struct Introspection {
+    pub(crate) schema: SchemaModel,
+    pub(crate) used_type_mappings: BTreeSet<(String, String)>,
 }
 
 async fn introspect_enums(pool: &PgPool, schema: &str) -> Result<Vec<PgEnum>> {
@@ -251,10 +261,12 @@ fn map_introspected_column_type(
     ty: IntrospectedType<'_>,
     enum_keys: &BTreeSet<(String, String)>,
     used_enums: &mut BTreeSet<(String, String)>,
+    used_type_mappings: &mut BTreeSet<(String, String)>,
     type_mappings: &TypeMappings,
 ) -> ColumnType {
     let type_key = (ty.schema.to_owned(), ty.udt_name.to_owned());
     if let Some(mapping) = type_mappings.get(&type_key) {
+        used_type_mappings.insert(type_key);
         return custom_column_type(ty.pg, mapping, false);
     }
 
@@ -262,6 +274,7 @@ fn map_introspected_column_type(
         let element_key = (element_schema.to_owned(), element_udt.to_owned());
         if let Some(mapping) = type_mappings.get(&element_key) {
             if mapping.array {
+                used_type_mappings.insert(element_key);
                 return custom_column_type(ty.pg, mapping, true);
             }
             return ColumnType::RawOnly {
@@ -499,6 +512,7 @@ mod tests {
     fn map_introspected_column_type_prefers_pg_enum_metadata() {
         let enum_keys = BTreeSet::from([("sample".to_owned(), "invoice_state".to_owned())]);
         let mut used_enums = BTreeSet::new();
+        let mut used_type_mappings = BTreeSet::new();
 
         assert_eq!(
             map_introspected_column_type(
@@ -508,6 +522,7 @@ mod tests {
                 },
                 &enum_keys,
                 &mut used_enums,
+                &mut used_type_mappings,
                 &BTreeMap::new(),
             ),
             ColumnType::PgEnum {
@@ -531,6 +546,7 @@ mod tests {
                 },
                 &enum_keys,
                 &mut used_enums,
+                &mut used_type_mappings,
                 &BTreeMap::new(),
             ),
             ColumnType::PgEnum {
@@ -544,12 +560,14 @@ mod tests {
             used_enums,
             BTreeSet::from([("sample".to_owned(), "invoice_state".to_owned())])
         );
+        assert!(used_type_mappings.is_empty());
     }
 
     #[test]
     fn cross_schema_pg_enums_remain_raw_only_before_known_type_fallback() {
         let enum_keys = BTreeSet::from([("sample".to_owned(), "invoice_state".to_owned())]);
         let mut used_enums = BTreeSet::new();
+        let mut used_type_mappings = BTreeSet::new();
 
         assert_eq!(
             map_introspected_column_type(
@@ -559,6 +577,7 @@ mod tests {
                 },
                 &enum_keys,
                 &mut used_enums,
+                &mut used_type_mappings,
                 &BTreeMap::new(),
             ),
             ColumnType::RawOnly {
@@ -573,6 +592,7 @@ mod tests {
                 },
                 &enum_keys,
                 &mut used_enums,
+                &mut used_type_mappings,
                 &BTreeMap::new(),
             ),
             ColumnType::RawOnly {
@@ -580,6 +600,7 @@ mod tests {
             }
         );
         assert!(used_enums.is_empty());
+        assert!(used_type_mappings.is_empty());
     }
 
     #[test]
@@ -594,12 +615,14 @@ mod tests {
             },
         )]);
         let mut used_enums = BTreeSet::new();
+        let mut used_type_mappings = BTreeSet::new();
 
         assert_eq!(
             map_introspected_column_type(
                 introspected_type("pg_catalog", "numeric", "numeric"),
                 &BTreeSet::new(),
                 &mut used_enums,
+                &mut used_type_mappings,
                 &type_mappings,
             ),
             ColumnType::Custom {
@@ -609,6 +632,10 @@ mod tests {
                 ops: FieldOps::Ordered,
                 json: Some(FieldJson::NumericString),
             }
+        );
+        assert_eq!(
+            used_type_mappings,
+            BTreeSet::from([("pg_catalog".to_owned(), "numeric".to_owned())])
         );
     }
 
@@ -624,6 +651,7 @@ mod tests {
             },
         )]);
         let mut used_enums = BTreeSet::new();
+        let mut used_type_mappings = BTreeSet::new();
 
         assert_eq!(
             map_introspected_column_type(
@@ -636,12 +664,14 @@ mod tests {
                 ),
                 &BTreeSet::new(),
                 &mut used_enums,
+                &mut used_type_mappings,
                 &type_mappings,
             ),
             ColumnType::RawOnly {
                 pg: "bitcoin.uint256[]".to_owned(),
             }
         );
+        assert!(used_type_mappings.is_empty());
 
         let mut type_mappings = type_mappings;
         type_mappings
@@ -660,6 +690,7 @@ mod tests {
                 ),
                 &BTreeSet::new(),
                 &mut used_enums,
+                &mut used_type_mappings,
                 &type_mappings,
             ),
             ColumnType::Custom {
@@ -669,6 +700,10 @@ mod tests {
                 ops: FieldOps::Ordered,
                 json: None,
             }
+        );
+        assert_eq!(
+            used_type_mappings,
+            BTreeSet::from([("bitcoin".to_owned(), "uint256".to_owned())])
         );
     }
 
@@ -684,6 +719,7 @@ mod tests {
             },
         )]);
         let mut used_enums = BTreeSet::new();
+        let mut used_type_mappings = BTreeSet::new();
 
         assert_eq!(
             map_introspected_column_type(
@@ -696,6 +732,7 @@ mod tests {
                 ),
                 &BTreeSet::new(),
                 &mut used_enums,
+                &mut used_type_mappings,
                 &type_mappings,
             ),
             ColumnType::Custom {
@@ -706,17 +743,23 @@ mod tests {
                 json: None,
             }
         );
+        assert_eq!(
+            used_type_mappings,
+            BTreeSet::from([("bitcoin".to_owned(), "uint256".to_owned())])
+        );
     }
 
     #[test]
     fn unmapped_non_catalog_types_remain_raw_only_before_builtin_fallback() {
         let mut used_enums = BTreeSet::new();
+        let mut used_type_mappings = BTreeSet::new();
 
         assert_eq!(
             map_introspected_column_type(
                 introspected_type("bitcoin", "numeric", "bitcoin.numeric"),
                 &BTreeSet::new(),
                 &mut used_enums,
+                &mut used_type_mappings,
                 &BTreeMap::new(),
             ),
             ColumnType::RawOnly {
@@ -728,11 +771,13 @@ mod tests {
                 introspected_array("bitcoin", "_uuid", "bitcoin", "uuid", "bitcoin.uuid[]"),
                 &BTreeSet::new(),
                 &mut used_enums,
+                &mut used_type_mappings,
                 &BTreeMap::new(),
             ),
             ColumnType::RawOnly {
                 pg: "bitcoin.uuid[]".to_owned(),
             }
         );
+        assert!(used_type_mappings.is_empty());
     }
 }

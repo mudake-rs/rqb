@@ -9,4 +9,4 @@ publish = false
 [dependencies]
 rqb = { path = "../../crates/rqb" }
 rqb-sample-schema = { path = "../schema" }
-uuid = "1"
+uuid = "1.23.4"

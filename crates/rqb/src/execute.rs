@@ -2,7 +2,7 @@ use async_stream::try_stream;
 use futures_core::stream::BoxStream;
 use futures_util::{StreamExt, TryStreamExt};
 use sqlx::postgres::PgRow;
-use sqlx::{Decode, FromRow, PgExecutor, PgPool, Postgres, Type};
+use sqlx::{AssertSqlSafe, Decode, FromRow, PgExecutor, PgPool, Postgres, Type};
 
 use crate::Result;
 use crate::{
@@ -18,10 +18,17 @@ pub trait ScalarValue: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Un
 
 impl<T> ScalarValue for T where T: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin {}
 
+fn safe_sql(sql: &str) -> AssertSqlSafe<&str> {
+    // rqb reaches execution only after validation and rendering have produced
+    // parameterized Postgres SQL; raw fragments are server-owned with bind
+    // counts validated, and user values are carried separately as binds.
+    AssertSqlSafe(sql)
+}
+
 impl BuiltQuery {
     /// Executes the query and returns affected row count.
     pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
-        let result = sqlx::query_with(&self.sql, self.arguments()?)
+        let result = sqlx::query_with(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .execute(executor)
             .await?;
@@ -30,7 +37,7 @@ impl BuiltQuery {
 
     /// Fetches all rows as raw sqlx `PgRow` values.
     pub async fn fetch_all<'e>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<PgRow>> {
-        sqlx::query_with(&self.sql, self.arguments()?)
+        sqlx::query_with(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_all(executor)
             .await
@@ -48,7 +55,7 @@ impl BuiltQuery {
     where
         'e: 'q,
     {
-        Ok(sqlx::query_with(&self.sql, self.arguments()?)
+        Ok(sqlx::query_with(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch(executor)
             .map_err(Into::into)
@@ -68,7 +75,7 @@ impl BuiltQuery {
         let arguments = params.arguments()?;
 
         Ok(try_stream! {
-            let mut rows = sqlx::query_with(&sql, arguments)
+            let mut rows = sqlx::query_with(safe_sql(&sql), arguments)
                 .persistent(cacheable)
                 .fetch(&pool);
             while let Some(row) = rows.try_next().await.map_err(crate::Error::from)? {
@@ -80,7 +87,7 @@ impl BuiltQuery {
 
     /// Fetches exactly one raw sqlx `PgRow`.
     pub async fn fetch_one<'e>(&self, executor: impl PgExecutor<'e>) -> Result<PgRow> {
-        sqlx::query_with(&self.sql, self.arguments()?)
+        sqlx::query_with(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_one(executor)
             .await
@@ -89,7 +96,7 @@ impl BuiltQuery {
 
     /// Fetches zero or one raw sqlx `PgRow`.
     pub async fn fetch_optional<'e>(&self, executor: impl PgExecutor<'e>) -> Result<Option<PgRow>> {
-        sqlx::query_with(&self.sql, self.arguments()?)
+        sqlx::query_with(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_optional(executor)
             .await
@@ -101,7 +108,7 @@ impl BuiltQuery {
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
     {
-        sqlx::query_as_with::<_, T, _>(&self.sql, self.arguments()?)
+        sqlx::query_as_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_all(executor)
             .await
@@ -120,11 +127,13 @@ impl BuiltQuery {
         'e: 'q,
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'q,
     {
-        Ok(sqlx::query_as_with::<_, T, _>(&self.sql, self.arguments()?)
-            .persistent(self.cacheable)
-            .fetch(executor)
-            .map_err(Into::into)
-            .boxed())
+        Ok(
+            sqlx::query_as_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
+                .persistent(self.cacheable)
+                .fetch(executor)
+                .map_err(Into::into)
+                .boxed(),
+        )
     }
 
     /// Streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
@@ -143,7 +152,7 @@ impl BuiltQuery {
         let arguments = params.arguments()?;
 
         Ok(try_stream! {
-            let mut rows = sqlx::query_as_with::<_, T, _>(&sql, arguments)
+            let mut rows = sqlx::query_as_with::<_, T, _>(safe_sql(&sql), arguments)
                 .persistent(cacheable)
                 .fetch(&pool);
             while let Some(row) = rows.try_next().await.map_err(crate::Error::from)? {
@@ -158,7 +167,7 @@ impl BuiltQuery {
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
     {
-        sqlx::query_as_with::<_, T, _>(&self.sql, self.arguments()?)
+        sqlx::query_as_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_one(executor)
             .await
@@ -170,7 +179,7 @@ impl BuiltQuery {
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
     {
-        sqlx::query_as_with::<_, T, _>(&self.sql, self.arguments()?)
+        sqlx::query_as_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_optional(executor)
             .await
@@ -182,7 +191,7 @@ impl BuiltQuery {
     where
         T: ScalarValue,
     {
-        sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
+        sqlx::query_scalar_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_all(executor)
             .await
@@ -201,7 +210,7 @@ impl BuiltQuery {
         T: ScalarValue + 'q,
     {
         Ok(
-            sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
+            sqlx::query_scalar_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
                 .persistent(self.cacheable)
                 .fetch(executor)
                 .map_err(Into::into)
@@ -225,7 +234,7 @@ impl BuiltQuery {
         let arguments = params.arguments()?;
 
         Ok(try_stream! {
-            let mut rows = sqlx::query_scalar_with::<_, T, _>(&sql, arguments)
+            let mut rows = sqlx::query_scalar_with::<_, T, _>(safe_sql(&sql), arguments)
                 .persistent(cacheable)
                 .fetch(&pool);
             while let Some(row) = rows.try_next().await.map_err(crate::Error::from)? {
@@ -240,7 +249,7 @@ impl BuiltQuery {
     where
         T: ScalarValue,
     {
-        sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
+        sqlx::query_scalar_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_one(executor)
             .await
@@ -255,7 +264,7 @@ impl BuiltQuery {
     where
         T: ScalarValue,
     {
-        sqlx::query_scalar_with::<_, T, _>(&self.sql, self.arguments()?)
+        sqlx::query_scalar_with::<_, T, _>(safe_sql(&self.sql), self.arguments()?)
             .persistent(self.cacheable)
             .fetch_optional(executor)
             .await

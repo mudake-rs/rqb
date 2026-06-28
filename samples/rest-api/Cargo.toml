@@ -7,14 +7,14 @@ publish = false
 [workspace]
 
 [dependencies]
-async-stream = "0.3"
-axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio"] }
-chrono = { version = "0.4", features = ["serde"] }
-futures-util = { version = "0.3", default-features = false, features = ["std"] }
+async-stream = "0.3.6"
+axum = { version = "0.8.9", default-features = false, features = ["json", "query", "tokio"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
 rqb = { path = "../../crates/rqb" }
 rqb-sample-schema = { path = "../schema" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "uuid", "chrono", "json", "runtime-tokio-rustls", "derive"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-uuid = { version = "1", features = ["serde", "v4"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "uuid", "chrono", "json", "runtime-tokio", "tls-rustls", "derive"] }
+tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1.23.4", features = ["serde", "v4"] }

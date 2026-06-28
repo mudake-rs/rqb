@@ -62,18 +62,19 @@ Until the crate is published on crates.io, depend on the git repository:
 ```toml
 [dependencies]
 rqb = { git = "https://github.com/mudake-rs/rqb" }
-chrono = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sqlx = { version = "0.8", features = [
+chrono = "0.4.45"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sqlx = { version = "0.9.0", features = [
     "postgres",
     "derive",
     "uuid",
     "chrono",
     "json",
-    "runtime-tokio-rustls",
+    "runtime-tokio",
+    "tls-rustls",
 ] }
-uuid = "1"
+uuid = "1.23.4"
 ```
 
 For reproducible application builds, pin a commit:

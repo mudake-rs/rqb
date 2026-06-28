@@ -7,7 +7,7 @@ publish = false
 [workspace]
 
 [dependencies]
-chrono = "0.4"
+chrono = "0.4.45"
 rqb = { path = "../../crates/rqb" }
 rqb-sample-schema = { path = "../schema" }
-uuid = "1"
+uuid = "1.23.4"

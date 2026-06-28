@@ -25,6 +25,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 syn = "2.0.118"
 thiserror = "2.0.18"
+toml = "1.1.2"
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "json", "uuid", "chrono", "bigdecimal", "runtime-tokio", "tls-rustls"] }
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1.23.4", default-features = false, features = ["serde", "std"] }

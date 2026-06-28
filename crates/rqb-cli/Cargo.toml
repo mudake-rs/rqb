@@ -18,6 +18,8 @@ doc = false
 anyhow.workspace = true
 clap.workspace = true
 heck.workspace = true
+serde.workspace = true
 sqlx.workspace = true
 syn = { workspace = true, features = ["full", "parsing"] }
 tokio.workspace = true
+toml.workspace = true

@@ -31,6 +31,11 @@ rqb::schema! {
         display_name: text = String,
         active: bool = bool,
         created_at: timestamptz = DateTime<Utc>,
+        constraints {
+            APP_USERS_EMAIL_KEY: "app_users_email_key",
+            APP_USERS_ORGANIZATION_EMAIL_KEY: "app_users_organization_email_key",
+            APP_USERS_PKEY: "app_users_pkey",
+        }
     }
     table sample.events {
         id: uuid = Uuid,
@@ -39,6 +44,9 @@ rqb::schema! {
         event_type: text = String,
         payload: jsonb = Value,
         created_at: timestamptz = DateTime<Utc>,
+        constraints {
+            EVENTS_PKEY: "events_pkey",
+        }
     }
     table sample.invoices {
         id: uuid = Uuid,
@@ -71,6 +79,10 @@ rqb::schema! {
         pdf: bytea = Vec<u8>,
         tags: "text[]" = Vec<String>,
         metadata: jsonb = Value,
+        constraints {
+            INVOICES_INVOICE_NO_KEY: "invoices_invoice_no_key",
+            INVOICES_PKEY: "invoices_pkey",
+        }
     }
     table sample.order_items {
         id: uuid = Uuid,
@@ -82,6 +94,10 @@ rqb::schema! {
         // Generated: stored. Do not include in INSERT assignments.
         line_total_cents: int8 = i64,
         metadata: jsonb = Value,
+        constraints {
+            ORDER_ITEMS_ORDER_PRODUCT_KEY: "order_items_order_product_key",
+            ORDER_ITEMS_PKEY: "order_items_pkey",
+        }
     }
     // View column nullability is conservative in Postgres metadata.
     view sample.order_search_view {
@@ -107,6 +123,9 @@ rqb::schema! {
         metadata: jsonb = Value,
         tags: "text[]" = Vec<String>,
         created_at: timestamptz = DateTime<Utc>,
+        constraints {
+            ORDERS_PKEY: "orders_pkey",
+        }
     }
     table sample.organizations {
         id: uuid = Uuid,
@@ -114,6 +133,10 @@ rqb::schema! {
         name: text = String,
         settings: jsonb = Value,
         created_at: timestamptz = DateTime<Utc>,
+        constraints {
+            ORGANIZATIONS_PKEY: "organizations_pkey",
+            ORGANIZATIONS_SLUG_KEY: "organizations_slug_key",
+        }
     }
     table sample.products {
         id: uuid = Uuid,
@@ -123,5 +146,9 @@ rqb::schema! {
         attributes: jsonb = Value,
         tags: "text[]" = Vec<String>,
         created_at: timestamptz = DateTime<Utc>,
+        constraints {
+            PRODUCTS_PKEY: "products_pkey",
+            PRODUCTS_SKU_KEY: "products_sku_key",
+        }
     }
 }

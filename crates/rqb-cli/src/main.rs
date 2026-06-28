@@ -8,12 +8,14 @@ use clap::{Parser, Subcommand};
 use sqlx::postgres::PgPoolOptions;
 
 mod codegen;
+mod config;
 mod ident;
 mod introspect;
 mod model;
 mod type_map;
 
 use codegen::render;
+use config::GeneratorConfig;
 use introspect::introspect;
 use model::{ColumnType, Relation};
 
@@ -39,6 +41,8 @@ enum Command {
             help = "Limit generation to a table, view, or materialized view; may be repeated"
         )]
         table: Vec<String>,
+        #[arg(long, help = "Path to rqb-cli generator config TOML")]
+        config: Option<PathBuf>,
         #[arg(
             long,
             conflicts_with_all = ["check", "out"],
@@ -70,6 +74,7 @@ async fn main() -> Result<()> {
             database_url,
             schema,
             table,
+            config,
             stdout,
             check,
             no_rustfmt,
@@ -79,6 +84,7 @@ async fn main() -> Result<()> {
                 &database_url,
                 &schema,
                 &table,
+                config.as_deref(),
                 GenerateOutput {
                     out,
                     stdout,
@@ -102,15 +108,17 @@ async fn generate(
     database_url: &str,
     schema: &str,
     only_tables: &[String],
+    config_path: Option<&std::path::Path>,
     output: GenerateOutput,
 ) -> Result<()> {
+    let config = GeneratorConfig::load(config_path)?;
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(database_url)
         .await
         .context("failed to connect to Postgres")?;
 
-    let mut schema_model = introspect(&pool, schema, only_tables).await?;
+    let mut schema_model = introspect(&pool, schema, only_tables, &config.type_map).await?;
     if schema_model.relations.is_empty() {
         bail!("no tables, views, or materialized views found in schema `{schema}`");
     }
@@ -305,6 +313,20 @@ mod tests {
     }
 
     #[test]
+    fn generate_accepts_config_path() {
+        Cli::try_parse_from([
+            "rqb",
+            "generate",
+            "--database-url",
+            "postgres://localhost/db",
+            "--config",
+            "rqb.toml",
+            "--stdout",
+        ])
+        .unwrap();
+    }
+
+    #[test]
     fn raw_only_column_report_lists_extension_columns() {
         let columns = raw_only_columns(&[Relation {
             schema: "public".to_owned(),
@@ -328,6 +350,7 @@ mod tests {
                     generated: GeneratedKind::None,
                 },
             ],
+            constraints: Vec::new(),
         }]);
 
         assert_eq!(columns, ["public.documents.embedding (vector(384))"]);

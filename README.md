@@ -733,6 +733,40 @@ let embedding = vector_documents::EMBEDDING_META.expr();
 let distance = embedding.op("<->", rqb::dsl::param("[0.1,0.2,0.3]".to_owned()).cast("vector"));
 ```
 
+Project-owned types can be mapped with a checked-in TOML config:
+
+```toml
+[type_map."bitcoin.uint256"]
+rust = "crate::types::PgU256"
+ops = "ordered"
+json = "text"
+array = true
+```
+
+```bash
+rqb generate \
+  --database-url "$DATABASE_URL" \
+  --schema public \
+  --config rqb.toml \
+  --out src/schema.rs
+```
+
+The generated field uses the Rust path directly. The mapped type must implement
+the relevant sqlx Postgres traits; rqb does not convert custom values itself.
+Custom mappings are not exposed to JSON search unless `json` is set explicitly.
+Array columns remain hidden from JSON search even when their scalar type mapping
+sets `json`; rqb does not currently define client JSON semantics for array
+filters.
+
+Generated primary-key and unique constraints are exposed inside each relation's
+`constraints` module for conflict handling:
+
+```rust
+insert(schema::users::table())
+    .on_conflict_constraint(schema::users::constraints::USERS_EMAIL_KEY)
+    .do_nothing();
+```
+
 Generated field names match database column names. HTTP JSON casing belongs in
 application DTOs, not in generated schema metadata.
 

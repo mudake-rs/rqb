@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 #[derive(Debug, Clone)]
 pub(crate) struct SchemaModel {
     pub(crate) enums: Vec<PgEnum>,
@@ -17,6 +19,7 @@ pub(crate) struct Relation {
     pub(crate) name: String,
     pub(crate) kind: RelationKind,
     pub(crate) columns: Vec<Column>,
+    pub(crate) constraints: Vec<UniqueConstraint>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +49,13 @@ pub(crate) enum GeneratedKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ColumnType {
     Known(KnownType),
+    Custom {
+        pg: String,
+        rust: String,
+        array: bool,
+        ops: FieldOps,
+        json: Option<FieldJson>,
+    },
     PgEnum {
         schema: String,
         name: String,
@@ -55,6 +65,38 @@ pub(crate) enum ColumnType {
     RawOnly {
         pg: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UniqueConstraint {
+    pub(crate) name: String,
+    pub(crate) const_name: String,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FieldOps {
+    None,
+    Equality,
+    Ordered,
+    Text,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FieldJson {
+    Text,
+    Bool,
+    Integer,
+    BigInt,
+    Float,
+    NumericString,
+    Uuid,
+    Date,
+    Time,
+    Timestamp,
+    Timestamptz,
+    Jsonb,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

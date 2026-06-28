@@ -26,7 +26,7 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `values_source(...)` plus `from_select_all(...)` keeps batch upserts from
   repeating target columns; `set_from("alias")` copies update values from the
   incoming source.
-- Constraint conflict targets use `on_conflict_constraint(...).do_nothing()`.
+- Generated constraint name constants feed `on_conflict_constraint(...)`.
 - `insert(...).columns((...)).from_select(...)` validates target column count
   against the server-owned select projection.
 - Formatting and range helpers such as `to_char`, `range_lower`, and `isempty`

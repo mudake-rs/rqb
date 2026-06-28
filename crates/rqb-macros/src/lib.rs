@@ -13,7 +13,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{
     Attribute, Data, DeriveInput, Error, Field, Fields, GenericArgument, LitBool, LitStr, Path,
-    PathArguments, Result, Token, Type, braced, parse_macro_input,
+    PathArguments, Result, Token, Type, braced, parse_macro_input, token,
 };
 
 /// Generates compact rqb schema modules.
@@ -22,8 +22,12 @@ use syn::{
 ///
 /// ```text
 /// (table|view) <schema>.<relation> [as <module>] {
+///     [#[rqb(ops = none|equality|ordered|text, json = none|text|...)]]
 ///     <db_column> [as <CONST>]: <pg_type> [= <rust_type>],
 ///     ...
+///     constraints {
+///         <CONST>: <constraint_name>,
+///     }
 /// }
 /// ```
 ///
@@ -147,13 +151,20 @@ struct RelationInput {
     qualified_name: String,
     module: Ident,
     columns: Vec<ColumnInput>,
+    constraints: Vec<ConstraintInput>,
 }
 
 struct ColumnInput {
+    attrs: SchemaFieldAttrs,
     db: String,
     const_ident: Ident,
     pg: String,
     rust_ty: Option<Type>,
+}
+
+struct ConstraintInput {
+    const_ident: Ident,
+    name: String,
 }
 
 #[derive(Default)]
@@ -168,7 +179,39 @@ struct FieldAttrs {
     skip_none: bool,
 }
 
+#[derive(Default)]
+struct SchemaFieldAttrs {
+    ops: Option<SchemaOps>,
+    json: Option<SchemaJson>,
+}
+
+#[derive(Clone, Copy)]
+enum SchemaOps {
+    None,
+    Equality,
+    Ordered,
+    Text,
+}
+
+#[derive(Clone, Copy)]
+enum SchemaJson {
+    None,
+    Text,
+    Bool,
+    Integer,
+    BigInt,
+    Float,
+    NumericString,
+    Uuid,
+    Date,
+    Time,
+    Timestamp,
+    Timestamptz,
+    Jsonb,
+}
+
 mod kw {
+    syn::custom_keyword!(constraints);
     syn::custom_keyword!(table);
     syn::custom_keyword!(view);
 }
@@ -215,10 +258,18 @@ impl Parse for RelationInput {
         let content;
         braced!(content in input);
         let mut columns = Vec::new();
+        let mut constraints = Vec::new();
         while !content.is_empty() {
-            columns.push(content.parse()?);
-            if content.peek(Token![,]) {
-                content.parse::<Token![,]>()?;
+            if starts_constraints_block(&content) {
+                if !constraints.is_empty() {
+                    return Err(content.error("duplicate constraints block"));
+                }
+                constraints = parse_constraints_block(&content)?;
+            } else {
+                columns.push(content.parse()?);
+                if content.peek(Token![,]) {
+                    content.parse::<Token![,]>()?;
+                }
             }
         }
 
@@ -227,6 +278,7 @@ impl Parse for RelationInput {
             qualified_name: name.qualified,
             module,
             columns,
+            constraints,
         })
     }
 }
@@ -264,6 +316,7 @@ impl RelationInput {
             .filter_map(|column| column.alias_method.as_ref());
         let meta_idents = columns.iter().map(|column| &column.meta_ident);
         let field_count = Literal::usize_unsuffixed(columns.len());
+        let constraints = expand_constraints(self.constraints);
 
         quote! {
             pub mod #module {
@@ -277,6 +330,7 @@ impl RelationInput {
                 pub static FIELDS: [&'static ::rqb::Meta; #field_count] = [#(&#meta_idents),*];
 
                 #constructor_fn
+                #constraints
 
                 pub fn alias(alias: impl Into<String>) -> Alias {
                     Alias {
@@ -322,6 +376,7 @@ struct ExpandedColumn {
 
 impl Parse for ColumnInput {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let attrs = parse_schema_field_attrs(&Attribute::parse_outer(input)?)?;
         let db = parse_name(input)?;
         let const_ident = if input.peek(Token![as]) {
             input.parse::<Token![as]>()?;
@@ -343,6 +398,7 @@ impl Parse for ColumnInput {
         };
 
         Ok(Self {
+            attrs,
             db,
             const_ident,
             pg,
@@ -359,8 +415,8 @@ impl ColumnInput {
         );
         let db = self.db;
         let pg = self.pg;
-        let ops = ops_tokens(&pg, self.rust_ty.is_some());
-        let json = json_kind_tokens(&pg, self.rust_ty.is_some());
+        let ops = ops_tokens(&pg, self.rust_ty.is_some(), self.attrs.ops);
+        let json = json_kind_tokens(&pg, self.rust_ty.is_some(), self.attrs.json);
         let const_ident = self.const_ident;
         let method_ident = Ident::new(
             &sanitize_alias_method_ident(&const_ident.to_string().to_snake_case()),
@@ -395,6 +451,58 @@ impl ColumnInput {
             meta,
             field,
             alias_method,
+        }
+    }
+}
+
+fn starts_constraints_block(input: ParseStream<'_>) -> bool {
+    if !input.peek(kw::constraints) {
+        return false;
+    }
+    let fork = input.fork();
+    fork.parse::<kw::constraints>().is_ok() && fork.peek(token::Brace)
+}
+
+fn parse_constraints_block(input: ParseStream<'_>) -> Result<Vec<ConstraintInput>> {
+    input.parse::<kw::constraints>()?;
+    let content;
+    braced!(content in input);
+    let mut constraints = Vec::new();
+    while !content.is_empty() {
+        constraints.push(content.parse()?);
+        if content.peek(Token![,]) {
+            content.parse::<Token![,]>()?;
+        }
+    }
+    Ok(constraints)
+}
+
+impl Parse for ConstraintInput {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let const_ident = input.call(Ident::parse_any)?;
+        input.parse::<Token![:]>()?;
+        let name = parse_name(input)?;
+
+        Ok(Self { const_ident, name })
+    }
+}
+
+fn expand_constraints(constraints: Vec<ConstraintInput>) -> proc_macro2::TokenStream {
+    if constraints.is_empty() {
+        return quote! {};
+    }
+
+    let items = constraints.into_iter().map(|constraint| {
+        let const_ident = constraint.const_ident;
+        let name = Literal::string(&constraint.name);
+        quote! {
+            pub const #const_ident: &str = #name;
+        }
+    });
+
+    quote! {
+        pub mod constraints {
+            #(#items)*
         }
     }
 }
@@ -446,7 +554,10 @@ fn parse_pg_name(input: ParseStream<'_>) -> Result<String> {
     Ok(input.call(Ident::parse_any)?.to_string())
 }
 
-fn ops_tokens(pg: &str, typed: bool) -> proc_macro2::TokenStream {
+fn ops_tokens(pg: &str, typed: bool, override_ops: Option<SchemaOps>) -> proc_macro2::TokenStream {
+    if let Some(ops) = override_ops {
+        return schema_ops_tokens(ops);
+    }
     if !typed {
         return quote! { ::rqb::OpSet::none() };
     }
@@ -457,6 +568,15 @@ fn ops_tokens(pg: &str, typed: bool) -> proc_macro2::TokenStream {
         quote! { ::rqb::OpSet::equality() }
     } else {
         quote! { ::rqb::OpSet::ordered() }
+    }
+}
+
+fn schema_ops_tokens(ops: SchemaOps) -> proc_macro2::TokenStream {
+    match ops {
+        SchemaOps::None => quote! { ::rqb::OpSet::none() },
+        SchemaOps::Equality => quote! { ::rqb::OpSet::equality() },
+        SchemaOps::Ordered => quote! { ::rqb::OpSet::ordered() },
+        SchemaOps::Text => quote! { ::rqb::OpSet::text() },
     }
 }
 
@@ -482,8 +602,18 @@ fn is_equality_only_pg(pg: &str) -> bool {
     ) || pg.ends_with("[]")
 }
 
-fn json_kind_tokens(pg: &str, typed: bool) -> Option<proc_macro2::TokenStream> {
-    if !typed || pg.ends_with("[]") {
+fn json_kind_tokens(
+    pg: &str,
+    typed: bool,
+    override_json: Option<SchemaJson>,
+) -> Option<proc_macro2::TokenStream> {
+    if pg.ends_with("[]") {
+        return None;
+    }
+    if let Some(json) = override_json {
+        return schema_json_tokens(json);
+    }
+    if !typed {
         return None;
     }
     let kind = match pg {
@@ -502,6 +632,25 @@ fn json_kind_tokens(pg: &str, typed: bool) -> Option<proc_macro2::TokenStream> {
         "timestamptz" => quote! { ::rqb::JsonKind::Timestamptz },
         "json" | "jsonb" => quote! { ::rqb::JsonKind::Jsonb },
         _ => return None,
+    };
+    Some(kind)
+}
+
+fn schema_json_tokens(json: SchemaJson) -> Option<proc_macro2::TokenStream> {
+    let kind = match json {
+        SchemaJson::None => return None,
+        SchemaJson::Text => quote! { ::rqb::JsonKind::Text },
+        SchemaJson::Bool => quote! { ::rqb::JsonKind::Bool },
+        SchemaJson::Integer => quote! { ::rqb::JsonKind::Integer },
+        SchemaJson::BigInt => quote! { ::rqb::JsonKind::BigInt },
+        SchemaJson::Float => quote! { ::rqb::JsonKind::Float },
+        SchemaJson::NumericString => quote! { ::rqb::JsonKind::NumericString },
+        SchemaJson::Uuid => quote! { ::rqb::JsonKind::Uuid },
+        SchemaJson::Date => quote! { ::rqb::JsonKind::Date },
+        SchemaJson::Time => quote! { ::rqb::JsonKind::Time },
+        SchemaJson::Timestamp => quote! { ::rqb::JsonKind::Timestamp },
+        SchemaJson::Timestamptz => quote! { ::rqb::JsonKind::Timestamptz },
+        SchemaJson::Jsonb => quote! { ::rqb::JsonKind::Jsonb },
     };
     Some(kind)
 }
@@ -663,6 +812,61 @@ fn parse_field_attrs(attrs: &[Attribute]) -> syn::Result<FieldAttrs> {
         })?;
     }
     Ok(parsed)
+}
+
+fn parse_schema_field_attrs(attrs: &[Attribute]) -> syn::Result<SchemaFieldAttrs> {
+    let mut parsed = SchemaFieldAttrs::default();
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("rqb")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("ops") {
+                parsed.ops = Some(parse_schema_ops(&meta)?);
+                return Ok(());
+            }
+            if meta.path.is_ident("json") {
+                parsed.json = Some(parse_schema_json(&meta)?);
+                return Ok(());
+            }
+            Err(meta.error("unsupported rqb schema field attribute"))
+        })?;
+    }
+    Ok(parsed)
+}
+
+fn parse_schema_ops(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<SchemaOps> {
+    let ident: Ident = meta.value()?.call(Ident::parse_any)?;
+    match ident.to_string().as_str() {
+        "none" => Ok(SchemaOps::None),
+        "equality" => Ok(SchemaOps::Equality),
+        "ordered" => Ok(SchemaOps::Ordered),
+        "text" => Ok(SchemaOps::Text),
+        _ => Err(Error::new_spanned(
+            ident,
+            "expected one of: none, equality, ordered, text",
+        )),
+    }
+}
+
+fn parse_schema_json(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<SchemaJson> {
+    let ident: Ident = meta.value()?.call(Ident::parse_any)?;
+    match ident.to_string().as_str() {
+        "none" => Ok(SchemaJson::None),
+        "text" => Ok(SchemaJson::Text),
+        "bool" => Ok(SchemaJson::Bool),
+        "integer" => Ok(SchemaJson::Integer),
+        "big_int" => Ok(SchemaJson::BigInt),
+        "float" => Ok(SchemaJson::Float),
+        "numeric_string" => Ok(SchemaJson::NumericString),
+        "uuid" => Ok(SchemaJson::Uuid),
+        "date" => Ok(SchemaJson::Date),
+        "time" => Ok(SchemaJson::Time),
+        "timestamp" => Ok(SchemaJson::Timestamp),
+        "timestamptz" => Ok(SchemaJson::Timestamptz),
+        "jsonb" => Ok(SchemaJson::Jsonb),
+        _ => Err(Error::new_spanned(
+            ident,
+            "expected one of: none, text, bool, integer, big_int, float, numeric_string, uuid, date, time, timestamp, timestamptz, jsonb",
+        )),
+    }
 }
 
 fn parse_optional_bool(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<bool> {

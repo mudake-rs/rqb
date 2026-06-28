@@ -93,8 +93,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .bind(BigDecimal::from_str("5.00")?)
         .build()?;
 
-    // Conflict targets accept one field, a tuple of fields, or a named
-    // constraint. Predicates are allowed only for column targets.
+    // Conflict targets accept fields or generated constraint name constants.
+    // Predicates are allowed only for column targets.
     let upsert_user_sql = insert(users::table())
         .set_many((
             users::ID.set(Uuid::nil()),
@@ -120,7 +120,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             users::EMAIL.set("ada@example.com"),
             users::DISPLAY_NAME.set("Ada"),
         ))
-        .on_conflict_constraint("app_users_email_key")
+        .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
         .do_nothing()
         .returning(users::ID)
         .build()?;
@@ -186,7 +186,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             users::DISPLAY_NAME.set("Ada"),
             users::STATUS.set("active"),
         ))
-        .on_conflict(users::EMAIL)
+        .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
         .do_update_excluded((users::DISPLAY_NAME, users::STATUS))
         .returning(users::ID)
         .build()?;
@@ -214,7 +214,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     let bulk_upsert_sql = insert(users::table())
         .from_select_all(incoming_users)
-        .on_conflict(users::EMAIL)
+        .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
         .do_update_set((
             users::STATUS.set_from("incoming"),
             users::DISPLAY_NAME.set_from("incoming"),
@@ -228,11 +228,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(
         excluded_upsert_sql.sql,
-        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = EXCLUDED.\"status\" RETURNING \"id\""
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = EXCLUDED.\"status\" RETURNING \"id\""
     );
     assert_eq!(
         bulk_upsert_sql.sql,
-        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") SELECT \"incoming\".\"id\", \"incoming\".\"organization_id\", \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"display_name\" FROM (VALUES ($1, $2, $3, $4, $5)) AS \"incoming\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") ON CONFLICT (\"email\") DO UPDATE SET \"status\" = \"incoming\".\"status\", \"display_name\" = \"incoming\".\"display_name\" RETURNING \"id\""
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") SELECT \"incoming\".\"id\", \"incoming\".\"organization_id\", \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"display_name\" FROM (VALUES ($1, $2, $3, $4, $5)) AS \"incoming\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO UPDATE SET \"status\" = \"incoming\".\"status\", \"display_name\" = \"incoming\".\"display_name\" RETURNING \"id\""
     );
 
     // Formatting and range helpers stay in the typed expression layer; no raw

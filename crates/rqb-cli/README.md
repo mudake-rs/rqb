@@ -51,6 +51,16 @@ rqb generate \
   --out src/schema.rs
 ```
 
+Use `--config` when the generated schema needs project-owned type mappings:
+
+```bash
+rqb generate \
+  --database-url "$DATABASE_URL" \
+  --schema public \
+  --config rqb.toml \
+  --out src/schema.rs
+```
+
 Preview generated code without writing a file:
 
 ```bash
@@ -117,6 +127,27 @@ used in server-owned SQL expressions through `*_META.expr()` or
 `*_META.at("alias")`. This keeps extension columns available for server-owned
 operators without pretending they have a portable Rust `Field<T>` mapping.
 
+Map project-owned domains, extensions, or other PostgreSQL types in TOML:
+
+```toml
+[type_map."bitcoin.uint256"]
+rust = "crate::types::PgU256"
+ops = "ordered"        # none | equality | ordered | text; default none
+json = "text"          # optional; omit to hide from SearchRequest
+array = true           # also map bitcoin.uint256[] to Vec<crate::types::PgU256>
+
+[type_map."public.vector"]
+rust = "pgvector::Vector"
+ops = "none"
+```
+
+`rust` must be a qualified Rust type path and is emitted inline; the generator
+does not add imports. The Rust type must implement the sqlx Postgres traits
+required by the way it is used (`Type`, `Encode`, `Decode`, and array support
+for `array = true`). rqb does not perform custom conversion.
+`json` exposes only scalar columns to `SearchRequest`; generated array fields
+stay JSON-hidden even when `array = true`.
+
 When raw-only columns are generated, `rqb-cli` prints a stderr summary with the
 relation, column, and Postgres type name. Treat that as a review queue for
 project-specific enums, domains, ranges, and extension types that may deserve
@@ -142,6 +173,25 @@ sequence_no: int8 = i64,
 Materialized views are emitted as `view` entries with a `// Materialized view.`
 comment. `rqb` queries them like normal read sources.
 
+Non-deferrable primary-key and unique constraints generate a relation-local
+`constraints` module:
+
+```rust
+rqb::schema! {
+    table public.users {
+        id: uuid = Uuid,
+        email: text = String,
+        constraints {
+            USERS_EMAIL_KEY: "users_email_key",
+        }
+    }
+}
+
+insert(users::table())
+    .on_conflict_constraint(users::constraints::USERS_EMAIL_KEY)
+    .do_nothing();
+```
+
 ## Boundaries
 
 `rqb-cli` generates schema metadata, not application models. Row structs, API
@@ -151,9 +201,10 @@ Nullable columns keep their normal `Field<T>` type in generated metadata. Use
 `Option<T>` in `sqlx::FromRow` structs when the database column can return
 `NULL`.
 
-Primary keys, foreign keys, unique constraints, check constraints, and indexes
-are not introspected into the generated API. They remain database constraints;
-runtime violations are mapped by `rqb::Error` when sqlx returns them.
+Foreign keys, check constraints, expression indexes, partial indexes, and
+non-unique indexes are not introspected into the generated API. They remain
+database constraints; runtime violations are mapped by `rqb::Error` when sqlx
+returns them.
 
 ## Migrations
 

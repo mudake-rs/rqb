@@ -334,6 +334,12 @@ pub mod prelude {
 mod tests {
     use super::{Error, Field, Meta, OpSet, Result};
 
+    #[derive(Clone)]
+    struct PgU256;
+
+    #[derive(Clone)]
+    struct Vector;
+
     #[test]
     fn facade_exports_typed_field_and_error() {
         static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::equality());
@@ -446,5 +452,35 @@ mod tests {
 
         assert!(matches!(source, crate::Source::Table { .. }));
         assert_eq!(assignment.field.db, "id");
+    }
+
+    #[test]
+    fn schema_macro_accepts_metadata_overrides_and_constraints() {
+        crate::schema! {
+            table public.wallets {
+                id: uuid = uuid::Uuid,
+                #[rqb(ops = ordered, json = text)]
+                balance: "bitcoin.uint256" = crate::tests::PgU256,
+                #[rqb(ops = none, json = none)]
+                embedding: vector = crate::tests::Vector,
+                #[rqb(ops = equality, json = text)]
+                tags: "text[]" = Vec<String>,
+                constraints {
+                    WALLETS_PKEY: "wallets_pkey",
+                    WALLETS_BALANCE_KEY: "wallets_balance_key",
+                }
+            }
+        }
+
+        assert!(wallets::BALANCE_META.ops.ordering);
+        assert_eq!(wallets::BALANCE_META.json, Some(crate::JsonKind::Text));
+        assert_eq!(wallets::EMBEDDING_META.ops, OpSet::none());
+        assert_eq!(wallets::EMBEDDING_META.json, None);
+        assert_eq!(wallets::TAGS_META.json, None);
+        assert_eq!(wallets::constraints::WALLETS_PKEY, "wallets_pkey");
+        assert_eq!(
+            wallets::constraints::WALLETS_BALANCE_KEY,
+            "wallets_balance_key"
+        );
     }
 }

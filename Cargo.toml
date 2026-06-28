@@ -7,7 +7,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mudake-rs/rqb"
@@ -20,7 +20,7 @@ heck = "0.5.0"
 itoa = "1.0.18"
 proc-macro2 = "1.0.106"
 quote = "1.0.46"
-rqb-macros = { path = "crates/rqb-macros", version = "0.1.0" }
+rqb-macros = { path = "crates/rqb-macros", version = "0.1.1" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 syn = "2.0.118"

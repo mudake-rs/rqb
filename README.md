@@ -46,8 +46,8 @@ authority for name resolution, constraints, permissions, and query planning.
 
 ## Status
 
-Pre-crates.io, pre-1.0. The repository is public, but the crates are not
-published yet. APIs are still allowed to break when that makes the library
+Pre-1.0. The repository is public and the supported distribution path is the
+GitHub repository. APIs are still allowed to break when that makes the library
 simpler or clearer.
 
 The core builder targets Postgres 14+ for ordinary application queries. Some
@@ -57,7 +57,7 @@ runs against Postgres 18.
 
 ## Install
 
-Until the crate is published on crates.io, depend on the git repository:
+rqb is distributed as a git dependency:
 
 ```toml
 [dependencies]
@@ -635,16 +635,13 @@ setup, or transaction ownership that crosses helper boundaries.
 `rqb-cli` introspects Postgres and writes a compact `rqb::schema!` module. The
 macro expands to `Meta`, `Field<T>`, `FIELDS`, and `table()` / `view()` items.
 
-Install the CLI from GitHub until the crate is published on crates.io; the
-installed binary is `rqb`.
+Install the CLI from GitHub; the installed binary is `rqb`.
 
 ```bash
 cargo install --git https://github.com/mudake-rs/rqb rqb-cli
 ```
 
 The package name is `rqb-cli`; the binary name is `rqb`.
-
-After crates.io publish, this becomes `cargo install rqb-cli`.
 
 Inside this workspace, run the same binary through `cargo run -p rqb-cli --`.
 

@@ -21,6 +21,9 @@ executable API documentation.
   it.
 - [`json-search`](json-search/): client-controlled filters on top of
   server-owned query shape. Renders SQL and asserts it.
+- [`query-reuse-and-pagination`](query-reuse-and-pagination/): reusable query
+  shapes, keyset cursors, UUIDv7-style id cursors, and the JSON search cursor
+  boundary. Renders SQL and asserts it.
 - [`writes-and-types`](writes-and-types/): inserts, updates, deletes, write
   DTOs, conflict handling, and sqlx-backed Postgres types. Renders SQL and
   asserts it.

@@ -38,6 +38,7 @@ verify: check doc
 	RUSTFLAGS="-D warnings" cargo check --manifest-path samples/schema/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/basic-queries/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/json-search/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/query-reuse-and-pagination/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/writes-and-types/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/transactions/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/executor-wrapper/Cargo.toml

@@ -41,6 +41,13 @@ struct NewUser {
     _local_note: String,
 }
 
+#[derive(Insertable)]
+#[rqb(table = users)]
+struct OptionalInsert {
+    #[rqb(skip_none)]
+    nickname: Option<String>,
+}
+
 #[derive(Changeset)]
 #[rqb(table = users)]
 struct UserChanges {
@@ -119,6 +126,125 @@ fn insertable_derive_includes_skip_none_fields_when_present() {
         "INSERT INTO \"public\".\"users\" (\"email\", \"status\", \"type\", \"nickname\") VALUES ($1, $2, $3, $4) RETURNING \"nickname\""
     );
     assert_eq!(built.params.len(), 4);
+}
+
+#[test]
+fn insertable_batch_insert_builds_values_source_from_dtos() {
+    let users = vec![
+        NewUser {
+            email: "ada@example.com".to_owned(),
+            state: "active".to_owned(),
+            r#type: "admin".to_owned(),
+            nickname: Some("Ada".to_owned()),
+            _local_note: "not persisted".to_owned(),
+        },
+        NewUser {
+            email: "grace@example.com".to_owned(),
+            state: "active".to_owned(),
+            r#type: "member".to_owned(),
+            nickname: Some("Grace".to_owned()),
+            _local_note: "not persisted".to_owned(),
+        },
+    ];
+
+    let built = insert(users::table())
+        .values_many(&users, "incoming")
+        .unwrap()
+        .returning(users::ID)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"public\".\"users\" (\"email\", \"status\", \"type\", \"nickname\") SELECT \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"type\", \"incoming\".\"nickname\" FROM (VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)) AS \"incoming\" (\"email\", \"status\", \"type\", \"nickname\") RETURNING \"id\""
+    );
+    assert_eq!(built.params.len(), 8);
+}
+
+#[test]
+fn insertable_batch_insert_rejects_empty_batches() {
+    let users = Vec::<NewUser>::new();
+
+    let err = insert(users::table())
+        .values_many(users, "incoming")
+        .err()
+        .unwrap();
+
+    assert!(matches!(
+        err,
+        rqb::Error::InvalidInsertShape { message }
+            if message == "batch insert requires at least one row"
+    ));
+}
+
+#[test]
+fn insertable_batch_insert_rejects_different_row_shapes() {
+    let users = vec![
+        NewUser {
+            email: "ada@example.com".to_owned(),
+            state: "active".to_owned(),
+            r#type: "admin".to_owned(),
+            nickname: Some("Ada".to_owned()),
+            _local_note: "not persisted".to_owned(),
+        },
+        NewUser {
+            email: "grace@example.com".to_owned(),
+            state: "active".to_owned(),
+            r#type: "member".to_owned(),
+            nickname: None,
+            _local_note: "not persisted".to_owned(),
+        },
+    ];
+
+    let err = insert(users::table())
+        .values_many(&users, "incoming")
+        .err()
+        .unwrap();
+
+    assert!(matches!(
+        err,
+        rqb::Error::InvalidInsertShape { message }
+            if message == "batch insert rows must use the same fields in the same order"
+    ));
+}
+
+#[test]
+fn insertable_batch_insert_rejects_empty_row_assignments() {
+    let users = [OptionalInsert { nickname: None }];
+
+    let err = insert(users::table())
+        .values_many(&users, "incoming")
+        .err()
+        .unwrap();
+
+    assert!(matches!(
+        err,
+        rqb::Error::InvalidInsertShape { message }
+            if message == "batch insert rows must contain at least one assignment"
+    ));
+}
+
+#[test]
+fn insertable_batch_insert_rejects_existing_insert_values() {
+    let users = [NewUser {
+        email: "ada@example.com".to_owned(),
+        state: "active".to_owned(),
+        r#type: "admin".to_owned(),
+        nickname: Some("Ada".to_owned()),
+        _local_note: "not persisted".to_owned(),
+    }];
+
+    let err = insert(users::table())
+        .set(users::ID.set(1))
+        .values_many(&users, "incoming")
+        .err()
+        .unwrap();
+
+    assert!(matches!(
+        err,
+        rqb::Error::InvalidInsertShape { message }
+            if message == "batch insert cannot be combined with existing insert values or source"
+    ));
 }
 
 #[test]

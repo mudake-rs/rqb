@@ -35,6 +35,16 @@ struct InvoiceChanges {
     grace_period: Option<sqlx::postgres::types::PgInterval>,
 }
 
+#[derive(Insertable)]
+#[rqb(table = users)]
+struct NewUser {
+    id: Uuid,
+    organization_id: Uuid,
+    email: String,
+    status: String,
+    display_name: String,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let invoice_id = Uuid::nil();
     let customer_id = Uuid::nil();
@@ -191,29 +201,17 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(users::ID)
         .build()?;
 
-    // Bulk insert/update paths can expose an in-memory batch as a VALUES
-    // source. `from_select_all` uses the source metadata for both target
-    // columns and SELECT projection; `set_from` copies updated values from the
-    // source alias without repeating each field reference by hand.
-    let incoming_users = values_source(
-        [(
-            Uuid::nil(),
-            Uuid::nil(),
-            "grace@example.com",
-            "active",
-            "Grace",
-        )],
-        "incoming",
-        (
-            users::ID,
-            users::ORGANIZATION_ID,
-            users::EMAIL,
-            users::STATUS,
-            users::DISPLAY_NAME,
-        ),
-    );
+    // Batch DTO inserts use an inline VALUES source under the hood. `set_from`
+    // copies update values from the same source alias in conflict updates.
+    let incoming_users = [NewUser {
+        id: Uuid::nil(),
+        organization_id: Uuid::nil(),
+        email: "grace@example.com".to_owned(),
+        status: "active".to_owned(),
+        display_name: "Grace".to_owned(),
+    }];
     let bulk_upsert_sql = insert(users::table())
-        .from_select_all(incoming_users)
+        .values_many(&incoming_users, "incoming")?
         .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
         .do_update_set((
             users::STATUS.set_from("incoming"),

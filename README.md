@@ -625,24 +625,15 @@ insert(schema::products::table())
     .await?;
 ```
 
-For sync-style batch inputs, expose the incoming rows as a `values_source`.
-`from_select_all(...)` uses that source metadata for both the target column list
-and the `SELECT` projection, and `set_from("alias")` copies fields from the
+For sync-style batch DTO inputs, `values_many(...)` exposes the incoming
+rows as an inline `VALUES` source. `set_from("alias")` copies fields from that
 same source in conflict updates:
 
 ```rust
-let incoming = values_source(
-    [(sku, name, price_cents)],
-    "incoming",
-    (
-        schema::products::SKU,
-        schema::products::NAME,
-        schema::products::PRICE_CENTS,
-    ),
-);
+let incoming = [product_a, product_b];
 
 insert(schema::products::table())
-    .from_select_all(incoming)
+    .values_many(&incoming, "incoming")?
     .on_conflict(schema::products::SKU)
     .do_update_set((
         schema::products::NAME.set_from("incoming"),

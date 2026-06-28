@@ -89,6 +89,9 @@ pub fn schema(input: TokenStream) -> TokenStream {
 /// `insert(table).values(&dto).set(server_field.set(value))` to let
 /// server-owned values override DTO fields.
 ///
+/// For DTO batches, use `insert(table).values_many(&rows, "incoming")`.
+/// Each row must produce the same fields in the same order.
+///
 /// Field attributes:
 /// - `#[rqb(field = TABLE::FIELD)]` maps a Rust field to a differently named
 ///   generated schema field.

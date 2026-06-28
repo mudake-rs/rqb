@@ -69,6 +69,64 @@ impl Insert {
         self
     }
 
+    /// Adds many [`Insertable`] DTO rows through `INSERT ... SELECT` over an
+    /// inline `VALUES` source.
+    ///
+    /// Every row must produce the same insert fields in the same order. This is
+    /// usually true for DTOs without `#[rqb(skip_none)]`; if optional insert
+    /// fields can be omitted per row, normalize the input first or build an
+    /// explicit `values_source(...)`.
+    ///
+    /// `alias` names the generated `VALUES` source. Use the same alias with
+    /// [`Field::set_from`] when an upsert needs to copy incoming values in
+    /// `DO UPDATE SET`.
+    pub fn values_many<I, R>(self, rows: I, alias: impl Into<String>) -> Result<Self>
+    where
+        I: IntoIterator<Item = R>,
+        R: Insertable,
+    {
+        if !self.columns.is_empty() || !self.assignments.is_empty() || self.source.is_some() {
+            return Err(Error::InvalidInsertShape {
+                message: "batch insert cannot be combined with existing insert values or source",
+            });
+        }
+
+        let mut columns = None::<Vec<Meta>>;
+        let mut values: Vec<Vec<ValueExpr>> = Vec::new();
+        for row in rows {
+            let assignments = normalized_batch_assignments(row.insert_assignments())?;
+            match &columns {
+                Some(columns) if !same_batch_fields(columns, &assignments) => {
+                    return Err(Error::InvalidInsertShape {
+                        message: "batch insert rows must use the same fields in the same order",
+                    });
+                }
+                Some(_) => {}
+                None => {
+                    columns = Some(
+                        assignments
+                            .iter()
+                            .map(|assignment| assignment.field)
+                            .collect(),
+                    );
+                }
+            }
+            values.push(
+                assignments
+                    .into_iter()
+                    .map(|assignment| assignment.value)
+                    .collect(),
+            );
+        }
+
+        let Some(columns) = columns else {
+            return Err(Error::InvalidInsertShape {
+                message: "batch insert requires at least one row",
+            });
+        };
+        Ok(self.from_select_all(crate::values_source(values, alias, columns)))
+    }
+
     /// Adds a target column for `INSERT ... SELECT`.
     pub fn column<T>(mut self, field: Field<T>) -> Self {
         push_column(&mut self.columns, *field.meta);
@@ -163,4 +221,25 @@ impl Insert {
         self.returning.push(item);
         self
     }
+}
+
+fn normalized_batch_assignments(assignments: Vec<Assignment>) -> Result<Vec<Assignment>> {
+    let mut normalized = Vec::new();
+    for assignment in assignments {
+        push_assignment(&mut normalized, assignment);
+    }
+    if normalized.is_empty() {
+        return Err(Error::InvalidInsertShape {
+            message: "batch insert rows must contain at least one assignment",
+        });
+    }
+    Ok(normalized)
+}
+
+fn same_batch_fields(columns: &[Meta], assignments: &[Assignment]) -> bool {
+    columns.len() == assignments.len()
+        && columns
+            .iter()
+            .zip(assignments)
+            .all(|(column, assignment)| column.db == assignment.field.db)
 }

@@ -482,6 +482,8 @@ The usual HTTP mapping is:
 - `SerializationFailure`, `DeadlockDetected`, and connection failures ->
   `503 Service Unavailable` or a retry response. `error.is_retryable()` returns
   true for these retryable cases.
+- `LockNotAvailable` (`55P03`, for example `FOR UPDATE NOWAIT`) -> `409 Conflict`,
+  `423 Locked`, or a domain-specific "already busy" response.
 - `QueryCanceled` -> `504 Gateway Timeout` or request timeout, depending on
   who canceled the query.
 - `InsufficientPrivilege` -> `403 Forbidden`.
@@ -659,6 +661,41 @@ let updated = update(schema::orders::table())
     .fetch_optional_as::<OrderRow>(&pool)
     .await?;
 ```
+
+Row locks stay on `SELECT` and should normally run inside a transaction:
+
+```rust
+let order = select(schema::orders::table())
+    .filter(schema::orders::ID.eq(order_id))
+    .for_update()
+    .nowait()
+    .fetch_one_as::<OrderRow>(&mut *tx)
+    .await?;
+```
+
+Use `for_no_key_update`, `for_share`, or `for_key_share` when the narrower
+Postgres row-lock mode matches the workflow. `skip_locked()` supports worker
+queue patterns where busy rows should be ignored.
+
+Postgres advisory locks are exposed as transaction-scoped statement helpers in
+`rqb::dsl`:
+
+```rust
+use rqb::dsl::try_advisory_xact_lock_named;
+
+let acquired = try_advisory_xact_lock_named(format!("job:{job_id}"))
+    .fetch_one_scalar::<bool>(&mut *tx)
+    .await?;
+if !acquired {
+    return Ok(None);
+}
+```
+
+Postgres advisory locks accept `bigint` or `(int4, int4)` keys. The `_named`
+helpers hash a string with a stable FNV-1a 64-bit hash and bind the resulting
+`bigint`; collisions are possible, so use explicit numeric keys for
+collision-critical protocols. Session-level advisory locks remain available
+through `raw(...)`, but transaction-level locks are safer with connection pools.
 
 `DELETE` without a filter is rejected during validation.
 

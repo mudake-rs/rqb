@@ -11,6 +11,13 @@ transaction flows without opening a database connection.
 - `tx!(&pool, |conn| { ... })` runs several async statements in one transaction.
 - Transaction-reused service helpers accept `impl PgExecutor<'_>`, so the same
   query works with a pool, connection, or transaction connection.
+- Row locks such as `FOR NO KEY UPDATE NOWAIT` render from the typed select
+  builder and should be executed inside a transaction when the lock must protect
+  follow-up work.
+- Transaction-scoped advisory locks use `rqb::dsl` helpers such as
+  `try_advisory_xact_lock_named(...)`; named helpers hash the string to a
+  stable `bigint` key because PostgreSQL advisory locks do not accept strings
+  directly.
 - The focused sample is compile-checked without a database, but the transaction
   function contains the real `.await?` flow used by applications.
 - Explicit `pool.begin().await?` remains available when closure scope is not

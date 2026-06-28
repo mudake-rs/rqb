@@ -350,6 +350,17 @@ impl Select {
         self.lock_of(LockMode::Update, relation)
     }
 
+    /// Adds `FOR NO KEY UPDATE`.
+    #[inline]
+    pub fn for_no_key_update(self) -> Self {
+        self.lock(LockMode::NoKeyUpdate)
+    }
+
+    /// Adds `FOR NO KEY UPDATE OF relation`.
+    pub fn for_no_key_update_of(self, relation: impl Into<String>) -> Self {
+        self.lock_of(LockMode::NoKeyUpdate, relation)
+    }
+
     /// Adds `FOR SHARE`.
     #[inline]
     pub fn for_share(self) -> Self {
@@ -359,6 +370,17 @@ impl Select {
     /// Adds `FOR SHARE OF relation`.
     pub fn for_share_of(self, relation: impl Into<String>) -> Self {
         self.lock_of(LockMode::Share, relation)
+    }
+
+    /// Adds `FOR KEY SHARE`.
+    #[inline]
+    pub fn for_key_share(self) -> Self {
+        self.lock(LockMode::KeyShare)
+    }
+
+    /// Adds `FOR KEY SHARE OF relation`.
+    pub fn for_key_share_of(self, relation: impl Into<String>) -> Self {
+        self.lock_of(LockMode::KeyShare, relation)
     }
 
     /// Sets `NOWAIT` on the current row lock, creating `FOR UPDATE` if absent.

@@ -1,8 +1,13 @@
+use rqb::dsl::{
+    advisory_xact_lock_named, try_advisory_xact_lock, try_advisory_xact_lock_named,
+};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::orders;
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
+
+const ORDER_WORKER_LOCK: i32 = 10;
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -18,6 +23,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let explicit_future = explicit_transaction(&pool, user_id);
     drop(explicit_future);
 
+    let worker_future = run_exclusive_user_job(&pool, user_id);
+    drop(worker_future);
+
     // The rendered statement matches the second helper in the transaction body.
     let cancel_sql = update(orders::table())
         .set(orders::STATUS.set("canceled"))
@@ -25,13 +33,37 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .filter(orders::STATUS.eq("open"))
         .build()?;
 
+    let lock_sql = select(orders::table())
+        .filter(orders::ID.eq(Uuid::nil()))
+        .for_no_key_update()
+        .nowait()
+        .build()?;
+
+    let advisory_sql = advisory_xact_lock_named("sample:user-job").build()?;
+    let try_advisory_sql = try_advisory_xact_lock((ORDER_WORKER_LOCK, 42_i32)).build()?;
+
     assert_eq!(
         cancel_sql.sql,
         "UPDATE \"sample\".\"orders\" SET \"status\" = $1 WHERE (\"user_id\" = $2 AND \"status\" = $3)"
     );
     assert_eq!(cancel_sql.params.len(), 3);
+    assert_eq!(
+        lock_sql.sql,
+        "SELECT \"id\", \"user_id\", \"status\", \"total_cents\", \"metadata\", \"tags\", \"created_at\" FROM \"sample\".\"orders\" WHERE \"id\" = $1 FOR NO KEY UPDATE NOWAIT"
+    );
+    assert_eq!(
+        advisory_sql.sql,
+        "SELECT pg_advisory_xact_lock($1)"
+    );
+    assert_eq!(
+        try_advisory_sql.sql,
+        "SELECT pg_try_advisory_xact_lock($1, $2)"
+    );
 
     println!("{}", cancel_sql.sql);
+    println!("{}", lock_sql.sql);
+    println!("{}", advisory_sql.sql);
+    println!("{}", try_advisory_sql.sql);
     Ok(())
 }
 
@@ -70,4 +102,20 @@ async fn explicit_transaction(pool: &PgPool, user_id: Uuid) -> rqb::Result<()> {
     cancel_open_orders(&mut *tx, user_id).await?;
 
     tx.commit().await.map_err(rqb::Error::from)
+}
+
+async fn run_exclusive_user_job(pool: &PgPool, user_id: Uuid) -> rqb::Result<bool> {
+    tx!(pool, |conn| {
+        let acquired = try_advisory_xact_lock_named(format!("sample:user-job:{user_id}"))
+            .fetch_one_scalar::<bool>(&mut *conn)
+            .await?;
+        if !acquired {
+            return Ok(false);
+        }
+
+        deactivate_user(&mut *conn, user_id).await?;
+        cancel_open_orders(conn, user_id).await?;
+        Ok(true)
+    })
+    .await
 }

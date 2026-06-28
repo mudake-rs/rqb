@@ -109,6 +109,7 @@ async fn select_for_update_nowait_fails_on_locked_row() {
         .await
         .unwrap_err();
 
+    assert!(matches!(err, rqb::Error::LockNotAvailable(_)));
     assert_eq!(err.code(), Some("55P03"));
 
     tx2.rollback().await.unwrap();

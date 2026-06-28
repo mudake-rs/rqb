@@ -60,6 +60,10 @@ impl IntoResponse for ApiError {
                     StatusCode::SERVICE_UNAVAILABLE,
                     "retryable database error".to_owned(),
                 ),
+                rqb::Error::LockNotAvailable(_) => (
+                    StatusCode::CONFLICT,
+                    "database resource is locked".to_owned(),
+                ),
                 rqb::Error::QueryCanceled(_) => (
                     StatusCode::GATEWAY_TIMEOUT,
                     "database query canceled".to_owned(),

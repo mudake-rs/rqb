@@ -1299,6 +1299,34 @@ fn update_from_delete_using_and_lock_of_render_with_aliases() {
         lock_sql.sql,
         "SELECT \"u\".\"id\", \"u\".\"email_address\" AS \"email\" FROM \"public\".\"app_users\" AS \"u\" FOR UPDATE OF \"u\" NOWAIT"
     );
+
+    let no_key_update_sql = select(users().alias("u"))
+        .for_no_key_update_of("u")
+        .skip_locked()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        no_key_update_sql.sql,
+        "SELECT \"u\".\"id\", \"u\".\"email_address\" AS \"email\" FROM \"public\".\"app_users\" AS \"u\" FOR NO KEY UPDATE OF \"u\" SKIP LOCKED"
+    );
+
+    let key_share_sql = select(users()).for_key_share().build().unwrap();
+
+    assert_eq!(
+        key_share_sql.sql,
+        "SELECT \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\" FOR KEY SHARE"
+    );
+
+    let key_share_of_sql = select(users().alias("u"))
+        .for_key_share_of("u")
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        key_share_of_sql.sql,
+        "SELECT \"u\".\"id\", \"u\".\"email_address\" AS \"email\" FROM \"public\".\"app_users\" AS \"u\" FOR KEY SHARE OF \"u\""
+    );
 }
 
 #[test]

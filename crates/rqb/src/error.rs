@@ -345,6 +345,10 @@ pub enum Error {
     #[error("deadlock detected: {}", .0.message)]
     DeadlockDetected(Box<PgFailure>),
 
+    /// Postgres lock not available (`55P03`).
+    #[error("lock not available: {}", .0.message)]
+    LockNotAvailable(Box<PgFailure>),
+
     /// Postgres query cancellation (`57014`).
     #[error("query canceled: {}", .0.message)]
     QueryCanceled(Box<PgFailure>),
@@ -595,6 +599,9 @@ impl Error {
             "40P01" => {
                 Self::DeadlockDetected(Box::new(PgFailure::new(message, detail, hint, info)))
             }
+            "55P03" => {
+                Self::LockNotAvailable(Box::new(PgFailure::new(message, detail, hint, info)))
+            }
             "57014" => Self::QueryCanceled(Box::new(PgFailure::new(message, detail, hint, info))),
             "42501" => Self::InsufficientPrivilege(Box::new(
                 DatabaseFailure::new(code, message)
@@ -638,6 +645,7 @@ impl Error {
             Self::ExclusionViolation(_) => Some("23P01"),
             Self::SerializationFailure(_) => Some("40001"),
             Self::DeadlockDetected(_) => Some("40P01"),
+            Self::LockNotAvailable(_) => Some("55P03"),
             Self::InsufficientPrivilege(_) => Some("42501"),
             Self::QueryCanceled(_) => Some("57014"),
             Self::Database(err) => Some(&err.code),
@@ -685,6 +693,7 @@ impl Error {
             | Self::ExclusionViolation(err) => err.detail.as_deref(),
             Self::SerializationFailure(err)
             | Self::DeadlockDetected(err)
+            | Self::LockNotAvailable(err)
             | Self::QueryCanceled(err) => err.detail.as_deref(),
             Self::InsufficientPrivilege(err) | Self::Database(err) => err.detail.as_deref(),
             _ => None,
@@ -696,6 +705,7 @@ impl Error {
         match self {
             Self::SerializationFailure(err)
             | Self::DeadlockDetected(err)
+            | Self::LockNotAvailable(err)
             | Self::QueryCanceled(err) => err.hint.as_deref(),
             Self::InsufficientPrivilege(err) | Self::Database(err) => err.hint.as_deref(),
             _ => None,
@@ -712,6 +722,7 @@ impl Error {
             Self::NotNullViolation(err) => Some(&err.info),
             Self::SerializationFailure(err)
             | Self::DeadlockDetected(err)
+            | Self::LockNotAvailable(err)
             | Self::QueryCanceled(err) => Some(&err.info),
             Self::InsufficientPrivilege(err) | Self::Database(err) => Some(&err.info),
             _ => None,
@@ -838,6 +849,21 @@ mod tests {
             }))
             .is_retryable()
         );
+    }
+
+    #[test]
+    fn lock_not_available_exposes_sqlstate_without_global_retry_policy() {
+        let error = Error::LockNotAvailable(Box::new(PgFailure {
+            message: "could not obtain lock on row in relation".to_owned(),
+            detail: Some("row is already locked".to_owned()),
+            hint: Some("retry later".to_owned()),
+            info: DbErrorInfo::default(),
+        }));
+
+        assert_eq!(error.code(), Some("55P03"));
+        assert_eq!(error.detail(), Some("row is already locked"));
+        assert_eq!(error.hint(), Some("retry later"));
+        assert!(!error.is_retryable());
     }
 
     #[test]

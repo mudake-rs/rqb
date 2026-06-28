@@ -40,6 +40,7 @@ verify: check doc
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/json-search/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/writes-and-types/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/transactions/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/executor-wrapper/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/error-handling/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/raw-query/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/joins-and-aggregates/Cargo.toml

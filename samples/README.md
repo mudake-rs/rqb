@@ -46,6 +46,14 @@ executable API documentation.
 - [`schema`](schema/): shared generated schema crate used by the runnable
   samples.
 
+## Experiments
+
+- [`executor-wrapper`](executor-wrapper/): optional design probe for a GAT
+  wrapper around sqlx executors. It is compile-checked, but it is not the
+  recommended service style unless the wrapper proves more ergonomic than
+  `&PgPool`, reusable query-shape helpers, and targeted `PgExecutor<'_>`
+  helpers.
+
 ## Running Against A Database
 
 The focused samples avoid real connections and either assert rendered SQL or

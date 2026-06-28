@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use rqb::dsl::{and, or};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
@@ -30,6 +29,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let email_fragment = Some("@example.com");
     // Multiple filters compose with AND. `and([...])` is the explicit helper
     // when a nested predicate group reads better than a chain of `.filter(...)`.
+    // The projection is intentionally narrow for a small response DTO.
     let composed = select(users::table())
         .columns((users::ID, users::EMAIL))
         .filter(and([
@@ -51,6 +51,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // `and([...])` and `or([...])` can be nested to express grouped boolean
     // logic without raw SQL: active users whose status is active, or invited
     // users that already have a display name.
+    // `.columns(...)` keeps the rendered SQL tied to this smaller row shape.
     let nested = select(users::table())
         .columns((users::ID, users::EMAIL))
         .filter(and([
@@ -74,6 +75,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // `.or_filter(...)` and `.or_filter_option(...)` are useful for fallback
     // search branches without building the OR tree by hand.
     let fallback_email = Some("ops@example.com");
+    // This is another intentional subset projection, not required boilerplate.
     let disjunctive = select(users::table())
         .columns((users::ID, users::EMAIL))
         .filter(users::ACTIVE.eq(true))

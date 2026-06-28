@@ -72,6 +72,16 @@ impl Select {
         self
     }
 
+    /// Adds the root source fields that default projection would render.
+    ///
+    /// This is useful when a query wants the normal schema-driven row plus
+    /// computed projection items. It only expands the root source fields; joined
+    /// fields still need explicit projection.
+    pub fn default_columns(mut self) -> Self {
+        push_default_source_fields(&self.source, &mut self.projection);
+        self
+    }
+
     /// Adds an expression without an output alias.
     pub fn expr(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.projection.push(SelectItem {

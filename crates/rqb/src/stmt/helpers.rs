@@ -55,8 +55,24 @@ pub(super) fn select_item_for_meta(meta: Meta) -> SelectItem {
     }
 }
 
+pub(super) fn select_item_for_source_meta(meta: Meta, qualifier: Option<&str>) -> SelectItem {
+    let alias = field_alias(&meta);
+    SelectItem {
+        expr: ValueExpr::Field {
+            meta,
+            qualifier: qualifier.map(str::to_owned),
+        },
+        alias,
+    }
+}
+
 pub(super) fn push_all_source_fields(source: &Source, items: &mut Vec<SelectItem>) {
     source.for_each_field(|meta| items.push(select_item_for_meta(*meta)));
+}
+
+pub(super) fn push_default_source_fields(source: &Source, items: &mut Vec<SelectItem>) {
+    let qualifier = source.explicit_alias();
+    source.for_each_field(|meta| items.push(select_item_for_source_meta(*meta, qualifier)));
 }
 
 pub(super) fn field_alias(meta: &Meta) -> Option<String> {

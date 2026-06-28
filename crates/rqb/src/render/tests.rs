@@ -456,6 +456,65 @@ fn aliased_root_default_projection_is_qualified() {
 }
 
 #[test]
+fn default_columns_can_be_extended_with_computed_items() {
+    let built = select(users())
+        .default_columns()
+        .item(crate::length(EMAIL).alias("email_length"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"id\", \"email_address\" AS \"email\", length(\"email_address\") AS \"email_length\" FROM \"public\".\"app_users\""
+    );
+}
+
+#[test]
+fn default_columns_preserves_aliased_root_projection_shape() {
+    let built = select(users().alias("u"))
+        .default_columns()
+        .item(crate::length(EMAIL.at("u")).alias("email_length"))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"u\".\"id\", \"u\".\"email_address\" AS \"email\", length(\"u\".\"email_address\") AS \"email_length\" FROM \"public\".\"app_users\" AS \"u\""
+    );
+}
+
+#[test]
+fn default_columns_respects_builder_order() {
+    let built = select(users())
+        .item(crate::length(EMAIL).alias("email_length"))
+        .default_columns()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT length(\"email_address\") AS \"email_length\", \"id\", \"email_address\" AS \"email\" FROM \"public\".\"app_users\""
+    );
+}
+
+#[test]
+fn default_columns_only_expands_root_fields_for_joined_queries() {
+    let built = select(users().alias("u"))
+        .join(
+            orders().alias("o"),
+            ID.at("u").eq_field(ORDER_USER_ID.at("o")),
+        )
+        .default_columns()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"u\".\"id\", \"u\".\"email_address\" AS \"email\" FROM \"public\".\"app_users\" AS \"u\" JOIN \"public\".\"orders\" AS \"o\" ON \"u\".\"id\" = \"o\".\"user_id\""
+    );
+}
+
+#[test]
 fn everyday_predicates_render_without_raw_sql() {
     let built = select(users())
         .filter(BoolExpr::and([

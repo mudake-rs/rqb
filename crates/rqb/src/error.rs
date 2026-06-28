@@ -657,16 +657,6 @@ impl Error {
         }
     }
 
-    /// Returns the associated table name when available.
-    pub fn table_name(&self) -> Option<&str> {
-        match self {
-            Self::InsufficientPrivilege(err) | Self::Database(err) => {
-                err.table.as_deref().or(err.info.table.as_deref())
-            }
-            _ => self.db_error_info().and_then(|info| info.table.as_deref()),
-        }
-    }
-
     /// Returns the associated column name when available.
     pub fn column_name(&self) -> Option<&str> {
         match self {
@@ -705,29 +695,7 @@ impl Error {
         }
     }
 
-    /// Returns the associated schema name when available.
-    pub fn schema_name(&self) -> Option<&str> {
-        self.db_error_info().and_then(|info| info.schema.as_deref())
-    }
-
-    /// Returns the associated data type name when available.
-    pub fn datatype_name(&self) -> Option<&str> {
-        self.db_error_info()
-            .and_then(|info| info.datatype.as_deref())
-    }
-
-    /// Returns the Postgres `WHERE` error context when available.
-    pub fn where_context(&self) -> Option<&str> {
-        self.db_error_info().and_then(|info| info.where_.as_deref())
-    }
-
-    /// Returns the database error position when available.
-    pub fn position(&self) -> Option<&DbErrorPosition> {
-        self.db_error_info().and_then(|info| info.position.as_ref())
-    }
-
-    /// Returns the full structured database error metadata when available.
-    pub fn db_error_info(&self) -> Option<&DbErrorInfo> {
+    fn db_error_info(&self) -> Option<&DbErrorInfo> {
         match self {
             Self::UniqueViolation(err)
             | Self::ForeignKeyViolation(err)
@@ -761,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn structured_error_helpers_expose_constraint_table_column_and_code() {
+    fn structured_error_helpers_expose_common_api_boundary_fields() {
         let error = Error::Database(Box::new(DatabaseFailure {
             code: "23505".to_owned(),
             message: "duplicate key value violates unique constraint".to_owned(),
@@ -781,17 +749,21 @@ mod tests {
 
         assert_eq!(error.code(), Some("23505"));
         assert_eq!(error.constraint_name(), Some("users_email_key"));
-        assert_eq!(error.table_name(), Some("users"));
         assert_eq!(error.column_name(), Some("email"));
         assert_eq!(
             error.detail(),
             Some("Key (email)=(ada@example.com) already exists.")
         );
         assert_eq!(error.hint(), Some("Use another email."));
-        assert_eq!(error.schema_name(), Some("public"));
-        assert_eq!(error.datatype_name(), Some("text"));
-        assert_eq!(error.where_context(), Some("SQL statement"));
-        assert_eq!(error.position(), Some(&DbErrorPosition::Original(42)));
+
+        let Error::Database(err) = error else {
+            panic!("expected database error");
+        };
+        assert_eq!(err.table.as_deref(), Some("users"));
+        assert_eq!(err.info.schema.as_deref(), Some("public"));
+        assert_eq!(err.info.datatype.as_deref(), Some("text"));
+        assert_eq!(err.info.where_.as_deref(), Some("SQL statement"));
+        assert_eq!(err.info.position, Some(DbErrorPosition::Original(42)));
     }
 
     #[test]
@@ -809,7 +781,6 @@ mod tests {
 
         assert_eq!(error.code(), Some("23505"));
         assert_eq!(error.constraint_name(), Some("users_email_key"));
-        assert_eq!(error.table_name(), Some("users"));
         assert_eq!(error.column_name(), Some("email"));
     }
 

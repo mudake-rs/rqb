@@ -22,6 +22,7 @@ pub enum BoolOp {
 }
 
 /// Boolean truth test target.
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BooleanTest {
     /// `TRUE`.

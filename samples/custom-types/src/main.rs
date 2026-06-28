@@ -47,9 +47,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let search_index = vector_documents::SEARCH_INDEX_META.expr();
     let ts_query = phraseto_tsquery(query_text);
     let full_text = select(vector_documents::table())
-        // `.item(...)` starts an explicit projection; default fields are not
-        // selected unless they are added with `.column(...)`.
-        .column(vector_documents::ID)
+        // `default_columns()` expands the same schema metadata that the default
+        // projection would render, then computed items can be appended.
+        .default_columns()
         .item(ts_rank(search_index.clone(), ts_query.clone()).alias("rank"))
         .filter(search_index.predicate("@@", ts_query.clone()))
         .order_desc(ts_rank(vector_documents::SEARCH_INDEX_META, ts_query))
@@ -57,7 +57,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(
         full_text.sql,
-        "SELECT \"id\", ts_rank(\"search_index\", phraseto_tsquery($1)) AS \"rank\" FROM \"sample\".\"vector_documents\" WHERE \"search_index\" @@ phraseto_tsquery($2) ORDER BY ts_rank(\"search_index\", phraseto_tsquery($3)) DESC"
+        "SELECT \"id\", \"status\", \"embedding\", \"search_index\", \"metadata\", ts_rank(\"search_index\", phraseto_tsquery($1)) AS \"rank\" FROM \"sample\".\"vector_documents\" WHERE \"search_index\" @@ phraseto_tsquery($2) ORDER BY ts_rank(\"search_index\", phraseto_tsquery($3)) DESC"
     );
     assert_eq!(full_text.params.len(), 3);
 

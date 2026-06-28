@@ -116,7 +116,6 @@ rqb::schema! {
 }
 
 let query = select(app_users::table())
-    .columns((app_users::ID, app_users::EMAIL))
     .filter(app_users::STATUS.eq("active"))
     .order_asc(app_users::EMAIL)
     .limit(20)
@@ -129,6 +128,16 @@ generated schema lives in. Samples in `samples/` use imports such as
 
 `select(table())` does not render `SELECT *`. It renders the known root fields
 from metadata, so SQL output stays explicit and stable.
+
+Use `.columns((...))` when a query intentionally returns a narrower response
+shape:
+
+```rust
+let query = select(app_users::table())
+    .columns((app_users::ID, app_users::EMAIL))
+    .filter(app_users::STATUS.eq("active"))
+    .build()?;
+```
 
 `query.sql` contains `$N` placeholders and `query.arguments()?` creates
 `sqlx::postgres::PgArguments` at execution time.
@@ -145,7 +154,6 @@ struct UserRow {
 }
 
 let rows = select(schema::users::table())
-    .columns((schema::users::ID, schema::users::EMAIL))
     .filter(schema::users::STATUS.eq("active"))
     .fetch_all_as::<UserRow>(&pool)
     .await?;
@@ -250,7 +258,8 @@ Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `FILTER`, window functions, array/jsonb/range predicates, conditional
 `filter_if(...)` / `filter_option(...)` / `or_filter_option(...)` /
 `set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
-comparisons for cursor pagination, `insert(...).columns((...)).from_select(...)`,
+comparisons for cursor pagination, `default_columns()` for root fields plus
+computed projection items, `insert(...).columns((...)).from_select(...)`,
 `values_source(...)`, `generate_series_source(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated
@@ -258,6 +267,20 @@ against Postgres `WHEN` clause rules before rendering. REST-style pagination sta
 in application code; the REST sample shows `limit` / `offset` plus
 `Select::count()` for a matching count query, cursor pagination, and
 pool-owned streaming CSV responses into axum `Body::from_stream`.
+
+Projection calls are explicit: `.column(...)`, `.columns(...)`, `.expr(...)`,
+and `.item(...)` replace the default root projection with the items you name.
+When a query should return the normal root fields plus computed columns, expand
+the root fields first:
+
+```rust
+use rqb::dsl::length;
+
+let query = select(schema::orders::table())
+    .default_columns()
+    .item(length(schema::orders::STATUS).alias("status_length"))
+    .build()?;
+```
 
 `Select::count()` is a matching-row count helper, not a locked-query replay. It
 removes ordering, page limits, `FETCH`, and row-lock clauses before wrapping the
@@ -360,16 +383,21 @@ let query = select(schema::order_search_view::view())
 ```
 
 Server filters are preserved and combined with the request filter using `AND`.
-Only fields with `Meta::json(...)` are visible to JSON requests. Operators are
-gated by field capabilities: equality/null tests require equality capability,
-sort requires ordering capability, and LIKE/regex/text-pattern operators require
-text-pattern capability such as `OpSet::text()`. Client-supplied LIKE and regex
-patterns are capped at 1024 Unicode scalar values; public APIs should still set
-a database `statement_timeout` appropriate for their workload.
+Request sort, limit, and offset are request-owned clauses and replace existing
+builder values. Only fields with `Meta::json(...)` are visible to JSON requests.
+Operators are gated by field capabilities: equality/null tests require equality
+capability, sort requires ordering capability, and LIKE/regex/text-pattern
+operators require text-pattern capability such as `OpSet::text()`.
+Client-supplied LIKE and regex patterns are capped at 1024 Unicode scalar
+values; public APIs should still set a database `statement_timeout` appropriate
+for their workload.
 
 > Tenant and permission scope: install tenant, user, RBAC, and soft-delete
 > filters before calling `apply_search`. If a request is allowed to own the
 > entire search clause, start from a fresh `select(...)` and apply it there.
+> Cursor endpoints should not accept a full `SearchRequest`; accept a
+> filter-only DTO with `#[serde(deny_unknown_fields)]` so clients cannot supply
+> cursor-breaking `sort`, `limit`, or `offset` fields.
 
 Search failures are ordinary `rqb::Error` variants, so API boundaries can return
 stable client errors without parsing strings:

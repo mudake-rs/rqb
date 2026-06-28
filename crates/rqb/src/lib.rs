@@ -320,23 +320,13 @@ pub mod dsl {
 /// `Result` signatures.
 pub mod prelude {
     pub use crate::{
-        Assignment, BindValue, BoolExpr, BoolOp, BooleanTest, BuiltQuery, CaseBuilder, Changeset,
-        ColumnConflictBuilder, ColumnError, ConflictAction, ConflictClause, ConflictFields,
-        ConflictTarget, ConstraintConflictBuilder, ConstraintError, Cte, CteMaterialization,
-        CteShapeError, DatabaseFailure, DatePart, DbErrorInfo, DbErrorPosition, Delete, Error,
-        FetchClause, Field, FieldRef, FrameBound, FrameExclude, FunctionSource, GroupByItem,
-        Insert, Insertable, IntoAssignments, IntoFieldMetas, IntoFieldRef, IntoRowValues,
-        IntoSelectItems, Join, JoinKind, JsonKind, LockMode, LockWait, MatchedMergeBuilder, Merge,
-        MergeAction, MergeWhen, Meta, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder,
-        NullsPosition, OffsetWindowFunctionBuilder, OpSet, OperatorError, OrderDirection,
-        OrderItem, Param, Params, PgConnection, PgExecutor, PgFailure, PgPool, RawStmt, RowLock,
-        ScalarValue, SearchFilter, SearchOperator, SearchPredicate, SearchRequest, SearchSort,
-        SearchValueError, Select, SelectItem, SetOperator, SetQuery, SortDirection, Source, Stmt,
-        Update, ValueExpr, ValueOp, WindowFrame, WindowFrameKind, WindowFunction,
-        WindowFunctionBuilder, WindowSpec, WriteTargetError, cte, cte_ref, delete_from, except,
-        except_all, field, function_source, insert, intersect, intersect_all, jsonb_agg_object,
-        merge_into, raw, raw_expr, raw_predicate, raw_source, schema, select, subquery, table, tx,
-        union, union_all, update, values_source, view,
+        Assignment, BindValue, BoolExpr, BuiltQuery, Changeset, Cte, Delete, Error, Field,
+        FieldRef, Insert, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params, PgConnection,
+        PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate, SearchRequest,
+        SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, and, cte,
+        cte_ref, delete_from, except, except_all, field, insert, intersect, intersect_all,
+        jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate, raw_source, schema,
+        select, subquery, table, tx, union, union_all, update, values_source, view,
     };
 }
 

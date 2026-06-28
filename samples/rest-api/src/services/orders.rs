@@ -184,6 +184,7 @@ pub fn export_csv_stream(
     user_id: Uuid,
 ) -> StreamResult<impl Stream<Item = StreamResult<String>> + Send + 'static> {
     let mut rows = select(orders::table())
+        // The CSV contract is intentionally narrower than the full order row.
         .columns((
             orders::ID,
             orders::USER_ID,

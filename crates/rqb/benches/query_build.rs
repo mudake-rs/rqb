@@ -2,8 +2,8 @@ use std::hint::black_box;
 
 use chrono::{DateTime, Utc};
 use divan::Bencher;
-use rqb::dsl::json_agg;
 use rqb::prelude::*;
+use rqb::{OrderItem, dsl::json_agg};
 use serde_json::json;
 use uuid::Uuid;
 

@@ -68,6 +68,36 @@ impl IntoResponse for ApiError {
                     StatusCode::FORBIDDEN,
                     "insufficient database privilege".to_owned(),
                 ),
+                rqb::Error::InvalidSearchField { field } => (
+                    StatusCode::BAD_REQUEST,
+                    format!("unknown search field `{field}`"),
+                ),
+                rqb::Error::SearchFieldNotExposed { field } => (
+                    StatusCode::BAD_REQUEST,
+                    format!("search field `{field}` is not exposed"),
+                ),
+                rqb::Error::InvalidSearchOperator(err) => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "operator `{}` is not allowed for search field `{}`",
+                        err.operator, err.field
+                    ),
+                ),
+                rqb::Error::InvalidSearchValue(err) => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "invalid value for search field `{}`; expected {}",
+                        err.field, err.expected
+                    ),
+                ),
+                rqb::Error::InvalidSort { field } => (
+                    StatusCode::BAD_REQUEST,
+                    format!("field `{field}` is not sortable"),
+                ),
+                rqb::Error::EmptySearchLogical { logical } => (
+                    StatusCode::BAD_REQUEST,
+                    format!("{logical} group must contain at least one filter"),
+                ),
                 error => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             },
         };

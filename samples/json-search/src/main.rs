@@ -1,5 +1,5 @@
 use rqb::prelude::*;
-use rqb_sample_schema::order_search_view as orders;
+use rqb_sample_schema::order_search_view;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -31,10 +31,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }))?;
 
     // JSON search is only the client-controlled part. The Rust query still owns
-    // the source, projection, and organization filter.
-    let merged = select(orders::view())
-        .columns((orders::ID, orders::STATUS, orders::TOTAL_CENTS))
-        .filter(orders::ORGANIZATION_ID.eq(current_org))
+    // the source, organization filter, and this intentionally narrow response
+    // projection.
+    let merged = select(order_search_view::view())
+        .columns((
+            order_search_view::ID,
+            order_search_view::STATUS,
+            order_search_view::TOTAL_CENTS,
+        ))
+        .filter(order_search_view::ORGANIZATION_ID.eq(current_org))
         .apply_search(merged_request)?
         .build()?;
 
@@ -50,7 +55,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }))?;
     // If the JSON request is allowed to own the whole search clause, start from
     // a fresh select. Do not call this shape for tenant/user-scoped endpoints.
-    let standalone = select(orders::view())
+    let standalone = select(order_search_view::view())
         .apply_search(standalone_request)?
         .build()?;
 
@@ -145,9 +150,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 }
 
 fn search_orders(org_id: Uuid, request: SearchRequest) -> rqb::Result<BuiltQuery> {
-    select(orders::view())
-        .columns((orders::ID, orders::STATUS, orders::TOTAL_CENTS))
-        .filter(orders::ORGANIZATION_ID.eq(org_id))
+    select(order_search_view::view())
+        .columns((
+            order_search_view::ID,
+            order_search_view::STATUS,
+            order_search_view::TOTAL_CENTS,
+        ))
+        .filter(order_search_view::ORGANIZATION_ID.eq(org_id))
         .apply_search(request)?
         .build()
 }

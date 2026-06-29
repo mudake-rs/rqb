@@ -6,7 +6,7 @@ impl RawStmt {
     /// Use `?` for rqb bind placeholders and `??` for a literal question mark,
     /// for example PostgreSQL JSONB `?` operators. Bind-count mismatches fail
     /// validation before rendering or execution.
-    pub fn new(sql: impl Into<String>) -> Self {
+    pub(crate) fn new(sql: impl Into<String>) -> Self {
         Self {
             sql: sql.into(),
             params: Vec::new(),

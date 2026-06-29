@@ -64,16 +64,6 @@ pub fn except_all(left: impl Into<Stmt>, right: impl Into<Stmt>) -> SetQuery {
     SetQuery::new(SetOperator::ExceptAll, left, right)
 }
 
-impl Stmt {
-    /// Creates a raw SQL statement.
-    ///
-    /// Prefer the free [`raw`] constructor for normal use; this exists for code
-    /// that is already working with the enum form.
-    pub fn raw(sql: impl Into<String>) -> Self {
-        Self::Raw(Box::new(RawStmt::new(sql)))
-    }
-}
-
 impl From<Select> for Stmt {
     fn from(select: Select) -> Self {
         Self::Select(Box::new(select))

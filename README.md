@@ -247,7 +247,7 @@ let rows = select(&u)
             .column(schema::orders::ID)
             .filter(schema::orders::USER_ID.eq_field(u.id())),
     ))
-    .item(sum(schema::orders::TOTAL_CENTS.at("po")).alias("paid_total"))
+    .expr_as(sum(schema::orders::TOTAL_CENTS.at("po")), "paid_total")
     .group_by(u.id())
     .fetch_all_as::<UserRow>(&pool)
     .await?;
@@ -269,7 +269,8 @@ in application code; the REST sample shows `limit` / `offset` plus
 pool-owned streaming CSV responses into axum `Body::from_stream`.
 
 Projection calls are explicit: `.column(...)`, `.columns(...)`, `.expr(...)`,
-and `.item(...)` replace the default root projection with the items you name.
+and `.expr_as(...)` replace the default root projection with the values you
+name.
 When a query should return the normal root fields plus computed columns, expand
 the root fields first:
 
@@ -278,7 +279,7 @@ use rqb::dsl::length;
 
 let query = select(schema::orders::table())
     .default_columns()
-    .item(length(schema::orders::STATUS).alias("status_length"))
+    .expr_as(length(schema::orders::STATUS), "status_length")
     .build()?;
 ```
 
@@ -348,10 +349,9 @@ Aggregate calls can also be used as PostgreSQL window functions:
 ```rust
 select(schema::orders::table())
     .column(schema::orders::USER_ID)
-    .item(
-        sum(schema::orders::TOTAL_CENTS)
-            .over(window().partition_by(schema::orders::USER_ID))
-            .alias("user_total_cents"),
+    .expr_as(
+        sum(schema::orders::TOTAL_CENTS).over(window().partition_by(schema::orders::USER_ID)),
+        "user_total_cents",
     );
 ```
 
@@ -452,8 +452,7 @@ use rqb::prelude::*;
 let extension_score = raw_expr(
     "custom_extension_score(payload, ?::text)",
     [Param::typed("strict".to_owned())],
-)
-.alias("extension_score");
+);
 
 let extension_rows = raw_source(
     "SELECT * FROM custom_extension_scan(?::text)",
@@ -463,6 +462,9 @@ let extension_rows = raw_source(
     ],
     rqb::field!("id": uuid => uuid::Uuid, equality),
 );
+
+let scored = select(extension_rows)
+    .expr_as(extension_score, "extension_score");
 ```
 
 Any raw fragment marks the whole built query as non-cacheable, so execution uses
@@ -539,8 +541,8 @@ let changed = update(schema::users::table())
         schema::users::LOGIN_COUNT.expr().op("+", 1),
     ))
     .filter(schema::users::ID.eq(user_id))
-    .returning_item(schema::users::LOGIN_COUNT.old_value().alias("old_login_count"))
-    .returning_item(schema::users::LOGIN_COUNT.new_value().alias("new_login_count"))
+    .returning_as(schema::users::LOGIN_COUNT.old_value(), "old_login_count")
+    .returning_as(schema::users::LOGIN_COUNT.new_value(), "new_login_count")
     .fetch_one_as::<LoginCountChange>(&pool)
     .await?;
 ```

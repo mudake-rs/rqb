@@ -38,15 +38,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // with the rest of the surrounding typed query.
     let computed = select(orders::table())
         .column(orders::ID)
-        .item(
+        .expr_as(
             raw_expr(
                 "coalesce(metadata ->> ?, ?)",
                 [
                     Param::typed("source".to_owned()),
                     Param::typed("unknown".to_owned()),
                 ],
-            )
-            .alias("source"),
+            ),
+            "source",
         )
         .filter(orders::ID.eq(Uuid::nil()))
         .build()?;

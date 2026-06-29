@@ -113,7 +113,7 @@ impl Select {
             expr.validate()?;
         }
         for item in &self.projection {
-            item.expr.validate()?;
+            validate_select_item(item, "projection alias cannot be empty")?;
         }
         if let Some(filter) = &self.filter {
             filter.validate()?;
@@ -245,7 +245,7 @@ impl RawStmt {
 }
 
 fn validate_table_target(statement: &'static str, target: &Source) -> Result<()> {
-    if matches!(target, Source::Table { .. } | Source::View { .. }) {
+    if target.is_table_or_view() {
         return Ok(());
     }
     Err(Error::invalid_write_target(statement, target.kind()))
@@ -373,10 +373,7 @@ impl Merge {
         for action in &self.actions {
             action.validate()?;
         }
-        for item in &self.returning {
-            item.expr.validate()?;
-        }
-        Ok(())
+        validate_returning(&self.returning)
     }
 }
 
@@ -437,7 +434,17 @@ impl Stmt {
 
 fn validate_returning(returning: &[SelectItem]) -> Result<()> {
     for item in returning {
-        item.expr.validate()?;
+        validate_select_item(item, "returning alias cannot be empty")?;
+    }
+    Ok(())
+}
+
+fn validate_select_item(item: &SelectItem, alias_message: &'static str) -> Result<()> {
+    item.expr.validate()?;
+    if matches!(item.alias.as_deref(), Some("")) {
+        return Err(Error::InvalidSelectShape {
+            message: alias_message,
+        });
     }
     Ok(())
 }

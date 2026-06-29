@@ -91,19 +91,16 @@ fn insertable_derive_outputs_expected_assignments() {
         _local_note: "not persisted".to_owned(),
     };
 
-    let assignments = new_user.insert_assignments();
-    let fields = assignments
-        .iter()
-        .map(|assignment| assignment.field.db)
-        .collect::<Vec<_>>();
+    let built = insert(users::table())
+        .set_many(new_user.insert_assignments())
+        .build()
+        .unwrap();
 
-    assert_eq!(fields, ["email", "status", "type", "nickname"]);
-    assert!(
-        assignments.iter().all(|assignment| matches!(
-            assignment.value,
-            AssignmentValue::Expr(ValueExpr::Param(_))
-        ))
+    assert_eq!(
+        built.sql,
+        "INSERT INTO \"public\".\"users\" (\"email\", \"status\", \"type\", \"nickname\") VALUES ($1, $2, $3, $4)"
     );
+    assert_eq!(built.params.len(), 4);
 }
 
 #[test]
@@ -256,19 +253,17 @@ fn changeset_derive_outputs_expected_assignments() {
         display_name: "Ada".to_owned(),
     };
 
-    let assignments = changes.changeset_assignments();
-    let fields = assignments
-        .iter()
-        .map(|assignment| assignment.field.db)
-        .collect::<Vec<_>>();
+    let built = update(users::table())
+        .set_many(changes.changeset_assignments())
+        .filter(users::ID.eq(1))
+        .build()
+        .unwrap();
 
-    assert_eq!(fields, ["email", "nickname"]);
-    assert!(
-        assignments.iter().all(|assignment| matches!(
-            assignment.value,
-            AssignmentValue::Expr(ValueExpr::Param(_))
-        ))
+    assert_eq!(
+        built.sql,
+        "UPDATE \"public\".\"users\" SET \"email\" = $1, \"nickname\" = $2 WHERE \"id\" = $3"
     );
+    assert_eq!(built.params.len(), 3);
 }
 
 #[test]

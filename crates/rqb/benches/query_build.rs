@@ -259,11 +259,11 @@ fn select_join_json_aggregate_query() -> Select {
         )
         .column(USER_ID.at("u"))
         .column(USER_EMAIL.at("u"))
-        .item(
+        .expr_as(
             json_agg(ORDER_ID.at("o"))
                 .aggregate_order_desc(ORDER_ID.at("o"))
-                .aggregate_filter(ORDER_STATUS.at("o").eq(black_box("paid")))
-                .alias("paid_order_ids"),
+                .aggregate_filter(ORDER_STATUS.at("o").eq(black_box("paid"))),
+            "paid_order_ids",
         )
         .filter(USER_ACTIVE.at("u").eq(black_box(true)))
         .filter(ORDER_TOTAL.at("o").gte(black_box(5_000_i64)))
@@ -481,35 +481,35 @@ fn phase_validate_prebuilt_select(bencher: Bencher) {
 fn phase_search_merge_small(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(old_order_search()), make_old_json_search_request()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_empty_narrow(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(narrow_search()), SearchRequest::default()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_empty_wide(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), SearchRequest::default()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_narrow_one_predicate(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(narrow_search()), search_request_one_eq("field00")))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_wide_one_predicate_first_field(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), search_request_one_eq("field00")))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 // Position probes: allocations should match; only the noisy timing delta can
@@ -518,35 +518,35 @@ fn phase_search_merge_wide_one_predicate_first_field(bencher: Bencher) {
 fn phase_search_merge_wide_one_predicate_last_field(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), search_request_one_eq("field19")))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_wide_page_only(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), search_request_page_only()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_wide_sort_only(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), search_request_sort_only()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_wide_filter_only(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), search_request_wide_filter_only()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]
 fn phase_search_merge_wide(bencher: Bencher) {
     bencher
         .with_inputs(|| (select(wide_search()), make_wide_json_search_request()))
-        .bench_values(|(select, request)| request.merge_in(select).unwrap());
+        .bench_values(|(select, request)| select.apply_search(request).unwrap());
 }
 
 #[divan::bench]

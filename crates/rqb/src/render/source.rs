@@ -134,7 +134,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub(super) fn render_join(&mut self, join: &crate::Join) -> Result<()> {
+    pub(super) fn render_join(&mut self, join: &crate::source::Join) -> Result<()> {
         self.sql.push(' ');
         self.sql.push_str(join.kind.as_sql());
         self.sql.push(' ');

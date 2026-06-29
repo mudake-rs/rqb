@@ -183,11 +183,7 @@ impl WindowSpec {
 impl WindowFunctionBuilder {
     /// Attaches an `OVER (...)` clause and returns a value expression.
     pub fn over(self, spec: WindowSpec) -> ValueExpr {
-        ValueExpr::Window {
-            function: self.function,
-            args: self.args,
-            spec,
-        }
+        ValueExpr::window(self.function, self.args, spec)
     }
 }
 
@@ -221,11 +217,7 @@ impl OffsetWindowFunctionBuilder {
             }
             (None, None) => {}
         }
-        ValueExpr::Window {
-            function: self.function,
-            args,
-            spec,
-        }
+        ValueExpr::window(self.function, args, spec)
     }
 }
 

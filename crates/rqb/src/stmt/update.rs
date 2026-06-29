@@ -78,18 +78,20 @@ impl Update {
         self
     }
 
+    /// Adds an aliased expression to `RETURNING`.
+    pub fn returning_as(mut self, expr: impl Into<ValueExpr>, alias: impl Into<String>) -> Self {
+        self.returning.push(SelectItem {
+            expr: expr.into(),
+            alias: Some(alias.into()),
+        });
+        self
+    }
+
     /// Replaces `RETURNING` with every field exposed by the target source.
     #[inline]
     pub fn returning_all(mut self) -> Self {
         self.returning.clear();
         push_all_source_fields(&self.target, &mut self.returning);
-        self
-    }
-
-    /// Adds an arbitrary item to `RETURNING`.
-    #[inline]
-    pub fn returning_item(mut self, item: SelectItem) -> Self {
-        self.returning.push(item);
         self
     }
 }

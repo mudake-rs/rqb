@@ -1,4 +1,4 @@
-use crate::{BindValue, Param, SelectItem};
+use crate::{BindValue, Param};
 
 use super::{BoolExpr, BoolOp, FieldRef, IntoFieldRef, ValueExpr};
 
@@ -6,10 +6,7 @@ impl<T> FieldRef<T> {
     /// Returns this qualified field as a value expression.
     #[inline]
     pub fn expr(self) -> ValueExpr {
-        ValueExpr::Field {
-            meta: *self.meta,
-            qualifier: self.qualifier,
-        }
+        ValueExpr::field(*self.meta, self.qualifier)
     }
 
     /// Builds a custom value operator expression for this field reference.
@@ -27,45 +24,26 @@ impl<T> FieldRef<T> {
         self.expr().not_predicate(op, right)
     }
 
-    /// Returns this field reference as an aliased projection item.
-    pub fn alias(self, alias: impl Into<String>) -> SelectItem {
-        self.expr().alias(alias)
-    }
-
     /// Builds `field IS NULL`.
     #[inline]
     pub fn is_null(self) -> BoolExpr {
-        BoolExpr::IsNull {
-            expr: self.expr(),
-            negated: false,
-        }
+        BoolExpr::is_null_expr(self.expr(), false)
     }
 
     /// Builds `field IS NOT NULL`.
     #[inline]
     pub fn is_not_null(self) -> BoolExpr {
-        BoolExpr::IsNull {
-            expr: self.expr(),
-            negated: true,
-        }
+        BoolExpr::is_null_expr(self.expr(), true)
     }
 
     /// Builds `field IN (subquery)`.
     pub fn in_subquery(self, query: impl Into<crate::Stmt>) -> BoolExpr {
-        BoolExpr::InSubquery {
-            expr: self.expr(),
-            query: Box::new(query.into()),
-            negated: false,
-        }
+        BoolExpr::in_subquery(self.expr(), Box::new(query.into()), false)
     }
 
     /// Builds `field NOT IN (subquery)`.
     pub fn not_in_subquery(self, query: impl Into<crate::Stmt>) -> BoolExpr {
-        BoolExpr::InSubquery {
-            expr: self.expr(),
-            query: Box::new(query.into()),
-            negated: true,
-        }
+        BoolExpr::in_subquery(self.expr(), Box::new(query.into()), true)
     }
 
     /// Builds an equality predicate against another field of the same Rust type.
@@ -136,11 +114,7 @@ impl<T> FieldRef<T> {
     where
         R: IntoFieldRef<T>,
     {
-        BoolExpr::Compare {
-            left: self.expr(),
-            op,
-            right: right.into_field_ref().expr(),
-        }
+        BoolExpr::compare(self.expr(), op, right.into_field_ref().expr())
     }
 }
 
@@ -206,11 +180,11 @@ impl<T: BindValue> FieldRef<T> {
     }
 
     fn compare(self, op: BoolOp, value: impl Into<T>) -> BoolExpr {
-        BoolExpr::Compare {
-            left: self.expr(),
+        BoolExpr::compare(
+            self.expr(),
             op,
-            right: ValueExpr::Param(Param::typed(value.into())),
-        }
+            ValueExpr::Param(Param::typed(value.into())),
+        )
     }
 
     fn list_predicate(
@@ -225,19 +199,15 @@ impl<T: BindValue> FieldRef<T> {
         if values.is_empty() {
             return BoolExpr::Constant(negated);
         }
-        BoolExpr::InList {
-            expr: self.expr(),
-            values,
-            negated,
-        }
+        BoolExpr::in_list(self.expr(), values, negated)
     }
 
     fn between_predicate(self, low: impl Into<T>, high: impl Into<T>, negated: bool) -> BoolExpr {
-        BoolExpr::Between {
-            expr: self.expr(),
-            low: ValueExpr::Param(Param::typed(low.into())),
-            high: ValueExpr::Param(Param::typed(high.into())),
+        BoolExpr::between(
+            self.expr(),
+            ValueExpr::Param(Param::typed(low.into())),
+            ValueExpr::Param(Param::typed(high.into())),
             negated,
-        }
+        )
     }
 }

@@ -15,10 +15,7 @@ pub fn to_tsvector_config(
     function(
         "to_tsvector",
         [
-            ValueExpr::Cast {
-                expr: Box::new(config.into()),
-                pg: "regconfig",
-            },
+            ValueExpr::cast_expr(config.into(), "regconfig"),
             document.into(),
         ],
     )
@@ -42,10 +39,7 @@ pub fn phraseto_tsquery_config(
     function(
         "phraseto_tsquery",
         [
-            ValueExpr::Cast {
-                expr: Box::new(config.into()),
-                pg: "regconfig",
-            },
+            ValueExpr::cast_expr(config.into(), "regconfig"),
             query.into(),
         ],
     )
@@ -63,12 +57,7 @@ pub fn to_tsquery(query: impl Into<ValueExpr>) -> ValueExpr {
 
 /// Builds a full-text `@@` match predicate.
 pub fn ts_match(document: impl Into<ValueExpr>, query: impl Into<ValueExpr>) -> BoolExpr {
-    BoolExpr::Infix {
-        left: document.into(),
-        op: "@@",
-        right: query.into(),
-        negated: false,
-    }
+    BoolExpr::infix(document.into(), "@@", query.into(), false)
 }
 
 /// Builds `ts_rank(vector, query)`.

@@ -50,7 +50,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // `default_columns()` expands the same schema metadata that the default
         // projection would render, then computed items can be appended.
         .default_columns()
-        .item(ts_rank(search_index.clone(), ts_query.clone()).alias("rank"))
+        .expr_as(ts_rank(search_index.clone(), ts_query.clone()), "rank")
         .filter(search_index.predicate("@@", ts_query.clone()))
         .order_desc(ts_rank(vector_documents::SEARCH_INDEX_META, ts_query))
         .build()?;

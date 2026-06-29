@@ -4,16 +4,16 @@ use super::*;
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub struct SelectItem {
+pub(crate) struct SelectItem {
     /// Projected expression.
-    pub expr: ValueExpr,
+    pub(crate) expr: ValueExpr,
     /// Optional SQL alias.
-    pub alias: Option<String>,
+    pub(crate) alias: Option<String>,
 }
 
 /// Sort direction for `ORDER BY`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OrderDirection {
+pub(crate) enum OrderDirection {
     /// Ascending order.
     Asc,
     /// Descending order.
@@ -22,7 +22,7 @@ pub enum OrderDirection {
 
 /// Null placement for `ORDER BY`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NullsPosition {
+pub(crate) enum NullsPosition {
     /// Render `NULLS FIRST`.
     First,
     /// Render `NULLS LAST`.
@@ -35,18 +35,18 @@ pub enum NullsPosition {
 #[non_exhaustive]
 pub struct OrderItem {
     /// Expression to order by.
-    pub expr: ValueExpr,
+    pub(crate) expr: ValueExpr,
     /// Sort direction.
-    pub direction: OrderDirection,
+    pub(crate) direction: OrderDirection,
     /// Optional null placement.
-    pub nulls: Option<NullsPosition>,
+    pub(crate) nulls: Option<NullsPosition>,
 }
 
 /// One `GROUP BY` item.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum GroupByItem {
+pub(crate) enum GroupByItem {
     /// Regular grouped expression.
     Expr(ValueExpr),
     /// PostgreSQL `ROLLUP`.
@@ -61,18 +61,18 @@ pub enum GroupByItem {
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub struct FetchClause {
+pub(crate) struct FetchClause {
     /// Row count expression.
-    pub count: ValueExpr,
+    pub(crate) count: ValueExpr,
     /// Whether to render `WITH TIES`.
-    pub with_ties: bool,
+    pub(crate) with_ties: bool,
 }
 
 /// Mutually exclusive row-limit mode for `SELECT` and set queries.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum RowLimit {
+pub(crate) enum RowLimit {
     /// SQL `LIMIT`.
     Limit(Param),
     /// SQL `FETCH FIRST`.
@@ -94,7 +94,7 @@ pub enum LockMode {
 
 /// PostgreSQL row lock wait behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum LockWait {
+pub(crate) enum LockWait {
     /// Wait for locked rows.
     #[default]
     Wait,
@@ -108,13 +108,13 @@ pub enum LockWait {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[must_use]
 #[non_exhaustive]
-pub struct RowLock {
+pub(crate) struct RowLock {
     /// Lock mode.
-    pub mode: LockMode,
+    pub(crate) mode: LockMode,
     /// Wait behavior.
-    pub wait: LockWait,
+    pub(crate) wait: LockWait,
     /// Optional relation aliases in `FOR ... OF`.
-    pub of: Vec<String>,
+    pub(crate) of: Vec<String>,
 }
 
 /// Field assignment used by insert, update, merge, and changesets.
@@ -123,16 +123,16 @@ pub struct RowLock {
 #[non_exhaustive]
 pub struct Assignment {
     /// Target field metadata.
-    pub field: Meta,
+    pub(crate) field: Meta,
     /// Assigned value.
-    pub value: AssignmentValue,
+    pub(crate) value: AssignmentValue,
 }
 
 /// Value accepted by write assignments.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum AssignmentValue {
+pub(crate) enum AssignmentValue {
     /// A normal expression or bind parameter.
     Expr(ValueExpr),
     /// SQL `DEFAULT` for this target column.
@@ -152,7 +152,7 @@ impl From<ValueExpr> for AssignmentValue {
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum InsertBody {
+pub(crate) enum InsertBody {
     /// `INSERT ... VALUES (...)`.
     Values(Vec<Assignment>),
     /// `INSERT ... SELECT`.
@@ -243,7 +243,7 @@ impl_assignment_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum ConflictTarget {
+pub(crate) enum ConflictTarget {
     /// Conflict target by one or more columns.
     Columns {
         /// Target columns.
@@ -259,7 +259,7 @@ pub enum ConflictTarget {
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum ConflictAction {
+pub(crate) enum ConflictAction {
     /// Render `DO NOTHING`.
     DoNothing,
     /// Render `DO UPDATE SET`.
@@ -275,11 +275,11 @@ pub enum ConflictAction {
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub struct ConflictClause {
+pub(crate) struct ConflictClause {
     /// Conflict target.
-    pub target: ConflictTarget,
+    pub(crate) target: ConflictTarget,
     /// Conflict action.
-    pub action: ConflictAction,
+    pub(crate) action: ConflictAction,
 }
 
 /// Builder returned by `Merge::when_matched()`.
@@ -474,34 +474,34 @@ where
 #[non_exhaustive]
 pub struct Select {
     /// CTEs attached to this select.
-    pub ctes: Vec<Cte>,
+    pub(crate) ctes: Vec<Cte>,
     /// Root source.
-    pub source: Source,
+    pub(crate) source: Source,
     /// Joined sources.
-    pub joins: Vec<Join>,
+    pub(crate) joins: Vec<Join>,
     /// Whether to render `DISTINCT`.
-    pub distinct: bool,
+    pub(crate) distinct: bool,
     /// Expressions for `DISTINCT ON`.
-    pub distinct_on: Vec<ValueExpr>,
+    pub(crate) distinct_on: Vec<ValueExpr>,
     /// Projection list.
     ///
     /// Empty means the renderer selects the root source's exposed fields.
     /// Joined fields and computed expressions are never added implicitly.
-    pub projection: Vec<SelectItem>,
+    pub(crate) projection: Vec<SelectItem>,
     /// Optional `WHERE` predicate.
-    pub filter: Option<BoolExpr>,
+    pub(crate) filter: Option<BoolExpr>,
     /// Grouping expressions.
-    pub group_by: Vec<GroupByItem>,
+    pub(crate) group_by: Vec<GroupByItem>,
     /// Optional `HAVING` predicate.
-    pub having: Option<BoolExpr>,
+    pub(crate) having: Option<BoolExpr>,
     /// Ordering expressions.
-    pub order: Vec<OrderItem>,
+    pub(crate) order: Vec<OrderItem>,
     /// Optional row-limit clause.
-    pub row_limit: Option<RowLimit>,
+    pub(crate) row_limit: Option<RowLimit>,
     /// Optional `OFFSET` parameter.
-    pub offset: Option<Param>,
+    pub(crate) offset: Option<Param>,
     /// Optional row lock clause.
-    pub lock: Option<RowLock>,
+    pub(crate) lock: Option<RowLock>,
 }
 
 /// Typed insert statement.
@@ -510,15 +510,15 @@ pub struct Select {
 #[non_exhaustive]
 pub struct Insert {
     /// CTEs attached to this insert.
-    pub ctes: Vec<Cte>,
+    pub(crate) ctes: Vec<Cte>,
     /// Target table or view.
-    pub target: Source,
+    pub(crate) target: Source,
     /// Active insert body.
-    pub body: InsertBody,
+    pub(crate) body: InsertBody,
     /// Optional conflict handling clause.
-    pub conflict: Option<ConflictClause>,
+    pub(crate) conflict: Option<ConflictClause>,
     /// Optional `RETURNING` projection.
-    pub returning: Vec<SelectItem>,
+    pub(crate) returning: Vec<SelectItem>,
 }
 
 /// Typed update statement.
@@ -527,17 +527,17 @@ pub struct Insert {
 #[non_exhaustive]
 pub struct Update {
     /// CTEs attached to this update.
-    pub ctes: Vec<Cte>,
+    pub(crate) ctes: Vec<Cte>,
     /// Target table or view.
-    pub target: Source,
+    pub(crate) target: Source,
     /// Assignments for `SET`.
-    pub assignments: Vec<Assignment>,
+    pub(crate) assignments: Vec<Assignment>,
     /// Optional `FROM` sources.
-    pub from: Vec<Source>,
+    pub(crate) from: Vec<Source>,
     /// Optional `WHERE` predicate.
-    pub filter: Option<BoolExpr>,
+    pub(crate) filter: Option<BoolExpr>,
     /// Optional `RETURNING` projection.
-    pub returning: Vec<SelectItem>,
+    pub(crate) returning: Vec<SelectItem>,
 }
 
 /// Typed delete statement.
@@ -546,24 +546,24 @@ pub struct Update {
 #[non_exhaustive]
 pub struct Delete {
     /// CTEs attached to this delete.
-    pub ctes: Vec<Cte>,
+    pub(crate) ctes: Vec<Cte>,
     /// Target table or view.
-    pub target: Source,
+    pub(crate) target: Source,
     /// Optional `USING` sources.
-    pub using: Vec<Source>,
+    pub(crate) using: Vec<Source>,
     /// Required `WHERE` predicate.
     ///
     /// Validation rejects unfiltered deletes with
     /// [`Error::DeleteWithoutFilter`](crate::Error::DeleteWithoutFilter).
-    pub filter: Option<BoolExpr>,
+    pub(crate) filter: Option<BoolExpr>,
     /// Optional `RETURNING` projection.
-    pub returning: Vec<SelectItem>,
+    pub(crate) returning: Vec<SelectItem>,
 }
 
 /// PostgreSQL `MERGE` match branch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum MergeWhen {
+pub(crate) enum MergeWhen {
     /// `WHEN MATCHED`.
     Matched,
     /// `WHEN NOT MATCHED`.
@@ -580,7 +580,7 @@ pub enum MergeWhen {
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub enum MergeAction {
+pub(crate) enum MergeAction {
     /// `DO NOTHING`.
     DoNothing {
         /// Match branch for the action.
@@ -625,17 +625,17 @@ pub enum MergeAction {
 #[non_exhaustive]
 pub struct Merge {
     /// CTEs attached to this merge.
-    pub ctes: Vec<Cte>,
+    pub(crate) ctes: Vec<Cte>,
     /// Merge target.
-    pub target: Source,
+    pub(crate) target: Source,
     /// Merge source.
-    pub using: Source,
+    pub(crate) using: Source,
     /// Join predicate between target and source.
-    pub on: BoolExpr,
+    pub(crate) on: BoolExpr,
     /// Ordered merge actions.
-    pub actions: Vec<MergeAction>,
+    pub(crate) actions: Vec<MergeAction>,
     /// Optional `RETURNING` projection.
-    pub returning: Vec<SelectItem>,
+    pub(crate) returning: Vec<SelectItem>,
 }
 
 /// Server-owned raw SQL statement.
@@ -644,14 +644,14 @@ pub struct Merge {
 #[non_exhaustive]
 pub struct RawStmt {
     /// Raw SQL text using rqb `?` placeholders.
-    pub sql: String,
+    pub(crate) sql: String,
     /// Bind parameters for the raw SQL text.
-    pub params: Vec<Param>,
+    pub(crate) params: Vec<Param>,
 }
 
 /// SQL set query operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SetOperator {
+pub(crate) enum SetOperator {
     /// `UNION`.
     Union,
     /// `UNION ALL`.
@@ -672,17 +672,17 @@ pub enum SetOperator {
 #[non_exhaustive]
 pub struct SetQuery {
     /// Left query.
-    pub left: Box<Stmt>,
+    pub(crate) left: Box<Stmt>,
     /// Set operator.
-    pub operator: SetOperator,
+    pub(crate) operator: SetOperator,
     /// Right query.
-    pub right: Box<Stmt>,
+    pub(crate) right: Box<Stmt>,
     /// Ordering after the set expression.
-    pub order: Vec<OrderItem>,
+    pub(crate) order: Vec<OrderItem>,
     /// Optional row-limit clause.
-    pub row_limit: Option<RowLimit>,
+    pub(crate) row_limit: Option<RowLimit>,
     /// Optional offset.
-    pub offset: Option<Param>,
+    pub(crate) offset: Option<Param>,
 }
 
 /// Any top-level query statement rqb can render.
@@ -691,17 +691,24 @@ pub struct SetQuery {
 #[non_exhaustive]
 pub enum Stmt {
     /// Select statement.
+    #[non_exhaustive]
     Select(Box<Select>),
     /// Set query.
+    #[non_exhaustive]
     Set(Box<SetQuery>),
     /// Insert statement.
+    #[non_exhaustive]
     Insert(Box<Insert>),
     /// Update statement.
+    #[non_exhaustive]
     Update(Box<Update>),
     /// Delete statement.
+    #[non_exhaustive]
     Delete(Box<Delete>),
     /// Merge statement.
+    #[non_exhaustive]
     Merge(Box<Merge>),
     /// Raw SQL statement.
+    #[non_exhaustive]
     Raw(Box<RawStmt>),
 }

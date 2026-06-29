@@ -7,15 +7,15 @@ impl BoolExpr {
     /// Validates this boolean expression before SQL rendering.
     pub fn validate(&self) -> Result<()> {
         match self {
-            Self::Constant(_) => Ok(()),
-            Self::Compare { left, op, right } => {
+            BoolExpr::Constant(_) => Ok(()),
+            BoolExpr::Compare { left, op, right } => {
                 validate_compare(left, *op)?;
                 validate_row_compare(left, right)?;
                 left.validate()?;
                 right.validate()
             }
-            Self::IsNull { expr, .. } | Self::IsBoolean { expr, .. } => expr.validate(),
-            Self::InList { expr, values, .. } => {
+            BoolExpr::IsNull { expr, .. } | BoolExpr::IsBoolean { expr, .. } => expr.validate(),
+            BoolExpr::InList { expr, values, .. } => {
                 validate_equality_expr(expr, "in")?;
                 expr.validate()?;
                 for value in values {
@@ -23,12 +23,12 @@ impl BoolExpr {
                 }
                 Ok(())
             }
-            Self::InSubquery { expr, query, .. } => {
+            BoolExpr::InSubquery { expr, query, .. } => {
                 validate_equality_expr(expr, "in_subquery")?;
                 expr.validate()?;
                 query.validate_query_statement("IN subquery must be SELECT, set, or raw statement")
             }
-            Self::Between {
+            BoolExpr::Between {
                 expr, low, high, ..
             } => {
                 validate_ordered_expr(expr, "between")?;
@@ -36,43 +36,43 @@ impl BoolExpr {
                 low.validate()?;
                 high.validate()
             }
-            Self::Like { expr, pattern, .. } => {
+            BoolExpr::Like { expr, pattern, .. } => {
                 validate_pattern_expr(expr, "like")?;
                 expr.validate()?;
                 pattern.validate()
             }
-            Self::SimilarTo { expr, pattern, .. } => {
+            BoolExpr::SimilarTo { expr, pattern, .. } => {
                 validate_pattern_expr(expr, "similar_to")?;
                 expr.validate()?;
                 pattern.validate()
             }
-            Self::Regex { expr, pattern, .. } => {
+            BoolExpr::Regex { expr, pattern, .. } => {
                 validate_pattern_expr(expr, "regex")?;
                 expr.validate()?;
                 pattern.validate()
             }
-            Self::Infix {
+            BoolExpr::Infix {
                 left, op, right, ..
             } => {
                 validate_infix_expr(left, op)?;
                 left.validate()?;
                 right.validate()
             }
-            Self::Any { value, array, .. } => {
+            BoolExpr::Any { value, array, .. } => {
                 validate_array_expr(array, "any")?;
                 value.validate()?;
                 array.validate()
             }
-            Self::ArrayIsEmpty { expr, .. } => {
+            BoolExpr::ArrayIsEmpty { expr, .. } => {
                 validate_array_expr(expr, "array_empty")?;
                 expr.validate()
             }
-            Self::And(exprs) | Self::Or(exprs) => {
+            BoolExpr::And(exprs) | BoolExpr::Or(exprs) => {
                 if exprs.is_empty() {
                     return Err(Error::EmptyLogical {
                         logical: match self {
-                            Self::And(_) => "and",
-                            Self::Or(_) => "or",
+                            BoolExpr::And(_) => "and",
+                            BoolExpr::Or(_) => "or",
                             _ => unreachable!(),
                         }
                         .to_owned(),
@@ -83,10 +83,10 @@ impl BoolExpr {
                 }
                 Ok(())
             }
-            Self::Not(expr) => expr.validate(),
-            Self::Exists(stmt) => stmt
+            BoolExpr::Not(expr) => expr.validate(),
+            BoolExpr::Exists(stmt) => stmt
                 .validate_query_statement("EXISTS subquery must be SELECT, set, or raw statement"),
-            Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
+            BoolExpr::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
         }
     }
 }
@@ -95,7 +95,7 @@ impl ValueExpr {
     /// Validates this value expression before SQL rendering.
     pub fn validate(&self) -> Result<()> {
         match self {
-            Self::Aggregate {
+            ValueExpr::Aggregate {
                 filter,
                 args,
                 order_by,
@@ -120,7 +120,7 @@ impl ValueExpr {
                 }
                 Ok(())
             }
-            Self::OrderedSetAggregate {
+            ValueExpr::OrderedSetAggregate {
                 filter,
                 args,
                 within_group,
@@ -143,13 +143,13 @@ impl ValueExpr {
                 }
                 Ok(())
             }
-            Self::Function { args, .. } => {
+            ValueExpr::Function { args, .. } => {
                 for arg in args {
                     arg.validate()?;
                 }
                 Ok(())
             }
-            Self::Case { branches, else_ } => {
+            ValueExpr::Case { branches, else_ } => {
                 for (when, then) in branches {
                     when.validate()?;
                     then.validate()?;
@@ -159,16 +159,16 @@ impl ValueExpr {
                 }
                 Ok(())
             }
-            Self::Cast { expr, .. } => expr.validate(),
-            Self::Binary { left, right, .. } => {
+            ValueExpr::Cast { expr, .. } => expr.validate(),
+            ValueExpr::Binary { left, right, .. } => {
                 left.validate()?;
                 right.validate()
             }
-            Self::Subscript { expr, index } => {
+            ValueExpr::Subscript { expr, index } => {
                 expr.validate()?;
                 index.validate()
             }
-            Self::Slice { expr, start, end } => {
+            ValueExpr::Slice { expr, start, end } => {
                 expr.validate()?;
                 if let Some(start) = start {
                     start.validate()?;
@@ -178,32 +178,32 @@ impl ValueExpr {
                 }
                 Ok(())
             }
-            Self::Array(values) | Self::Row(values) => {
+            ValueExpr::Array(values) | ValueExpr::Row(values) => {
                 for value in values {
                     value.validate()?;
                 }
                 Ok(())
             }
-            Self::Extract { expr, .. } => expr.validate(),
-            Self::Window { args, spec, .. } => {
+            ValueExpr::Extract { expr, .. } => expr.validate(),
+            ValueExpr::Window { args, spec, .. } => {
                 for arg in args {
                     arg.validate()?;
                 }
                 spec.validate()
             }
-            Self::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
-            Self::Subquery(stmt) => stmt
+            ValueExpr::Raw { sql, params } => raw::validate_bind_count(sql, params.len()),
+            ValueExpr::Subquery(stmt) => stmt
                 .validate_query_statement("scalar subquery must be SELECT, set, or raw statement"),
-            Self::InvalidAggregateModifier { expr, modifier } => {
+            ValueExpr::InvalidAggregateModifier { expr, modifier } => {
                 expr.validate()?;
                 Err(Error::InvalidAggregateModifier { modifier })
             }
-            Self::Field { .. }
-            | Self::Excluded(_)
-            | Self::Param(_)
-            | Self::Null
-            | Self::SqlLiteral(_)
-            | Self::Keyword(_) => Ok(()),
+            ValueExpr::Field { .. }
+            | ValueExpr::Excluded(_)
+            | ValueExpr::Param(_)
+            | ValueExpr::Null
+            | ValueExpr::SqlLiteral(_)
+            | ValueExpr::Keyword(_) => Ok(()),
         }
     }
 }

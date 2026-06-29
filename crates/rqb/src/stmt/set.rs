@@ -2,7 +2,11 @@ use super::*;
 
 impl SetQuery {
     /// Creates a set query from two statements.
-    pub fn new(operator: SetOperator, left: impl Into<Stmt>, right: impl Into<Stmt>) -> Self {
+    pub(crate) fn new(
+        operator: SetOperator,
+        left: impl Into<Stmt>,
+        right: impl Into<Stmt>,
+    ) -> Self {
         Self {
             left: Box::new(left.into()),
             operator,

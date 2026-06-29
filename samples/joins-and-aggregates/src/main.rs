@@ -16,16 +16,16 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .left_join(&o, u.id().eq_field(o.user_id()))
         .left_join(&i, o.id().eq_field(i.order_id()))
         .column(u.email())
-        .item(count_distinct(o.id()).alias("order_count"))
-        .item(sum(i.quantity()).alias("units_sold"))
-        .item(sum(o.total_cents()).alias("gross_cents"))
-        .item(
+        .expr_as(count_distinct(o.id()), "order_count")
+        .expr_as(sum(i.quantity()), "units_sold")
+        .expr_as(sum(o.total_cents()), "gross_cents")
+        .expr_as(
             // Field arguments use their metadata names as JSON object keys.
             // Computed values can be passed as ("key", expr) pairs.
             jsonb_agg_object![o.id(), o.status()]
                 .aggregate_order_desc(o.created_at())
-                .aggregate_filter(o.status().eq("paid"))
-                .alias("paid_orders"),
+                .aggregate_filter(o.status().eq("paid")),
+            "paid_orders",
         )
         .group_by(u.email())
         .having(count_distinct(o.id()).gt(0_i64))

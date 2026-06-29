@@ -55,19 +55,19 @@ impl Select {
         cte(name, self, fields)
     }
 
-    /// Adds a schema field or aliased field reference to the projection.
+    /// Adds a schema field or qualified field reference to the projection.
     ///
     /// Plain fields keep their database/API alias rules. Qualified fields get
     /// stable aliases such as `u_email`, which makes `sqlx::FromRow` mapping
     /// deterministic for joins.
-    pub fn column(mut self, field: impl Into<SelectItem>) -> Self {
-        self.projection.push(field.into());
+    pub fn column(mut self, field: impl IntoColumn) -> Self {
+        self.projection.extend(field.into_column().items);
         self
     }
 
-    /// Adds multiple schema fields or aliased field references to the projection.
-    pub fn columns(mut self, fields: impl IntoSelectItems) -> Self {
-        self.projection.extend(fields.into_select_items());
+    /// Adds multiple schema fields or qualified field references to the projection.
+    pub fn columns(mut self, fields: impl IntoColumns) -> Self {
+        self.projection.extend(fields.into_columns().items);
         self
     }
 
@@ -94,11 +94,24 @@ impl Select {
         self
     }
 
+    /// Adds an expression with an output alias.
+    ///
+    /// Use this for computed columns and deliberate field renames. Adding any
+    /// projection item switches the select out of default root-field
+    /// projection. Use [`Select::default_columns`] first when you want the
+    /// default row plus computed expressions.
+    pub fn expr_as(mut self, expr: impl Into<ValueExpr>, alias: impl Into<String>) -> Self {
+        self.projection.push(SelectItem {
+            expr: expr.into(),
+            alias: Some(alias.into()),
+        });
+        self
+    }
+
     /// Adds multiple expressions without output aliases.
     ///
     /// This accepts regular iterators of value expressions. For heterogeneous
-    /// field or aliased item batches, use [`Select::columns`] or
-    /// [`Select::items`] with tuple syntax.
+    /// field batches, use [`Select::columns`] with tuple syntax.
     pub fn exprs<I, T>(mut self, exprs: I) -> Self
     where
         I: IntoIterator<Item = T>,
@@ -109,23 +122,6 @@ impl Select {
                 expr: expr.into(),
                 alias: None,
             }));
-        self
-    }
-
-    /// Adds a fully specified projection item, usually an aliased expression.
-    ///
-    /// Adding any projection item switches the select out of default root-field
-    /// projection. Use [`Select::default_columns`] first when you want to append
-    /// computed columns to the default row.
-    #[inline]
-    pub fn item(mut self, item: SelectItem) -> Self {
-        self.projection.push(item);
-        self
-    }
-
-    /// Adds multiple fully specified projection items.
-    pub fn items(mut self, items: impl IntoSelectItems) -> Self {
-        self.projection.extend(items.into_select_items());
         self
     }
 
@@ -214,9 +210,8 @@ impl Select {
         I: IntoIterator<Item = E>,
         E: Into<ValueExpr>,
     {
-        self.group_by.push(GroupByItem::Rollup(
-            exprs.into_iter().map(Into::into).collect(),
-        ));
+        self.group_by
+            .push(GroupByItem::rollup(exprs.into_iter().map(Into::into)));
         self
     }
 
@@ -226,9 +221,8 @@ impl Select {
         I: IntoIterator<Item = E>,
         E: Into<ValueExpr>,
     {
-        self.group_by.push(GroupByItem::Cube(
-            exprs.into_iter().map(Into::into).collect(),
-        ));
+        self.group_by
+            .push(GroupByItem::cube(exprs.into_iter().map(Into::into)));
         self
     }
 
@@ -239,10 +233,9 @@ impl Select {
         S: IntoIterator<Item = E>,
         E: Into<ValueExpr>,
     {
-        self.group_by.push(GroupByItem::GroupingSets(
+        self.group_by.push(GroupByItem::grouping_sets(
             sets.into_iter()
-                .map(|set| set.into_iter().map(Into::into).collect())
-                .collect(),
+                .map(|set| set.into_iter().map(Into::into).collect()),
         ));
         self
     }

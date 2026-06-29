@@ -1,4 +1,4 @@
-use crate::{BindValue, Meta, OrderItem, Param, SelectItem, WindowSpec};
+use crate::{BindValue, Meta, OrderItem, Param, WindowSpec};
 
 use super::{BoolExpr, BoolOp, CaseBuilder, ValueExpr, ValueOp};
 
@@ -17,18 +17,12 @@ impl CaseBuilder {
     /// Finishes the expression without an `ELSE` branch.
     #[inline]
     pub fn end(self) -> ValueExpr {
-        ValueExpr::Case {
-            branches: self.branches,
-            else_: None,
-        }
+        ValueExpr::case(self.branches, None)
     }
 
     /// Finishes the expression with an `ELSE` branch.
     pub fn else_(self, value: impl Into<ValueExpr>) -> ValueExpr {
-        ValueExpr::Case {
-            branches: self.branches,
-            else_: Some(Box::new(value.into())),
-        }
+        ValueExpr::case(self.branches, Some(Box::new(value.into())))
     }
 }
 
@@ -39,18 +33,12 @@ impl Meta {
     /// schema generator but intentionally do not have a typed [`Field`](crate::Field).
     #[inline]
     pub fn expr(self) -> ValueExpr {
-        ValueExpr::Field {
-            meta: self,
-            qualifier: None,
-        }
+        ValueExpr::field(self, None)
     }
 
     /// Returns this metadata as a qualified value expression.
     pub fn at(self, qualifier: impl Into<String>) -> ValueExpr {
-        ValueExpr::Field {
-            meta: self,
-            qualifier: Some(qualifier.into()),
-        }
+        ValueExpr::field(self, Some(qualifier.into()))
     }
 }
 
@@ -75,21 +63,10 @@ impl ValueExpr {
         Self::Param(Param::typed(value))
     }
 
-    /// Returns this expression as an aliased projection item.
-    pub fn alias(self, alias: impl Into<String>) -> SelectItem {
-        SelectItem {
-            expr: self,
-            alias: Some(alias.into()),
-        }
-    }
-
     /// Casts this expression to a Postgres type.
     #[inline]
     pub fn cast(self, pg: &'static str) -> Self {
-        Self::Cast {
-            expr: Box::new(self),
-            pg,
-        }
+        Self::cast_expr(self, pg)
     }
 
     /// Builds a custom value operator expression.
@@ -97,49 +74,29 @@ impl ValueExpr {
     /// Use this as the typed escape hatch for extension operators such as
     /// pgvector distance operators.
     pub fn op(self, op: &'static str, right: impl Into<ValueExpr>) -> Self {
-        Self::Binary {
-            left: Box::new(self),
-            op: ValueOp::Custom(op),
-            right: Box::new(right.into()),
-        }
+        Self::binary(self, ValueOp::Custom(op), right.into())
     }
 
     /// Builds a custom boolean infix predicate.
     pub fn predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self,
-            op,
-            right: right.into(),
-            negated: false,
-        }
+        BoolExpr::infix(self, op, right.into(), false)
     }
 
     /// Builds a negated custom boolean infix predicate.
     pub fn not_predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self,
-            op,
-            right: right.into(),
-            negated: true,
-        }
+        BoolExpr::infix(self, op, right.into(), true)
     }
 
     /// Builds `expr IS NULL`.
     #[inline]
     pub fn is_null(self) -> BoolExpr {
-        BoolExpr::IsNull {
-            expr: self,
-            negated: false,
-        }
+        BoolExpr::is_null_expr(self, false)
     }
 
     /// Builds `expr IS NOT NULL`.
     #[inline]
     pub fn is_not_null(self) -> BoolExpr {
-        BoolExpr::IsNull {
-            expr: self,
-            negated: true,
-        }
+        BoolExpr::is_null_expr(self, true)
     }
 
     /// Compares this expression with another expression or bind value.
@@ -185,29 +142,19 @@ impl ValueExpr {
     /// Adds aggregate-local `ORDER BY`.
     #[inline]
     pub fn aggregate_order_by(self, item: OrderItem) -> Self {
-        if let Self::Aggregate {
-            name,
-            args,
-            distinct,
-            mut order_by,
-            filter,
-            over: None,
-        } = self
-        {
-            order_by.push(item);
-            return Self::Aggregate {
+        match self {
+            ValueExpr::Aggregate {
                 name,
                 args,
                 distinct,
-                order_by,
+                mut order_by,
                 filter,
                 over: None,
-            };
-        }
-
-        Self::InvalidAggregateModifier {
-            expr: Box::new(self),
-            modifier: "aggregate_order_by",
+            } => {
+                order_by.push(item);
+                Self::aggregate(name, args, distinct, order_by, filter, None)
+            }
+            expr => Self::invalid_aggregate_modifier(expr, "aggregate_order_by"),
         }
     }
 
@@ -225,36 +172,33 @@ impl ValueExpr {
     #[inline]
     pub fn aggregate_filter(self, next_filter: BoolExpr) -> Self {
         match self {
-            Self::Aggregate {
+            ValueExpr::Aggregate {
                 name,
                 args,
                 distinct,
                 order_by,
                 filter,
                 over,
-            } => Self::Aggregate {
+            } => Self::aggregate(
                 name,
                 args,
                 distinct,
                 order_by,
-                filter: combine_aggregate_filters(filter, next_filter),
+                combine_aggregate_filters(filter, next_filter),
                 over,
-            },
-            Self::OrderedSetAggregate {
+            ),
+            ValueExpr::OrderedSetAggregate {
                 name,
                 args,
                 within_group,
                 filter,
-            } => Self::OrderedSetAggregate {
+            } => Self::ordered_set_aggregate(
                 name,
                 args,
                 within_group,
-                filter: combine_aggregate_filters(filter, next_filter),
-            },
-            expr => Self::InvalidAggregateModifier {
-                expr: Box::new(expr),
-                modifier: "aggregate_filter",
-            },
+                combine_aggregate_filters(filter, next_filter),
+            ),
+            expr => Self::invalid_aggregate_modifier(expr, "aggregate_filter"),
         }
     }
 
@@ -263,43 +207,37 @@ impl ValueExpr {
     /// PostgreSQL aggregate window calls use `ORDER BY` inside `OVER (...)`;
     /// aggregate-local `DISTINCT` and `ORDER BY` are rejected for this modifier.
     #[inline]
-    pub fn over(mut self, spec: WindowSpec) -> Self {
-        if let Self::Aggregate {
-            distinct,
-            order_by,
-            over,
-            ..
-        } = &mut self
-        {
-            if *distinct || !order_by.is_empty() {
-                return Self::InvalidAggregateModifier {
-                    expr: Box::new(self),
-                    modifier: "over",
-                };
+    pub fn over(self, spec: WindowSpec) -> Self {
+        match self {
+            ValueExpr::Aggregate {
+                name,
+                args,
+                distinct,
+                order_by,
+                filter,
+                over,
+            } => {
+                if distinct || !order_by.is_empty() {
+                    return Self::invalid_aggregate_modifier(
+                        Self::aggregate(name, args, distinct, order_by, filter, over),
+                        "over",
+                    );
+                }
+                Self::aggregate(name, args, distinct, order_by, filter, Some(Box::new(spec)))
             }
-            *over = Some(Box::new(spec));
-            return self;
-        }
-
-        Self::InvalidAggregateModifier {
-            expr: Box::new(self),
-            modifier: "over",
+            expr => Self::invalid_aggregate_modifier(expr, "over"),
         }
     }
 
     pub(crate) fn field_meta(&self) -> Option<&Meta> {
         match self {
-            Self::Field { meta, .. } => Some(meta),
+            ValueExpr::Field { meta, .. } => Some(meta),
             _ => None,
         }
     }
 
     fn compare(self, op: BoolOp, right: impl Into<ValueExpr>) -> BoolExpr {
-        BoolExpr::Compare {
-            left: self,
-            op,
-            right: right.into(),
-        }
+        BoolExpr::compare(self, op, right.into())
     }
 }
 

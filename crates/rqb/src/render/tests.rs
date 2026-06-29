@@ -1,5 +1,5 @@
 use crate::{
-    Assignment, AssignmentValue, BoolExpr, Field, Insert, InsertBody, IntoSelectItems, Meta, OpSet,
+    Assignment, AssignmentValue, BoolExpr, Field, Insert, InsertBody, IntoColumns, Meta, OpSet,
     Param, RawStmt, Select, SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and,
     case, coalesce, count_all, count_distinct, cte, current_date, current_timestamp, delete_from,
     extract, function_source, insert, json_agg, json_get_text, lag, merge_into, param,
@@ -93,7 +93,10 @@ fn raw_fragments_are_numbered_in_render_order() {
         joins: Vec::new(),
         distinct: false,
         distinct_on: Vec::new(),
-        projection: vec![raw_expr("?::text", [Param::typed("first".to_owned())]).alias("label")],
+        projection: vec![SelectItem {
+            expr: raw_expr("?::text", [Param::typed("first".to_owned())]),
+            alias: Some("label".to_owned()),
+        }],
         filter: Some(raw_predicate("id > ?", [Param::typed(2_i32)])),
         group_by: Vec::new(),
         having: None,
@@ -312,11 +315,14 @@ fn default_write_values_render_without_parameters() {
 fn sql_literal_and_typed_date_part_render_without_parameters() {
     let bucket = crate::date_trunc_part(crate::DatePart::Day, current_timestamp());
     let built = select(users())
-        .item(bucket.clone().alias("day_bucket"))
-        .item(count_all().alias("rows"))
+        .expr_as(bucket.clone(), "day_bucket")
+        .expr_as(count_all(), "rows")
         .group_by(bucket.clone())
         .order_asc(bucket)
-        .item(crate::date_trunc(crate::literal("author's"), current_date()).alias("quoted_part"))
+        .expr_as(
+            crate::date_trunc(crate::literal("author's"), current_date()),
+            "quoted_part",
+        )
         .build()
         .unwrap();
 
@@ -379,7 +385,7 @@ fn insert_from_select_all_handles_sources_without_explicit_alias() {
 fn ergonomic_constructors_build_the_same_typed_ast() {
     let built = select(table("public.app_users", &USERS_FIELDS))
         .column(ID)
-        .item(EMAIL.alias("email"))
+        .expr_as(EMAIL, "email")
         .filter(and([ID.gt(10), ID.lt(20)]))
         .filter_if(false, ID.eq(999))
         .filter_option(Some("egor".to_owned()), |email| EMAIL.ne(email))
@@ -454,7 +460,7 @@ fn joins_render_qualified_fields_and_keep_param_order() {
             orders().alias("o"),
             ID.at("u").eq_field(ORDER_USER_ID.at("o")),
         )
-        .column(EMAIL.at("u").alias("email"))
+        .expr_as(EMAIL.at("u"), "email")
         .column(TOTAL.at("o"))
         .filter(TOTAL.at("o").gte(5000))
         .order_desc(TOTAL.at("o"))
@@ -513,7 +519,7 @@ fn aliased_root_default_projection_is_qualified() {
 fn default_columns_can_be_extended_with_computed_items() {
     let built = select(users())
         .default_columns()
-        .item(crate::length(EMAIL).alias("email_length"))
+        .expr_as(crate::length(EMAIL), "email_length")
         .build()
         .unwrap();
 
@@ -527,7 +533,7 @@ fn default_columns_can_be_extended_with_computed_items() {
 fn default_columns_preserves_aliased_root_projection_shape() {
     let built = select(users().alias("u"))
         .default_columns()
-        .item(crate::length(EMAIL.at("u")).alias("email_length"))
+        .expr_as(crate::length(EMAIL.at("u")), "email_length")
         .build()
         .unwrap();
 
@@ -540,7 +546,7 @@ fn default_columns_preserves_aliased_root_projection_shape() {
 #[test]
 fn default_columns_respects_builder_order() {
     let built = select(users())
-        .item(crate::length(EMAIL).alias("email_length"))
+        .expr_as(crate::length(EMAIL), "email_length")
         .default_columns()
         .build()
         .unwrap();
@@ -624,7 +630,7 @@ fn distinct_group_having_and_locks_render_as_select_clauses() {
     let built = select(users())
         .distinct_on(EMAIL)
         .column(EMAIL)
-        .item(count_id().alias("user_count"))
+        .expr_as(count_id(), "user_count")
         .group_by(EMAIL)
         .having(count_id().gt(1_i64))
         .order_asc(EMAIL)
@@ -728,8 +734,8 @@ fn pg18_returning_old_new_and_computed_assignments_render() {
     let built = update(users())
         .set(EMAIL.set_expr(EMAIL.expr().op("||", "@new.example")))
         .filter(ID.eq(1))
-        .returning_item(EMAIL.old_value().alias("old_email"))
-        .returning_item(EMAIL.new_value().alias("new_email"))
+        .returning_as(EMAIL.old_value(), "old_email")
+        .returning_as(EMAIL.new_value(), "new_email")
         .build()
         .unwrap();
 
@@ -779,16 +785,16 @@ fn variadic_select_projection_helpers_render() {
     let sixteen_items = (
         ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL, ID, EMAIL,
     )
-        .into_select_items();
+        .into_columns();
     let built = select(users())
         .columns((ID, EMAIL))
         .exprs([crate::lower(EMAIL), crate::upper(EMAIL)])
-        .items([crate::length(EMAIL).alias("email_length")])
-        .items([crate::count_all().alias("rows")])
+        .expr_as(crate::length(EMAIL), "email_length")
+        .expr_as(crate::count_all(), "rows")
         .build()
         .unwrap();
 
-    assert_eq!(sixteen_items.len(), 16);
+    assert_eq!(sixteen_items.items.len(), 16);
     assert_eq!(
         built.sql,
         "SELECT \"id\", \"email_address\" AS \"email\", lower(\"email_address\"), upper(\"email_address\"), length(\"email_address\") AS \"email_length\", count(*) AS \"rows\" FROM \"public\".\"app_users\""
@@ -800,15 +806,14 @@ fn variadic_select_projection_helpers_render() {
 fn frame_bound_constructors_render_without_manual_boxing() {
     let built = select(orders())
         .column(ORDER_USER_ID)
-        .item(
-            lag(TOTAL)
-                .over(
-                    window().partition_by(ORDER_USER_ID).order_asc(TOTAL).frame(
-                        crate::rows(crate::FrameBound::preceding(2_i32))
-                            .between(crate::FrameBound::following(1_i32)),
-                    ),
-                )
-                .alias("nearby_total"),
+        .expr_as(
+            lag(TOTAL).over(
+                window().partition_by(ORDER_USER_ID).order_asc(TOTAL).frame(
+                    crate::rows(crate::FrameBound::preceding(2_i32))
+                        .between(crate::FrameBound::following(1_i32)),
+                ),
+            ),
+            "nearby_total",
         )
         .build()
         .unwrap();
@@ -1151,16 +1156,15 @@ fn cte_fields_must_match_select_projection() {
 fn window_helpers_render_over_partition_and_order_specs() {
     let built = select(users())
         .column(ID)
-        .item(
-            row_number()
-                .over(window().partition_by(EMAIL).order_desc(ID))
-                .alias("row_no"),
+        .expr_as(
+            row_number().over(window().partition_by(EMAIL).order_desc(ID)),
+            "row_no",
         )
-        .item(
+        .expr_as(
             lag(EMAIL)
                 .offset(ValueExpr::Param(Param::typed(2_i32)))
-                .over(window().order_asc(ID))
-                .alias("previous_email"),
+                .over(window().order_asc(ID)),
+            "previous_email",
         )
         .build()
         .unwrap();
@@ -1176,18 +1180,17 @@ fn window_helpers_render_over_partition_and_order_specs() {
 fn aggregate_helpers_render_over_window_specs() {
     let built = select(orders())
         .column(ORDER_USER_ID)
-        .item(
-            crate::sum(TOTAL)
-                .over(window().partition_by(ORDER_USER_ID).order_desc(TOTAL))
-                .alias("running_total"),
+        .expr_as(
+            crate::sum(TOTAL).over(window().partition_by(ORDER_USER_ID).order_desc(TOTAL)),
+            "running_total",
         )
-        .item(
+        .expr_as(
             count_all()
                 .aggregate_filter(TOTAL.gt(0))
-                .over(window().partition_by(ORDER_USER_ID))
-                .alias("positive_user_rows"),
+                .over(window().partition_by(ORDER_USER_ID)),
+            "positive_user_rows",
         )
-        .item(count_all().over(window()).alias("all_rows"))
+        .expr_as(count_all().over(window()), "all_rows")
         .build()
         .unwrap();
 
@@ -1201,21 +1204,21 @@ fn aggregate_helpers_render_over_window_specs() {
 #[test]
 fn aggregate_helpers_render_common_postgres_aggregates() {
     let built = select(users())
-        .item(count_all().alias("total"))
-        .item(count_distinct(EMAIL).alias("unique_emails"))
-        .item(
+        .expr_as(count_all(), "total")
+        .expr_as(count_distinct(EMAIL), "unique_emails")
+        .expr_as(
             array_agg(EMAIL)
                 .aggregate_order_desc(ID)
-                .aggregate_filter(ID.gt(10))
-                .alias("emails"),
+                .aggregate_filter(ID.gt(10)),
+            "emails",
         )
-        .item(
+        .expr_as(
             json_agg(ID)
                 .aggregate_order_asc(EMAIL)
-                .aggregate_filter(ID.gt(20))
-                .alias("ids_json"),
+                .aggregate_filter(ID.gt(20)),
+            "ids_json",
         )
-        .item(crate::string_agg(EMAIL, ",").alias("emails_csv"))
+        .expr_as(crate::string_agg(EMAIL, ","), "emails_csv")
         .build()
         .unwrap();
 
@@ -1229,11 +1232,11 @@ fn aggregate_helpers_render_common_postgres_aggregates() {
 #[test]
 fn jsonb_agg_object_renders_keyed_objects_with_filter_and_order() {
     let built = select(orders())
-        .item(
+        .expr_as(
             crate::jsonb_agg_object![ORDER_USER_ID, TOTAL]
                 .aggregate_order_desc(TOTAL)
-                .aggregate_filter(TOTAL.gt(0))
-                .alias("orders"),
+                .aggregate_filter(TOTAL.gt(0)),
+            "orders",
         )
         .build()
         .unwrap();
@@ -1248,12 +1251,12 @@ fn jsonb_agg_object_renders_keyed_objects_with_filter_and_order() {
 #[test]
 fn jsonb_agg_object_accepts_explicit_keys_for_computed_values() {
     let built = select(orders())
-        .item(
+        .expr_as(
             crate::jsonb_agg_object![
                 ORDER_USER_ID,
                 ("source", json_get_text(PAYLOAD, param("source".to_owned()))),
-            ]
-            .alias("orders"),
+            ],
+            "orders",
         )
         .build()
         .unwrap();
@@ -1287,8 +1290,8 @@ fn count_query_renders_through_normal_ast_path() {
 #[test]
 fn keyword_helpers_render_without_function_parentheses_or_params() {
     let built = select(users())
-        .item(current_timestamp().alias("ts"))
-        .item(current_date().alias("today"))
+        .expr_as(current_timestamp(), "ts")
+        .expr_as(current_date(), "today")
         .build()
         .unwrap();
 
@@ -1303,24 +1306,24 @@ fn keyword_helpers_render_without_function_parentheses_or_params() {
 #[test]
 fn row_array_subscript_slice_extract_and_cast_render_value_expressions() {
     let built = select(orders())
-        .item(row((ORDER_USER_ID, TOTAL)).alias("row_value"))
-        .item(array([ORDER_USER_ID.expr(), ValueExpr::from(2_i32)]).alias("ids"))
-        .item(subscript(TAGS, ValueExpr::from(1_i32)).alias("first_tag"))
-        .item(
+        .expr_as(row((ORDER_USER_ID, TOTAL)), "row_value")
+        .expr_as(array([ORDER_USER_ID.expr(), ValueExpr::from(2_i32)]), "ids")
+        .expr_as(subscript(TAGS, ValueExpr::from(1_i32)), "first_tag")
+        .expr_as(
             slice(
                 TAGS,
                 Some(ValueExpr::from(1_i32)),
                 Some(ValueExpr::from(3_i32)),
-            )
-            .alias("tag_slice"),
+            ),
+            "tag_slice",
         )
-        .item(extract("year", current_timestamp()).alias("year"))
-        .item(
+        .expr_as(extract("year", current_timestamp()), "year")
+        .expr_as(
             ValueExpr::Cast {
                 expr: Box::new(ValueExpr::from("42")),
                 pg: "int4",
-            }
-            .alias("answer"),
+            },
+            "answer",
         )
         .filter(row((ORDER_USER_ID, TOTAL)).lt((1_i32, 100_i64)))
         .build()
@@ -1359,7 +1362,7 @@ fn array_and_json_predicates_render_without_raw_sql() {
 fn postgres_tier1_select_clauses_render_without_raw_sql() {
     let built = select(orders())
         .column(ORDER_USER_ID)
-        .item(crate::sum(TOTAL).alias("total"))
+        .expr_as(crate::sum(TOTAL), "total")
         .rollup([ORDER_USER_ID])
         .grouping_sets(vec![vec![ORDER_USER_ID.expr()], vec![TOTAL.expr()]])
         .order_desc_nulls_last(TOTAL)
@@ -1495,22 +1498,18 @@ fn delete_with_cte_renders_with_prefix_and_keeps_param_order() {
 #[test]
 fn window_frames_and_more_window_functions_render() {
     let built = select(users())
-        .item(
-            crate::first_value(EMAIL)
-                .over(
-                    window()
-                        .partition_by(ACTIVE)
-                        .order_asc_nulls_last(ID)
-                        .frame(
-                            crate::rows(crate::unbounded_preceding()).between(crate::current_row()),
-                        ),
-                )
-                .alias("first_email"),
+        .expr_as(
+            crate::first_value(EMAIL).over(
+                window()
+                    .partition_by(ACTIVE)
+                    .order_asc_nulls_last(ID)
+                    .frame(crate::rows(crate::unbounded_preceding()).between(crate::current_row())),
+            ),
+            "first_email",
         )
-        .item(
-            crate::nth_value(EMAIL, param(2_i32))
-                .over(window().order_desc(ID))
-                .alias("second_email"),
+        .expr_as(
+            crate::nth_value(EMAIL, param(2_i32)).over(window().order_desc(ID)),
+            "second_email",
         )
         .build()
         .unwrap();
@@ -1525,23 +1524,21 @@ fn window_frames_and_more_window_functions_render() {
 #[test]
 fn helper_functions_cover_common_postgres_builtins() {
     let built = select(orders())
-        .item(bool_and(ACTIVE).alias("all_active"))
-        .item(percentile_cont(param(0.95_f64), TOTAL).alias("p95"))
-        .item(
-            case()
-                .when(TOTAL.gte(10_000), "large")
-                .else_("standard")
-                .alias("bucket"),
+        .expr_as(bool_and(ACTIVE), "all_active")
+        .expr_as(percentile_cont(param(0.95_f64), TOTAL), "p95")
+        .expr_as(
+            case().when(TOTAL.gte(10_000), "large").else_("standard"),
+            "bucket",
         )
-        .item(TOTAL.op("%", 100_i64).alias("total_remainder"))
-        .item(
+        .expr_as(TOTAL.op("%", 100_i64), "total_remainder")
+        .expr_as(
             coalesce([
                 json_get_text(PAYLOAD, param("source".to_owned())),
                 param("unknown".to_owned()),
-            ])
-            .alias("source"),
+            ]),
+            "source",
         )
-        .item(to_jsonb(array([ORDER_USER_ID.expr(), TOTAL.expr()])).alias("ids"))
+        .expr_as(to_jsonb(array([ORDER_USER_ID.expr(), TOTAL.expr()])), "ids")
         .filter(BoolExpr::and([
             ACTIVE.is_not_false(),
             EMAIL.similar_to("%(example|test)%"),
@@ -1563,21 +1560,30 @@ fn helper_functions_cover_common_postgres_builtins() {
 #[test]
 fn postgres_gap_helpers_render_without_raw_sql() {
     let built = select(users())
-        .item(crate::to_char(crate::current_timestamp(), "YYYY-MM").alias("month"))
-        .item(crate::to_date("2026-05-11", "YYYY-MM-DD").alias("parsed_date"))
-        .item(crate::to_timestamp("2026-05-11 12:00", "YYYY-MM-DD HH24:MI").alias("parsed_ts"))
-        .item(crate::to_number("1,234.50", "9,999.99").alias("parsed_number"))
-        .item(crate::date_bin("1 hour", crate::current_timestamp(), "2000-01-01").alias("bucket"))
-        .item(crate::octet_length(EMAIL).alias("email_bytes"))
-        .item(crate::initcap(EMAIL).alias("email_title"))
-        .item(crate::encode(param(vec![0xde_u8, 0xad]), "hex").alias("encoded"))
-        .item(crate::decode("dead", "hex").alias("decoded"))
-        .item(crate::ascii("A").alias("ascii_a"))
-        .item(crate::chr(65_i32).alias("chr_a"))
-        .item(crate::current_user().alias("current_user"))
-        .item(crate::session_user().alias("session_user"))
-        .item(crate::current_schema().alias("current_schema"))
-        .item(crate::current_database().alias("current_database"))
+        .expr_as(
+            crate::to_char(crate::current_timestamp(), "YYYY-MM"),
+            "month",
+        )
+        .expr_as(crate::to_date("2026-05-11", "YYYY-MM-DD"), "parsed_date")
+        .expr_as(
+            crate::to_timestamp("2026-05-11 12:00", "YYYY-MM-DD HH24:MI"),
+            "parsed_ts",
+        )
+        .expr_as(crate::to_number("1,234.50", "9,999.99"), "parsed_number")
+        .expr_as(
+            crate::date_bin("1 hour", crate::current_timestamp(), "2000-01-01"),
+            "bucket",
+        )
+        .expr_as(crate::octet_length(EMAIL), "email_bytes")
+        .expr_as(crate::initcap(EMAIL), "email_title")
+        .expr_as(crate::encode(param(vec![0xde_u8, 0xad]), "hex"), "encoded")
+        .expr_as(crate::decode("dead", "hex"), "decoded")
+        .expr_as(crate::ascii("A"), "ascii_a")
+        .expr_as(crate::chr(65_i32), "chr_a")
+        .expr_as(crate::current_user(), "current_user")
+        .expr_as(crate::session_user(), "session_user")
+        .expr_as(crate::current_schema(), "current_schema")
+        .expr_as(crate::current_database(), "current_database")
         .filter(crate::isfinite(crate::current_timestamp()))
         .build()
         .unwrap();
@@ -1592,20 +1598,29 @@ fn postgres_gap_helpers_render_without_raw_sql() {
 #[test]
 fn json_symmetry_helpers_render_without_raw_sql() {
     let built = select(orders())
-        .item(
+        .expr_as(
             crate::json_build_object(vec![
                 param("id".to_owned()),
                 ORDER_USER_ID.expr(),
                 param("total".to_owned()),
                 TOTAL.expr(),
-            ])
-            .alias("json_obj"),
+            ]),
+            "json_obj",
         )
-        .item(crate::json_build_array(vec![ORDER_USER_ID.expr(), TOTAL.expr()]).alias("json_arr"))
-        .item(crate::json_object(array(["id", "42"])).alias("json_object"))
-        .item(crate::json_typeof(PAYLOAD).alias("json_type"))
-        .item(crate::json_array_length(crate::json_build_array([TOTAL])).alias("json_len"))
-        .item(crate::jsonb_array_length(crate::jsonb_build_array([TOTAL])).alias("jsonb_len"))
+        .expr_as(
+            crate::json_build_array(vec![ORDER_USER_ID.expr(), TOTAL.expr()]),
+            "json_arr",
+        )
+        .expr_as(crate::json_object(array(["id", "42"])), "json_object")
+        .expr_as(crate::json_typeof(PAYLOAD), "json_type")
+        .expr_as(
+            crate::json_array_length(crate::json_build_array([TOTAL])),
+            "json_len",
+        )
+        .expr_as(
+            crate::jsonb_array_length(crate::jsonb_build_array([TOTAL])),
+            "jsonb_len",
+        )
         .build()
         .unwrap();
 
@@ -1619,16 +1634,16 @@ fn json_symmetry_helpers_render_without_raw_sql() {
 #[test]
 fn postgres_18_function_helpers_render_without_raw_sql() {
     let built = select(users())
-        .item(crate::casefold(EMAIL).alias("folded_email"))
-        .item(crate::normalize_form(EMAIL, "NFC").alias("normalized_email"))
-        .item(crate::gamma(ID).alias("gamma_id"))
-        .item(crate::lgamma(ID).alias("lgamma_id"))
-        .item(crate::crc32(param(vec![1_u8, 2, 3])).alias("crc"))
-        .item(crate::uuidv4().alias("uuid_v4"))
-        .item(crate::gen_random_uuid().alias("random_uuid"))
-        .item(
-            crate::uuidv7_shift(param("1 hour".to_owned()).cast("interval"))
-                .alias("shifted_uuid_v7"),
+        .expr_as(crate::casefold(EMAIL), "folded_email")
+        .expr_as(crate::normalize_form(EMAIL, "NFC"), "normalized_email")
+        .expr_as(crate::gamma(ID), "gamma_id")
+        .expr_as(crate::lgamma(ID), "lgamma_id")
+        .expr_as(crate::crc32(param(vec![1_u8, 2, 3])), "crc")
+        .expr_as(crate::uuidv4(), "uuid_v4")
+        .expr_as(crate::gen_random_uuid(), "random_uuid")
+        .expr_as(
+            crate::uuidv7_shift(param("1 hour".to_owned()).cast("interval")),
+            "shifted_uuid_v7",
         )
         .filter(crate::starts_with(EMAIL, "egor"))
         .filter(crate::unicode_assigned(EMAIL))
@@ -1705,14 +1720,14 @@ fn values_and_srf_sources_render_without_raw_sql() {
 #[test]
 fn competitor_text_fts_system_and_analytics_helpers_render_without_raw_sql() {
     let built = select(users())
-        .item(crate::format("user:%s", [EMAIL]).alias("formatted"))
-        .item(crate::translate(EMAIL, "@.", "__").alias("translated"))
-        .item(crate::repeat("*", 3_i32).alias("repeated"))
-        .item(crate::width_bucket(ID, 0_i32, 100_i32, 10_i32).alias("bucket"))
-        .item(crate::version().alias("pg_version"))
-        .item(
-            crate::ts_headline(vec![EMAIL.into(), crate::phraseto_tsquery("hello world")])
-                .alias("headline"),
+        .expr_as(crate::format("user:%s", [EMAIL]), "formatted")
+        .expr_as(crate::translate(EMAIL, "@.", "__"), "translated")
+        .expr_as(crate::repeat("*", 3_i32), "repeated")
+        .expr_as(crate::width_bucket(ID, 0_i32, 100_i32, 10_i32), "bucket")
+        .expr_as(crate::version(), "pg_version")
+        .expr_as(
+            crate::ts_headline(vec![EMAIL.into(), crate::phraseto_tsquery("hello world")]),
+            "headline",
         )
         .filter(crate::starts_with(EMAIL, "egor"))
         .build()
@@ -1728,15 +1743,15 @@ fn competitor_text_fts_system_and_analytics_helpers_render_without_raw_sql() {
 #[test]
 fn json_utility_and_range_helpers_render_without_raw_sql() {
     let built = select(orders())
-        .item(crate::jsonb_pretty(PAYLOAD).alias("pretty_payload"))
-        .item(crate::array_to_json(TAGS).alias("tags_json"))
-        .item(crate::row_to_json(row((ORDER_USER_ID, TOTAL))).alias("row_json"))
-        .item(crate::range_lower(SCORE_RANGE).alias("lower_score"))
-        .item(crate::range_upper(SCORE_RANGE).alias("upper_score"))
-        .item(crate::range_merge(SCORE_RANGE).alias("merged_score"))
-        .item(
-            crate::multirange_merge(raw_expr("'{}'::int4multirange", Vec::<Param>::new()))
-                .alias("merged_multi"),
+        .expr_as(crate::jsonb_pretty(PAYLOAD), "pretty_payload")
+        .expr_as(crate::array_to_json(TAGS), "tags_json")
+        .expr_as(crate::row_to_json(row((ORDER_USER_ID, TOTAL))), "row_json")
+        .expr_as(crate::range_lower(SCORE_RANGE), "lower_score")
+        .expr_as(crate::range_upper(SCORE_RANGE), "upper_score")
+        .expr_as(crate::range_merge(SCORE_RANGE), "merged_score")
+        .expr_as(
+            crate::multirange_merge(raw_expr("'{}'::int4multirange", Vec::<Param>::new())),
+            "merged_multi",
         )
         .filter(BoolExpr::and([
             crate::isempty(SCORE_RANGE),
@@ -1758,16 +1773,16 @@ fn json_utility_and_range_helpers_render_without_raw_sql() {
 #[test]
 fn array_and_aggregate_fill_in_helpers_render_without_raw_sql() {
     let array_built = select(orders())
-        .item(crate::array_cat(TAGS, array(["vip", "new"])).alias("tag_cat"))
-        .item(crate::array_dims(TAGS).alias("tag_dims"))
-        .item(crate::array_lower(TAGS, 1_i32).alias("tag_lower"))
-        .item(crate::array_upper(TAGS, 1_i32).alias("tag_upper"))
-        .item(crate::array_ndims(TAGS).alias("tag_ndims"))
-        .item(crate::trim_array(TAGS, 1_i32).alias("tag_trimmed"))
-        .item(crate::array_reverse(TAGS).alias("tag_reverse"))
-        .item(crate::array_sample(TAGS, 2_i32).alias("tag_sample"))
-        .item(crate::array_shuffle(TAGS).alias("tag_shuffle"))
-        .item(crate::array_sort_desc(TAGS).alias("tag_sort_desc"))
+        .expr_as(crate::array_cat(TAGS, array(["vip", "new"])), "tag_cat")
+        .expr_as(crate::array_dims(TAGS), "tag_dims")
+        .expr_as(crate::array_lower(TAGS, 1_i32), "tag_lower")
+        .expr_as(crate::array_upper(TAGS, 1_i32), "tag_upper")
+        .expr_as(crate::array_ndims(TAGS), "tag_ndims")
+        .expr_as(crate::trim_array(TAGS, 1_i32), "tag_trimmed")
+        .expr_as(crate::array_reverse(TAGS), "tag_reverse")
+        .expr_as(crate::array_sample(TAGS, 2_i32), "tag_sample")
+        .expr_as(crate::array_shuffle(TAGS), "tag_shuffle")
+        .expr_as(crate::array_sort_desc(TAGS), "tag_sort_desc")
         .build()
         .unwrap();
 
@@ -1779,14 +1794,17 @@ fn array_and_aggregate_fill_in_helpers_render_without_raw_sql() {
 
     let aggregate_built = select(orders())
         .column(ORDER_USER_ID)
-        .item(crate::grouping([ORDER_USER_ID]).alias("grouping_mask"))
-        .item(crate::any_value(PAYLOAD).alias("any_payload"))
-        .item(crate::sum_distinct(TOTAL).alias("distinct_total"))
-        .item(crate::avg_distinct(TOTAL).alias("distinct_avg"))
-        .item(crate::bit_xor(TOTAL).alias("checksum"))
-        .item(crate::jsonb_agg_strict(PAYLOAD).alias("payloads"))
-        .item(crate::jsonb_object_agg_unique(ORDER_USER_ID, PAYLOAD).alias("payload_by_user"))
-        .item(crate::range_agg(SCORE_RANGE).alias("score_ranges"))
+        .expr_as(crate::grouping([ORDER_USER_ID]), "grouping_mask")
+        .expr_as(crate::any_value(PAYLOAD), "any_payload")
+        .expr_as(crate::sum_distinct(TOTAL), "distinct_total")
+        .expr_as(crate::avg_distinct(TOTAL), "distinct_avg")
+        .expr_as(crate::bit_xor(TOTAL), "checksum")
+        .expr_as(crate::jsonb_agg_strict(PAYLOAD), "payloads")
+        .expr_as(
+            crate::jsonb_object_agg_unique(ORDER_USER_ID, PAYLOAD),
+            "payload_by_user",
+        )
+        .expr_as(crate::range_agg(SCORE_RANGE), "score_ranges")
         .rollup([ORDER_USER_ID])
         .build()
         .unwrap();
@@ -1873,13 +1891,13 @@ fn cte_hints_function_sources_and_merge_render() {
     .update((EMAIL.set("merged@example.com".to_owned()), ID.set(9)))
     .when_not_matched()
     .insert((ID.set(1), EMAIL.set("new@example.com".to_owned())))
-    .returning_item(SelectItem::new(ID.at("u").expr()));
+    .returning_as(ID.at("u"), "id");
 
     let built = merge.build().unwrap();
 
     assert_eq!(
         built.sql,
-        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"incoming\" ON \"u\".\"id\" = \"incoming\".\"user_id\" WHEN MATCHED AND \"incoming\".\"total_cents\" > $1 THEN UPDATE SET \"email_address\" = $2, \"id\" = $3 WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($4, $5) RETURNING \"u\".\"id\""
+        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING \"public\".\"orders\" AS \"incoming\" ON \"u\".\"id\" = \"incoming\".\"user_id\" WHEN MATCHED AND \"incoming\".\"total_cents\" > $1 THEN UPDATE SET \"email_address\" = $2, \"id\" = $3 WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($4, $5) RETURNING \"u\".\"id\" AS \"id\""
     );
     assert_eq!(built.params.len(), 5);
 }

@@ -168,22 +168,23 @@ pub use request::{
 };
 pub use rqb_macros::{Changeset, Insertable, schema};
 pub use source::{
-    Cte, CteMaterialization, FunctionSource, IntoFieldMetas, Join, JoinKind, Source, cte, cte_ref,
-    function_source, generate_series_source, generate_series_step_source,
-    generate_subscripts_source, json_array_elements_source, json_each_source,
-    json_object_keys_source, jsonb_array_elements_source, jsonb_each_source,
-    jsonb_object_keys_source, raw_source, regexp_split_to_table_source, subquery, table,
-    unnest_source, values_source, view,
+    Cte, FunctionSource, IntoFieldMetas, Source, cte, cte_ref, function_source,
+    generate_series_source, generate_series_step_source, generate_subscripts_source,
+    json_array_elements_source, json_each_source, json_object_keys_source,
+    jsonb_array_elements_source, jsonb_each_source, jsonb_object_keys_source, raw_source,
+    regexp_split_to_table_source, subquery, table, unnest_source, values_source, view,
 };
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use stmt::{
-    Assignment, AssignmentValue, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause,
-    ConflictFields, ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem,
-    Insert, InsertBody, Insertable, IntoAssignments, IntoSelectItems, LockMode, LockWait,
-    MatchedMergeBuilder, Merge, MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder,
-    NotMatchedMergeBuilder, NullsPosition, OrderDirection, OrderItem, RawStmt, RowLimit, RowLock,
-    Select, SelectItem, SetOperator, SetQuery, Stmt, Update, delete_from, except, except_all,
-    insert, intersect, intersect_all, merge_into, raw, select, union, union_all, update,
+    Assignment, Changeset, ColumnConflictBuilder, ColumnList, ConflictFields,
+    ConstraintConflictBuilder, Delete, Insert, Insertable, IntoColumn, IntoColumns, LockMode,
+    MatchedMergeBuilder, Merge, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, OrderItem,
+    RawStmt, Select, SetQuery, Stmt, Update, delete_from, except, except_all, insert, intersect,
+    intersect_all, merge_into, raw, select, union, union_all, update,
+};
+pub(crate) use stmt::{
+    AssignmentValue, ConflictAction, ConflictClause, ConflictTarget, GroupByItem, InsertBody,
+    MergeAction, MergeWhen, OrderDirection, RowLimit, RowLock, SelectItem,
 };
 
 /// Creates a metadata-backed computed field for CTEs, subqueries, and projections.
@@ -326,14 +327,13 @@ pub mod dsl {
 /// `Result` signatures.
 pub mod prelude {
     pub use crate::{
-        Assignment, AssignmentValue, BindValue, BoolExpr, BuiltQuery, Changeset, Cte, Delete,
-        Error, Field, FieldRef, Insert, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params,
-        PgConnection, PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate,
-        SearchRequest, SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update,
-        ValueExpr, and, cte, cte_ref, delete_from, except, except_all, field, insert, intersect,
-        intersect_all, jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate,
-        raw_source, schema, select, subquery, table, tx, union, union_all, update, values_source,
-        view,
+        Assignment, BindValue, BoolExpr, BuiltQuery, Changeset, Cte, Delete, Error, Field,
+        FieldRef, Insert, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params, PgConnection,
+        PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate, SearchRequest,
+        SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, and, cte,
+        cte_ref, delete_from, except, except_all, field, insert, intersect, intersect_all,
+        jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate, raw_source, schema,
+        select, subquery, table, tx, union, union_all, update, values_source, view,
     };
 }
 
@@ -410,8 +410,8 @@ mod tests {
         const SPEND: Field<i64> = Field::new(&SPEND_META);
 
         let built = crate::select(crate::table("public.users", &FIELDS))
-            .item(crate::dsl::lower(EMAIL).alias("lower_email"))
-            .item(crate::dsl::sum_distinct(SPEND).alias("distinct_spend"))
+            .expr_as(crate::dsl::lower(EMAIL), "lower_email")
+            .expr_as(crate::dsl::sum_distinct(SPEND), "distinct_spend")
             .filter(crate::dsl::and([EMAIL.ilike("%@example.com")]))
             .build()
             .unwrap();

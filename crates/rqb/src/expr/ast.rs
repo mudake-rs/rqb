@@ -155,14 +155,19 @@ pub enum WindowFrameKind {
 #[must_use]
 pub enum FrameBound {
     /// `UNBOUNDED PRECEDING`.
+    #[non_exhaustive]
     UnboundedPreceding,
     /// `n PRECEDING`.
+    #[non_exhaustive]
     Preceding(Box<ValueExpr>),
     /// `CURRENT ROW`.
+    #[non_exhaustive]
     CurrentRow,
     /// `n FOLLOWING`.
+    #[non_exhaustive]
     Following(Box<ValueExpr>),
     /// `UNBOUNDED FOLLOWING`.
+    #[non_exhaustive]
     UnboundedFollowing,
 }
 
@@ -185,13 +190,13 @@ pub enum FrameExclude {
 #[non_exhaustive]
 pub struct WindowFrame {
     /// Frame unit.
-    pub kind: WindowFrameKind,
+    pub(crate) kind: WindowFrameKind,
     /// Start boundary.
-    pub start: FrameBound,
+    pub(crate) start: FrameBound,
     /// Optional end boundary for `BETWEEN`.
-    pub end: Option<FrameBound>,
+    pub(crate) end: Option<FrameBound>,
     /// Optional exclusion clause.
-    pub exclude: Option<FrameExclude>,
+    pub(crate) exclude: Option<FrameExclude>,
 }
 
 /// Window specification used by `OVER (...)`.
@@ -200,11 +205,11 @@ pub struct WindowFrame {
 #[non_exhaustive]
 pub struct WindowSpec {
     /// Partition expressions.
-    pub partition_by: Vec<ValueExpr>,
+    pub(crate) partition_by: Vec<ValueExpr>,
     /// Ordering expressions.
-    pub order_by: Vec<OrderItem>,
+    pub(crate) order_by: Vec<OrderItem>,
     /// Optional frame.
-    pub frame: Option<Box<WindowFrame>>,
+    pub(crate) frame: Option<Box<WindowFrame>>,
 }
 
 /// Builder for window functions without offset/default arguments.
@@ -238,8 +243,10 @@ pub struct CaseBuilder {
 #[non_exhaustive]
 pub enum BoolExpr {
     /// Boolean constant.
+    #[non_exhaustive]
     Constant(bool),
     /// Binary comparison.
+    #[non_exhaustive]
     Compare {
         /// Left side.
         left: ValueExpr,
@@ -249,6 +256,7 @@ pub enum BoolExpr {
         right: ValueExpr,
     },
     /// `IS NULL` / `IS NOT NULL`.
+    #[non_exhaustive]
     IsNull {
         /// Tested expression.
         expr: ValueExpr,
@@ -256,6 +264,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// `IS TRUE` / `IS NOT TRUE` and related boolean tests.
+    #[non_exhaustive]
     IsBoolean {
         /// Tested expression.
         expr: ValueExpr,
@@ -265,6 +274,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// `IN (...)` / `NOT IN (...)`.
+    #[non_exhaustive]
     InList {
         /// Tested expression.
         expr: ValueExpr,
@@ -274,6 +284,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// `IN (subquery)` / `NOT IN (subquery)`.
+    #[non_exhaustive]
     InSubquery {
         /// Tested expression.
         expr: ValueExpr,
@@ -283,6 +294,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// `BETWEEN` / `NOT BETWEEN`.
+    #[non_exhaustive]
     Between {
         /// Tested expression.
         expr: ValueExpr,
@@ -294,6 +306,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// `LIKE` / `ILIKE` predicate.
+    #[non_exhaustive]
     Like {
         /// Tested expression.
         expr: ValueExpr,
@@ -307,6 +320,7 @@ pub enum BoolExpr {
         escape: bool,
     },
     /// `SIMILAR TO` predicate.
+    #[non_exhaustive]
     SimilarTo {
         /// Tested expression.
         expr: ValueExpr,
@@ -316,6 +330,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// PostgreSQL regex predicate.
+    #[non_exhaustive]
     Regex {
         /// Tested expression.
         expr: ValueExpr,
@@ -327,6 +342,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// Custom typed infix predicate.
+    #[non_exhaustive]
     Infix {
         /// Left expression.
         left: ValueExpr,
@@ -338,6 +354,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// `value = ANY(array)` / negated form.
+    #[non_exhaustive]
     Any {
         /// Value expression.
         value: ValueExpr,
@@ -347,6 +364,7 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// Array-empty predicate.
+    #[non_exhaustive]
     ArrayIsEmpty {
         /// Array expression.
         expr: ValueExpr,
@@ -354,14 +372,19 @@ pub enum BoolExpr {
         negated: bool,
     },
     /// Logical conjunction.
+    #[non_exhaustive]
     And(Vec<BoolExpr>),
     /// Logical disjunction.
+    #[non_exhaustive]
     Or(Vec<BoolExpr>),
     /// Logical negation.
+    #[non_exhaustive]
     Not(Box<BoolExpr>),
     /// `EXISTS (subquery)`.
+    #[non_exhaustive]
     Exists(Box<crate::Stmt>),
     /// Server-owned raw predicate.
+    #[non_exhaustive]
     Raw {
         /// Raw SQL using rqb `?` placeholders.
         sql: String,
@@ -376,6 +399,7 @@ pub enum BoolExpr {
 #[non_exhaustive]
 pub enum ValueExpr {
     /// Field reference.
+    #[non_exhaustive]
     Field {
         /// Field metadata.
         meta: Meta,
@@ -383,16 +407,22 @@ pub enum ValueExpr {
         qualifier: Option<String>,
     },
     /// `EXCLUDED.field` reference for upserts.
+    #[non_exhaustive]
     Excluded(Meta),
     /// Bind parameter.
+    #[non_exhaustive]
     Param(Param),
     /// SQL `NULL` literal.
+    #[non_exhaustive]
     Null,
     /// Server-owned static SQL string literal.
+    #[non_exhaustive]
     SqlLiteral(&'static str),
     /// SQL keyword expression such as `CURRENT_DATE`.
+    #[non_exhaustive]
     Keyword(&'static str),
     /// Function call.
+    #[non_exhaustive]
     Function {
         /// Function name.
         name: &'static str,
@@ -400,6 +430,7 @@ pub enum ValueExpr {
         args: Vec<ValueExpr>,
     },
     /// Aggregate function call.
+    #[non_exhaustive]
     Aggregate {
         /// Aggregate function name.
         name: &'static str,
@@ -415,6 +446,7 @@ pub enum ValueExpr {
         over: Option<Box<WindowSpec>>,
     },
     /// Ordered-set aggregate function call.
+    #[non_exhaustive]
     OrderedSetAggregate {
         /// Aggregate function name.
         name: &'static str,
@@ -426,6 +458,7 @@ pub enum ValueExpr {
         filter: Option<Box<BoolExpr>>,
     },
     /// SQL `CASE` expression.
+    #[non_exhaustive]
     Case {
         /// Ordered `WHEN` branches.
         branches: Vec<(BoolExpr, ValueExpr)>,
@@ -433,6 +466,7 @@ pub enum ValueExpr {
         else_: Option<Box<ValueExpr>>,
     },
     /// SQL cast.
+    #[non_exhaustive]
     Cast {
         /// Casted expression.
         expr: Box<ValueExpr>,
@@ -440,6 +474,7 @@ pub enum ValueExpr {
         pg: &'static str,
     },
     /// Binary value expression.
+    #[non_exhaustive]
     Binary {
         /// Left expression.
         left: Box<ValueExpr>,
@@ -449,6 +484,7 @@ pub enum ValueExpr {
         right: Box<ValueExpr>,
     },
     /// Array or JSON subscript.
+    #[non_exhaustive]
     Subscript {
         /// Indexed expression.
         expr: Box<ValueExpr>,
@@ -456,6 +492,7 @@ pub enum ValueExpr {
         index: Box<ValueExpr>,
     },
     /// Array slice.
+    #[non_exhaustive]
     Slice {
         /// Sliced expression.
         expr: Box<ValueExpr>,
@@ -465,10 +502,13 @@ pub enum ValueExpr {
         end: Option<Box<ValueExpr>>,
     },
     /// SQL array constructor.
+    #[non_exhaustive]
     Array(Vec<ValueExpr>),
     /// SQL row constructor.
+    #[non_exhaustive]
     Row(Vec<ValueExpr>),
     /// SQL `EXTRACT(field FROM expr)`.
+    #[non_exhaustive]
     Extract {
         /// Extracted field name.
         field: &'static str,
@@ -476,6 +516,7 @@ pub enum ValueExpr {
         expr: Box<ValueExpr>,
     },
     /// Window function call with `OVER`.
+    #[non_exhaustive]
     Window {
         /// Window function name.
         function: WindowFunction,
@@ -485,6 +526,7 @@ pub enum ValueExpr {
         spec: WindowSpec,
     },
     /// Server-owned raw value expression.
+    #[non_exhaustive]
     Raw {
         /// Raw SQL using rqb `?` placeholders.
         sql: String,
@@ -492,12 +534,262 @@ pub enum ValueExpr {
         params: Vec<Param>,
     },
     /// Scalar subquery expression.
+    #[non_exhaustive]
     Subquery(Box<crate::Stmt>),
     /// Invalid aggregate-local modifier use retained for validation.
+    #[non_exhaustive]
     InvalidAggregateModifier {
         /// Expression the modifier was applied to.
         expr: Box<ValueExpr>,
         /// Modifier method name.
         modifier: &'static str,
     },
+}
+
+impl BoolExpr {
+    #[inline]
+    pub(crate) fn compare(left: ValueExpr, op: BoolOp, right: ValueExpr) -> Self {
+        Self::Compare { left, op, right }
+    }
+
+    #[inline]
+    pub(crate) fn is_null_expr(expr: ValueExpr, negated: bool) -> Self {
+        Self::IsNull { expr, negated }
+    }
+
+    #[inline]
+    pub(crate) fn is_boolean(expr: ValueExpr, test: BooleanTest, negated: bool) -> Self {
+        Self::IsBoolean {
+            expr,
+            test,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn in_list(expr: ValueExpr, values: Vec<ValueExpr>, negated: bool) -> Self {
+        Self::InList {
+            expr,
+            values,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn in_subquery(expr: ValueExpr, query: Box<crate::Stmt>, negated: bool) -> Self {
+        Self::InSubquery {
+            expr,
+            query,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn between(expr: ValueExpr, low: ValueExpr, high: ValueExpr, negated: bool) -> Self {
+        Self::Between {
+            expr,
+            low,
+            high,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn like(
+        expr: ValueExpr,
+        pattern: ValueExpr,
+        case_insensitive: bool,
+        negated: bool,
+        escape: bool,
+    ) -> Self {
+        Self::Like {
+            expr,
+            pattern,
+            case_insensitive,
+            negated,
+            escape,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn similar_to(expr: ValueExpr, pattern: ValueExpr, negated: bool) -> Self {
+        Self::SimilarTo {
+            expr,
+            pattern,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn regex(
+        expr: ValueExpr,
+        pattern: ValueExpr,
+        case_insensitive: bool,
+        negated: bool,
+    ) -> Self {
+        Self::Regex {
+            expr,
+            pattern,
+            case_insensitive,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn infix(
+        left: ValueExpr,
+        op: &'static str,
+        right: ValueExpr,
+        negated: bool,
+    ) -> Self {
+        Self::Infix {
+            left,
+            op,
+            right,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn any(value: ValueExpr, array: ValueExpr, negated: bool) -> Self {
+        Self::Any {
+            value,
+            array,
+            negated,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn array_is_empty(expr: ValueExpr, negated: bool) -> Self {
+        Self::ArrayIsEmpty { expr, negated }
+    }
+
+    #[inline]
+    pub(crate) fn raw(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> Self {
+        Self::Raw {
+            sql: sql.into(),
+            params: params.into(),
+        }
+    }
+}
+
+impl ValueExpr {
+    #[inline]
+    pub(crate) fn field(meta: Meta, qualifier: Option<String>) -> Self {
+        Self::Field { meta, qualifier }
+    }
+
+    #[inline]
+    pub(crate) fn function(name: &'static str, args: Vec<ValueExpr>) -> Self {
+        Self::Function { name, args }
+    }
+
+    #[inline]
+    pub(crate) fn aggregate(
+        name: &'static str,
+        args: Vec<ValueExpr>,
+        distinct: bool,
+        order_by: Vec<OrderItem>,
+        filter: Option<Box<BoolExpr>>,
+        over: Option<Box<WindowSpec>>,
+    ) -> Self {
+        Self::Aggregate {
+            name,
+            args,
+            distinct,
+            order_by,
+            filter,
+            over,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn ordered_set_aggregate(
+        name: &'static str,
+        args: Vec<ValueExpr>,
+        within_group: Vec<OrderItem>,
+        filter: Option<Box<BoolExpr>>,
+    ) -> Self {
+        Self::OrderedSetAggregate {
+            name,
+            args,
+            within_group,
+            filter,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn case(
+        branches: Vec<(BoolExpr, ValueExpr)>,
+        else_: Option<Box<ValueExpr>>,
+    ) -> Self {
+        Self::Case { branches, else_ }
+    }
+
+    #[inline]
+    pub(crate) fn cast_expr(expr: ValueExpr, pg: &'static str) -> Self {
+        Self::Cast {
+            expr: Box::new(expr),
+            pg,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn binary(left: ValueExpr, op: ValueOp, right: ValueExpr) -> Self {
+        Self::Binary {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn subscript(expr: ValueExpr, index: ValueExpr) -> Self {
+        Self::Subscript {
+            expr: Box::new(expr),
+            index: Box::new(index),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn slice(expr: ValueExpr, start: Option<ValueExpr>, end: Option<ValueExpr>) -> Self {
+        Self::Slice {
+            expr: Box::new(expr),
+            start: start.map(Box::new),
+            end: end.map(Box::new),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn extract(field: &'static str, expr: ValueExpr) -> Self {
+        Self::Extract {
+            field,
+            expr: Box::new(expr),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn window(function: WindowFunction, args: Vec<ValueExpr>, spec: WindowSpec) -> Self {
+        Self::Window {
+            function,
+            args,
+            spec,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn raw(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> Self {
+        Self::Raw {
+            sql: sql.into(),
+            params: params.into(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn invalid_aggregate_modifier(expr: ValueExpr, modifier: &'static str) -> Self {
+        Self::InvalidAggregateModifier {
+            expr: Box::new(expr),
+            modifier,
+        }
+    }
 }

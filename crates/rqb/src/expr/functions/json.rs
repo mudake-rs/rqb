@@ -80,11 +80,7 @@ pub fn jsonb_insert(
 
 /// Builds the Postgres `jsonb - key` delete expression.
 pub fn jsonb_delete(target: impl Into<ValueExpr>, key: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Binary {
-        left: Box::new(target.into()),
-        op: ValueOp::Custom("-"),
-        right: Box::new(key.into()),
-    }
+    ValueExpr::binary(target.into(), ValueOp::Custom("-"), key.into())
 }
 
 /// Builds `jsonb_strip_nulls(expr)`.
@@ -134,38 +130,22 @@ pub fn jsonb_path_exists(target: impl Into<ValueExpr>, path: impl Into<ValueExpr
 
 /// Builds the Postgres `target -> key` JSON access expression.
 pub fn json_get(target: impl Into<ValueExpr>, key: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Binary {
-        left: Box::new(target.into()),
-        op: ValueOp::Custom("->"),
-        right: Box::new(key.into()),
-    }
+    ValueExpr::binary(target.into(), ValueOp::Custom("->"), key.into())
 }
 
 /// Builds the Postgres `target ->> key` JSON text access expression.
 pub fn json_get_text(target: impl Into<ValueExpr>, key: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Binary {
-        left: Box::new(target.into()),
-        op: ValueOp::Custom("->>"),
-        right: Box::new(key.into()),
-    }
+    ValueExpr::binary(target.into(), ValueOp::Custom("->>"), key.into())
 }
 
 /// Builds the Postgres `target #> path` JSON path expression.
 pub fn json_path(target: impl Into<ValueExpr>, path: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Binary {
-        left: Box::new(target.into()),
-        op: ValueOp::Custom("#>"),
-        right: Box::new(path.into()),
-    }
+    ValueExpr::binary(target.into(), ValueOp::Custom("#>"), path.into())
 }
 
 /// Builds the Postgres `target #>> path` JSON path text expression.
 pub fn json_path_text(target: impl Into<ValueExpr>, path: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Binary {
-        left: Box::new(target.into()),
-        op: ValueOp::Custom("#>>"),
-        right: Box::new(path.into()),
-    }
+    ValueExpr::binary(target.into(), ValueOp::Custom("#>>"), path.into())
 }
 
 /// Builds the SQL/JSON `json(expr)` constructor.

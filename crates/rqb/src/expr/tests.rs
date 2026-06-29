@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use super::escaped_like_pattern;
 use crate::{
-    BoolExpr, BoolOp, Field, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param, ValueExpr,
-    ValueOp, raw_expr, raw_predicate, row,
+    BoolExpr, BoolOp, Field, IntoColumn, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param,
+    ValueExpr, ValueOp, raw_expr, raw_predicate, row,
 };
 
 #[test]
@@ -241,8 +241,8 @@ fn borrowed_field_refs_and_raw_metadata_convert_to_value_shapes() {
 
     let id = ID.at("u");
     let expr = ValueExpr::from(&id);
-    let item = crate::SelectItem::from(&id);
-    let raw_meta_item = crate::SelectItem::from(EMAIL_META);
+    let item = (&id).into_column().items.pop().unwrap();
+    let raw_meta_item = EMAIL_META.into_column().items.pop().unwrap();
 
     assert!(matches!(
         expr,

@@ -43,13 +43,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .join(&o, au.id().eq_field(o.user_id()))
         .left_join_lateral(latest_event, true_())
         .column(au.email())
-        .item(sum(o.total_cents()).alias("gross_cents"))
-        .item(
-            count_all()
-                .aggregate_filter(o.status().eq("paid"))
-                .alias("paid_count"),
+        .expr_as(sum(o.total_cents()), "gross_cents")
+        .expr_as(
+            count_all().aggregate_filter(o.status().eq("paid")),
+            "paid_count",
         )
-        .item(
+        .expr_as(
             // Metadata-backed fields become JSON keys automatically; computed
             // values keep an explicit key.
             jsonb_agg_object![
@@ -57,20 +56,20 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 o.status(),
                 ("source", json_get_text(o.metadata(), "source")),
             ]
-            .aggregate_order_desc(o.created_at())
-            .alias("orders"),
+            .aggregate_order_desc(o.created_at()),
+            "orders",
         )
-        .item(
+        .expr_as(
             row_number()
                 .over(
                     window()
                         .partition_by(o.user_id())
                         .order_desc(o.created_at()),
-                )
-                .alias("order_rank"),
+                ),
+            "order_rank",
         )
-        .item(order_size.alias("order_size"))
-        .item(last_event_at.at("latest_event").alias("last_event_at"))
+        .expr_as(order_size, "order_size")
+        .expr_as(last_event_at.at("latest_event"), "last_event_at")
         .filter(o.status().in_list(["paid", "refunded"]))
         .filter(o.metadata().has_key("source"))
         .group_by(au.email())
@@ -96,15 +95,17 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // A compact helper showcase for common reporting expressions that would
     // otherwise become small raw SQL fragments.
     let helper_showcase = select(orders::table())
-        .item(to_char(orders::CREATED_AT, "YYYY-MM").alias("order_month"))
-        .item(
-            sum(orders::TOTAL_CENTS)
-                .over(window().partition_by(orders::USER_ID))
-                .alias("user_total_cents"),
+        .expr_as(to_char(orders::CREATED_AT, "YYYY-MM"), "order_month")
+        .expr_as(
+            sum(orders::TOTAL_CENTS).over(window().partition_by(orders::USER_ID)),
+            "user_total_cents",
         )
-        .item(width_bucket(orders::TOTAL_CENTS, 0_i64, 100_000_i64, 10_i32).alias("amount_bucket"))
-        .item(json_typeof(orders::METADATA).alias("metadata_kind"))
-        .item(current_user().alias("current_user"))
+        .expr_as(
+            width_bucket(orders::TOTAL_CENTS, 0_i64, 100_000_i64, 10_i32),
+            "amount_bucket",
+        )
+        .expr_as(json_typeof(orders::METADATA), "metadata_kind")
+        .expr_as(current_user(), "current_user")
         .limit(1)
         .build()?;
 

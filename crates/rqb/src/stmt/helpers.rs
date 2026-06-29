@@ -36,10 +36,7 @@ pub(super) fn select_item_for_ref<T>(field: FieldRef<T>) -> SelectItem {
 pub(super) fn select_item_for_meta(meta: Meta) -> SelectItem {
     let alias = field_alias(&meta);
     SelectItem {
-        expr: ValueExpr::Field {
-            meta,
-            qualifier: None,
-        },
+        expr: ValueExpr::field(meta, None),
         alias,
     }
 }
@@ -47,10 +44,7 @@ pub(super) fn select_item_for_meta(meta: Meta) -> SelectItem {
 pub(super) fn select_item_for_source_meta(meta: Meta, qualifier: Option<&str>) -> SelectItem {
     let alias = field_alias(&meta);
     SelectItem {
-        expr: ValueExpr::Field {
-            meta,
-            qualifier: qualifier.map(str::to_owned),
-        },
+        expr: ValueExpr::field(meta, qualifier.map(str::to_owned)),
         alias,
     }
 }

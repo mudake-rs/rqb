@@ -7,6 +7,7 @@ use crate::{Result, raw};
 #[non_exhaustive]
 pub enum Source {
     /// Database table from static schema metadata.
+    #[non_exhaustive]
     Table {
         /// Qualified table name, for example `public.users`.
         name: &'static str,
@@ -16,6 +17,7 @@ pub enum Source {
         fields: &'static [&'static Meta],
     },
     /// Database view from static schema metadata.
+    #[non_exhaustive]
     View {
         /// Qualified view name.
         name: &'static str,
@@ -25,6 +27,7 @@ pub enum Source {
         fields: &'static [&'static Meta],
     },
     /// Reference to a CTE defined in the surrounding statement.
+    #[non_exhaustive]
     Cte {
         /// CTE name.
         name: String,
@@ -34,6 +37,7 @@ pub enum Source {
         fields: Vec<Meta>,
     },
     /// Derived table from a nested query.
+    #[non_exhaustive]
     Subquery {
         /// Query rendered inside parentheses.
         stmt: Box<Stmt>,
@@ -43,6 +47,7 @@ pub enum Source {
         fields: Vec<Meta>,
     },
     /// Server-owned raw SQL source.
+    #[non_exhaustive]
     Raw {
         /// Raw SQL fragment using rqb `?` placeholders.
         sql: String,
@@ -54,6 +59,7 @@ pub enum Source {
         fields: Vec<Meta>,
     },
     /// Table-valued function source.
+    #[non_exhaustive]
     Function {
         /// Function name rendered as SQL.
         name: &'static str,
@@ -67,6 +73,7 @@ pub enum Source {
         ordinality: bool,
     },
     /// Inline `VALUES` table source.
+    #[non_exhaustive]
     Values {
         /// Row values.
         rows: Vec<Vec<ValueExpr>>,
@@ -86,20 +93,20 @@ pub enum Source {
 #[non_exhaustive]
 pub struct FunctionSource {
     /// Function name rendered as SQL.
-    pub name: &'static str,
+    pub(crate) name: &'static str,
     /// Function arguments.
-    pub args: Vec<ValueExpr>,
+    pub(crate) args: Vec<ValueExpr>,
     /// Required SQL alias.
-    pub alias: String,
+    pub(crate) alias: String,
     /// Exposed fields.
-    pub fields: Vec<Meta>,
+    pub(crate) fields: Vec<Meta>,
     /// Whether to render `WITH ORDINALITY`.
-    pub ordinality: bool,
+    pub(crate) ordinality: bool,
 }
 
 /// PostgreSQL CTE materialization hint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CteMaterialization {
+pub(crate) enum CteMaterialization {
     /// Render `MATERIALIZED`.
     Materialized,
     /// Render `NOT MATERIALIZED`.
@@ -123,15 +130,15 @@ impl CteMaterialization {
 #[non_exhaustive]
 pub struct Cte {
     /// CTE name.
-    pub name: String,
+    pub(crate) name: String,
     /// Whether to render `WITH RECURSIVE`.
-    pub recursive: bool,
+    pub(crate) recursive: bool,
     /// Optional materialization hint.
-    pub materialization: Option<CteMaterialization>,
+    pub(crate) materialization: Option<CteMaterialization>,
     /// CTE body statement.
-    pub stmt: Box<Stmt>,
+    pub(crate) stmt: Box<Stmt>,
     /// Exposed field metadata for querying this CTE.
-    pub fields: Vec<Meta>,
+    pub(crate) fields: Vec<Meta>,
 }
 
 /// Converts fields, metadata, and tuples of either into exposed metadata.
@@ -146,7 +153,7 @@ pub trait IntoFieldMetas {
 
 /// SQL join kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum JoinKind {
+pub(crate) enum JoinKind {
     /// Inner join.
     Inner,
     /// Left outer join.
@@ -163,15 +170,22 @@ pub enum JoinKind {
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
-pub struct Join {
+pub(crate) struct Join {
     /// Join kind.
-    pub kind: JoinKind,
+    pub(crate) kind: JoinKind,
     /// Joined source.
-    pub source: Source,
+    pub(crate) source: Source,
     /// Join condition. Cross joins do not require one.
-    pub on: Option<BoolExpr>,
+    pub(crate) on: Option<BoolExpr>,
     /// Whether to render `LATERAL`.
-    pub lateral: bool,
+    pub(crate) lateral: bool,
+}
+
+impl Source {
+    #[inline]
+    pub(crate) fn is_table_or_view(&self) -> bool {
+        matches!(self, Self::Table { .. } | Self::View { .. })
+    }
 }
 
 /// Creates a table source from static metadata.
@@ -540,7 +554,7 @@ impl JoinKind {
 
 impl Join {
     /// Creates a non-lateral join with an `ON` condition.
-    pub fn new(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
+    pub(crate) fn new(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             kind,
             source: source.into(),
@@ -550,7 +564,7 @@ impl Join {
     }
 
     /// Creates a lateral join with an `ON` condition.
-    pub fn lateral(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
+    pub(crate) fn lateral(kind: JoinKind, source: impl Into<Source>, on: BoolExpr) -> Self {
         Self {
             kind,
             source: source.into(),
@@ -560,7 +574,7 @@ impl Join {
     }
 
     /// Creates a cross join.
-    pub fn cross(source: impl Into<Source>) -> Self {
+    pub(crate) fn cross(source: impl Into<Source>) -> Self {
         Self {
             kind: JoinKind::Cross,
             source: source.into(),
@@ -570,7 +584,7 @@ impl Join {
     }
 
     /// Creates a lateral cross join.
-    pub fn cross_lateral(source: impl Into<Source>) -> Self {
+    pub(crate) fn cross_lateral(source: impl Into<Source>) -> Self {
         Self {
             kind: JoinKind::Cross,
             source: source.into(),
@@ -580,7 +594,7 @@ impl Join {
     }
 
     /// Validates the joined source and required join condition.
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         self.source.validate()?;
         match (&self.on, self.kind.requires_condition()) {
             (Some(on), _) => on.validate(),
@@ -827,17 +841,26 @@ impl Source {
                 }
                 Ok(())
             }
-            Self::Cte { name, .. } => {
+            Self::Cte { name, alias, .. } => {
                 if name.is_empty() {
                     return Err(crate::Error::InvalidSelectShape {
                         message: "CTE source name cannot be empty",
                     });
                 }
-                Ok(())
+                validate_optional_source_alias(alias.as_deref(), "source alias cannot be empty")
             }
-            Self::Table { .. } | Self::View { .. } => Ok(()),
+            Self::Table { alias, .. } | Self::View { alias, .. } => {
+                validate_optional_source_alias(alias.as_deref(), "source alias cannot be empty")
+            }
         }
     }
+}
+
+fn validate_optional_source_alias(alias: Option<&str>, message: &'static str) -> Result<()> {
+    if matches!(alias, Some("")) {
+        return Err(crate::Error::InvalidSelectShape { message });
+    }
+    Ok(())
 }
 
 fn validate_source_alias(alias: &str, message: &'static str) -> Result<()> {
@@ -960,6 +983,20 @@ mod tests {
 
     #[test]
     fn raw_and_function_sources_require_aliases() {
+        let table = table("public.users", &FIELDS).alias("");
+        assert!(matches!(
+            table.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "source alias cannot be empty"
+        ));
+
+        let cte = cte_ref("ids", vec![ID_META]).alias("");
+        assert!(matches!(
+            cte.validate().unwrap_err(),
+            crate::Error::InvalidSelectShape { message }
+                if message == "source alias cannot be empty"
+        ));
+
         let raw = raw_source("select 1 as id", "", Vec::<Param>::new(), vec![ID_META]);
         assert!(matches!(
             raw.validate().unwrap_err(),

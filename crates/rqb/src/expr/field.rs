@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{BindValue, Meta, Param, SelectItem};
+use crate::{BindValue, Meta, Param};
 
 use super::{BoolExpr, ValueExpr};
 
@@ -121,11 +121,6 @@ impl<T> Field<T> {
     /// Builds a negated custom boolean infix predicate for this field.
     pub fn not_predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
         self.reference().not_predicate(op, right)
-    }
-
-    /// Returns this field as an aliased projection item.
-    pub fn alias(self, alias: impl Into<String>) -> SelectItem {
-        self.expr().alias(alias)
     }
 
     /// Returns `EXCLUDED.field` for `ON CONFLICT DO UPDATE`.

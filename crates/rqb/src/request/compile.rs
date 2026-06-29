@@ -19,7 +19,7 @@ impl SearchRequest {
     /// The request filter is AND-composed with the select's existing filter.
     /// Sort, limit, and offset are client-owned request clauses, so they
     /// replace the builder's current values for those clauses.
-    pub fn merge_in(&self, mut select: Select) -> Result<Select> {
+    pub(crate) fn merge_in(&self, mut select: Select) -> Result<Select> {
         let lookup = SearchMetaLookup::new(&select.source);
         let request_filter = self.filter_expr(&lookup)?;
         let order = self.order_items(&lookup)?;
@@ -121,10 +121,10 @@ impl SearchOperator {
             Self::Lte => comparison_expr(field_name, meta, "lte", BoolOp::Lte, field, json, value),
             Self::IsNull | Self::IsNotNull => {
                 validate_search_capability(field_name, meta, self.as_name(), false)?;
-                Ok(BoolExpr::IsNull {
-                    expr: field,
-                    negated: matches!(self, Self::IsNotNull),
-                })
+                Ok(BoolExpr::is_null_expr(
+                    field,
+                    matches!(self, Self::IsNotNull),
+                ))
             }
             Self::In | Self::NotIn => {
                 validate_search_capability(field_name, meta, self.as_name(), false)?;
@@ -135,11 +135,11 @@ impl SearchOperator {
                 if values.is_empty() {
                     return Ok(BoolExpr::Constant(matches!(self, Self::NotIn)));
                 }
-                Ok(BoolExpr::InList {
-                    expr: field,
+                Ok(BoolExpr::in_list(
+                    field,
                     values,
-                    negated: matches!(self, Self::NotIn),
-                })
+                    matches!(self, Self::NotIn),
+                ))
             }
             Self::Between | Self::NotBetween => {
                 validate_search_capability(field_name, meta, self.as_name(), true)?;
@@ -147,12 +147,12 @@ impl SearchOperator {
                 let [low, high] = values.as_slice() else {
                     return Err(Error::invalid_search_value(field_name, "two-element array"));
                 };
-                Ok(BoolExpr::Between {
-                    expr: field,
-                    low: ValueExpr::Param(json_param(field_name, json, low)?),
-                    high: ValueExpr::Param(json_param(field_name, json, high)?),
-                    negated: matches!(self, Self::NotBetween),
-                })
+                Ok(BoolExpr::between(
+                    field,
+                    ValueExpr::Param(json_param(field_name, json, low)?),
+                    ValueExpr::Param(json_param(field_name, json, high)?),
+                    matches!(self, Self::NotBetween),
+                ))
             }
             Self::Contains
             | Self::NotContains
@@ -168,43 +168,41 @@ impl SearchOperator {
                     Self::EndsWith | Self::NotEndsWith => ("%", ""),
                     _ => unreachable!(),
                 };
-                Ok(BoolExpr::Like {
-                    expr: field,
-                    pattern: ValueExpr::Param(Param::typed(escaped_like_pattern(
-                        value, prefix, suffix,
-                    ))),
-                    case_insensitive: true,
-                    negated: matches!(
+                Ok(BoolExpr::like(
+                    field,
+                    ValueExpr::Param(Param::typed(escaped_like_pattern(value, prefix, suffix))),
+                    true,
+                    matches!(
                         self,
                         Self::NotContains | Self::NotStartsWith | Self::NotEndsWith
                     ),
-                    escape: true,
-                })
+                    true,
+                ))
             }
             Self::Like | Self::NotLike | Self::ILike | Self::NotILike => {
                 validate_search_pattern(field_name, meta, json, self.as_name())?;
                 let pattern = ValueExpr::Param(Param::typed(
                     search_pattern_value(field_name, value)?.to_owned(),
                 ));
-                Ok(BoolExpr::Like {
-                    expr: field,
+                Ok(BoolExpr::like(
+                    field,
                     pattern,
-                    case_insensitive: matches!(self, Self::ILike | Self::NotILike),
-                    negated: matches!(self, Self::NotLike | Self::NotILike),
-                    escape: false,
-                })
+                    matches!(self, Self::ILike | Self::NotILike),
+                    matches!(self, Self::NotLike | Self::NotILike),
+                    false,
+                ))
             }
             Self::Regex | Self::NotRegex | Self::IRegex | Self::NotIRegex => {
                 validate_search_pattern(field_name, meta, json, self.as_name())?;
                 let pattern = ValueExpr::Param(Param::typed(
                     search_pattern_value(field_name, value)?.to_owned(),
                 ));
-                Ok(BoolExpr::Regex {
-                    expr: field,
+                Ok(BoolExpr::regex(
+                    field,
                     pattern,
-                    case_insensitive: matches!(self, Self::IRegex | Self::NotIRegex),
-                    negated: matches!(self, Self::NotRegex | Self::NotIRegex),
-                })
+                    matches!(self, Self::IRegex | Self::NotIRegex),
+                    matches!(self, Self::NotRegex | Self::NotIRegex),
+                ))
             }
         }
     }
@@ -251,11 +249,11 @@ fn comparison_expr(
     value: &JsonValue,
 ) -> Result<BoolExpr> {
     validate_search_capability(field_name, meta, operator_name, op.requires_ordering())?;
-    Ok(BoolExpr::Compare {
-        left: field,
+    Ok(BoolExpr::compare(
+        field,
         op,
-        right: ValueExpr::Param(json_param(field_name, json, value)?),
-    })
+        ValueExpr::Param(json_param(field_name, json, value)?),
+    ))
 }
 
 impl SearchSort {
@@ -327,10 +325,7 @@ impl<'a> SearchMetaLookup<'a> {
     }
 
     fn field_expr(&self, meta: Meta) -> ValueExpr {
-        ValueExpr::Field {
-            meta,
-            qualifier: self.qualifier.map(str::to_owned),
-        }
+        ValueExpr::field(meta, self.qualifier.map(str::to_owned))
     }
 }
 

@@ -117,10 +117,7 @@ pub fn isfinite(value: impl Into<ValueExpr>) -> BoolExpr {
 
 /// Builds `EXTRACT(field FROM expr)`.
 pub fn extract(field: &'static str, expr: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Extract {
-        field,
-        expr: Box::new(expr.into()),
-    }
+    ValueExpr::extract(field, expr.into())
 }
 
 /// Builds `age(...)` with one or two arguments.

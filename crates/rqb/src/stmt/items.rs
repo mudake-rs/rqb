@@ -1,139 +1,156 @@
 use super::*;
 
-impl SelectItem {
-    /// Creates an unaliased projection item.
-    pub fn new(expr: impl Into<ValueExpr>) -> Self {
-        Self {
-            expr: expr.into(),
-            alias: None,
-        }
-    }
+/// Opaque column-list container used by [`Select::columns`](crate::Select::columns).
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct ColumnList {
+    pub(crate) items: Vec<SelectItem>,
+}
 
-    /// Sets the SQL alias for this projection item.
-    pub fn alias(mut self, alias: impl Into<String>) -> Self {
-        self.alias = Some(alias.into());
-        self
+impl ColumnList {
+    pub(crate) fn one(item: SelectItem) -> Self {
+        Self { items: vec![item] }
     }
 }
 
-/// Converts fields, metadata, and tuples of either into projection items.
+/// Converts one field, field reference, or metadata value into one column projection.
+#[doc(hidden)]
+pub trait IntoColumn {
+    /// Converts this value into one column projection.
+    fn into_column(self) -> ColumnList;
+}
+
+/// Converts fields, metadata, and tuples of either into column projections.
 ///
 /// This lets heterogeneous field projections use tuple syntax, for example
 /// `select(users::table()).columns((users::ID, users::EMAIL))`.
 #[doc(hidden)]
-pub trait IntoSelectItems {
-    /// Converts this value into projection items.
-    fn into_select_items(self) -> Vec<SelectItem>;
+pub trait IntoColumns {
+    /// Converts this value into column projections.
+    fn into_columns(self) -> ColumnList;
 }
 
-impl<T> From<Field<T>> for SelectItem {
-    fn from(field: Field<T>) -> Self {
-        select_item_for_field(field)
+impl<T> IntoColumn for Field<T> {
+    fn into_column(self) -> ColumnList {
+        ColumnList::one(select_item_for_field(self))
     }
 }
 
-impl<T> From<&Field<T>> for SelectItem {
-    fn from(field: &Field<T>) -> Self {
-        select_item_for_field(*field)
+impl<T> IntoColumn for &Field<T> {
+    fn into_column(self) -> ColumnList {
+        ColumnList::one(select_item_for_field(*self))
     }
 }
 
-impl<T> From<FieldRef<T>> for SelectItem {
-    fn from(field: FieldRef<T>) -> Self {
-        select_item_for_ref(field)
+impl<T> IntoColumn for FieldRef<T> {
+    fn into_column(self) -> ColumnList {
+        ColumnList::one(select_item_for_ref(self))
     }
 }
 
-impl<T> From<&FieldRef<T>> for SelectItem {
-    fn from(field: &FieldRef<T>) -> Self {
-        select_item_for_ref(field.clone())
+impl<T> IntoColumn for &FieldRef<T> {
+    fn into_column(self) -> ColumnList {
+        ColumnList::one(select_item_for_ref(self.clone()))
     }
 }
 
-impl From<Meta> for SelectItem {
-    fn from(meta: Meta) -> Self {
-        select_item_for_meta(meta)
+impl IntoColumn for Meta {
+    fn into_column(self) -> ColumnList {
+        ColumnList::one(select_item_for_meta(self))
     }
 }
 
-impl From<&Meta> for SelectItem {
-    fn from(meta: &Meta) -> Self {
-        select_item_for_meta(*meta)
+impl IntoColumn for &Meta {
+    fn into_column(self) -> ColumnList {
+        ColumnList::one(select_item_for_meta(*self))
     }
 }
 
-impl IntoSelectItems for SelectItem {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self]
+impl<T> IntoColumns for Vec<Field<T>> {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.into_iter().map(select_item_for_field).collect(),
+        }
     }
 }
 
-impl<T> IntoSelectItems for Field<T> {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self.into()]
+impl<T> IntoColumns for &[Field<T>] {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.iter().copied().map(select_item_for_field).collect(),
+        }
     }
 }
 
-impl<T> IntoSelectItems for &Field<T> {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self.into()]
+impl<T, const N: usize> IntoColumns for [Field<T>; N] {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.into_iter().map(select_item_for_field).collect(),
+        }
     }
 }
 
-impl<T> IntoSelectItems for FieldRef<T> {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self.into()]
+impl<T> IntoColumns for Vec<FieldRef<T>> {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.into_iter().map(select_item_for_ref).collect(),
+        }
     }
 }
 
-impl<T> IntoSelectItems for &FieldRef<T> {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self.into()]
+impl<T> IntoColumns for &[FieldRef<T>] {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.iter().cloned().map(select_item_for_ref).collect(),
+        }
     }
 }
 
-impl IntoSelectItems for Meta {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self.into()]
+impl<T, const N: usize> IntoColumns for [FieldRef<T>; N] {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.into_iter().map(select_item_for_ref).collect(),
+        }
     }
 }
 
-impl IntoSelectItems for &Meta {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        vec![self.into()]
+impl IntoColumns for Vec<Meta> {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.into_iter().map(select_item_for_meta).collect(),
+        }
     }
 }
 
-impl IntoSelectItems for Vec<SelectItem> {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        self
+impl IntoColumns for &[Meta] {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.iter().copied().map(select_item_for_meta).collect(),
+        }
     }
 }
 
-impl IntoSelectItems for &[SelectItem] {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        self.to_vec()
-    }
-}
-
-impl<const N: usize> IntoSelectItems for [SelectItem; N] {
-    fn into_select_items(self) -> Vec<SelectItem> {
-        self.into_iter().collect()
+impl<const N: usize> IntoColumns for [Meta; N] {
+    fn into_columns(self) -> ColumnList {
+        ColumnList {
+            items: self.into_iter().map(select_item_for_meta).collect(),
+        }
     }
 }
 
 macro_rules! impl_select_item_tuple {
     ($($name:ident),+ $(,)?) => {
-        impl<$($name),+> IntoSelectItems for ($($name,)+)
+        impl<$($name),+> IntoColumns for ($($name,)+)
         where
-            $($name: IntoSelectItems,)+
+            $($name: IntoColumn,)+
         {
             #[allow(non_snake_case)]
-            fn into_select_items(self) -> Vec<SelectItem> {
+            fn into_columns(self) -> ColumnList {
                 let ($($name,)+) = self;
                 let mut items = Vec::new();
-                $(items.extend($name.into_select_items());)+
-                items
+                $(items.extend($name.into_column().items);)+
+                ColumnList { items }
             }
         }
     };

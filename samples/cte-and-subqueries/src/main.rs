@@ -132,7 +132,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // generated table field for `count(*) AS item_count`.
     let item_counts = subquery(
         select(items::table())
-            .item(count_all().alias("item_count"))
+            .expr_as(count_all(), "item_count")
             .filter(items::ORDER_ID.eq_field(o.id())),
         "item_counts",
         item_count,

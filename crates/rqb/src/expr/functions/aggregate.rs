@@ -1,4 +1,4 @@
-use crate::{Field, FieldRef, OrderItem, SelectItem, ValueExpr};
+use crate::{Field, FieldRef, Meta, OrderItem, ValueExpr};
 
 /// Builds a generic aggregate function call.
 pub fn aggregate(
@@ -6,14 +6,14 @@ pub fn aggregate(
     args: impl IntoIterator<Item = impl Into<ValueExpr>>,
     distinct: bool,
 ) -> ValueExpr {
-    ValueExpr::Aggregate {
+    ValueExpr::aggregate(
         name,
-        args: args.into_iter().map(Into::into).collect(),
+        args.into_iter().map(Into::into).collect(),
         distinct,
-        order_by: Vec::new(),
-        filter: None,
-        over: None,
-    }
+        Vec::new(),
+        None,
+        None,
+    )
 }
 
 /// Builds an ordered-set aggregate with a `WITHIN GROUP` ordering.
@@ -22,12 +22,12 @@ pub fn ordered_set_aggregate(
     args: impl IntoIterator<Item = impl Into<ValueExpr>>,
     within_group: impl IntoIterator<Item = OrderItem>,
 ) -> ValueExpr {
-    ValueExpr::OrderedSetAggregate {
+    ValueExpr::ordered_set_aggregate(
         name,
-        args: args.into_iter().map(Into::into).collect(),
-        within_group: within_group.into_iter().collect(),
-        filter: None,
-    }
+        args.into_iter().map(Into::into).collect(),
+        within_group.into_iter().collect(),
+        None,
+    )
 }
 
 macro_rules! aggregate_fn {
@@ -81,9 +81,20 @@ aggregate_fn!(/// Builds `jsonb_agg(expr)`.
 aggregate_fn!(/// Builds `jsonb_agg_strict(expr)`.
     jsonb_agg_strict => "jsonb_agg_strict");
 
-/// Builds `jsonb_agg(jsonb_build_object(...))` from selected fields or aliased expressions.
-pub fn jsonb_agg_object(items: impl IntoIterator<Item = impl Into<SelectItem>>) -> ValueExpr {
-    __jsonb_agg_object_from_pairs(items.into_iter().map(select_item_jsonb_object_pair))
+/// Builds `jsonb_agg(jsonb_build_object(...))` from fields or explicit key/value pairs.
+///
+/// The function form accepts a homogeneous iterator. Use
+/// [`jsonb_agg_object!`](crate::jsonb_agg_object!) when mixing fields and
+/// computed pairs in one call.
+pub fn jsonb_agg_object<T>(items: impl IntoIterator<Item = T>) -> ValueExpr
+where
+    T: JsonbObjectItem,
+{
+    __jsonb_agg_object_from_pairs(
+        items
+            .into_iter()
+            .map(JsonbObjectItem::into_jsonb_object_pair),
+    )
 }
 
 #[doc(hidden)]
@@ -92,13 +103,13 @@ pub fn __jsonb_agg_object_from_pairs(
 ) -> ValueExpr {
     aggregate(
         "jsonb_agg",
-        [ValueExpr::Function {
-            name: "jsonb_build_object",
-            args: items
+        [ValueExpr::function(
+            "jsonb_build_object",
+            items
                 .into_iter()
                 .flat_map(|(key, expr)| [ValueExpr::from(key), expr])
                 .collect(),
-        }],
+        )],
         false,
     )
 }
@@ -125,9 +136,15 @@ impl<T> JsonbObjectItem for FieldRef<T> {
     }
 }
 
-impl JsonbObjectItem for SelectItem {
+impl JsonbObjectItem for Meta {
     fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
-        select_item_jsonb_object_pair(self)
+        (self.api.to_owned(), self.expr())
+    }
+}
+
+impl JsonbObjectItem for &Meta {
+    fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
+        (self.api.to_owned(), self.expr())
     }
 }
 
@@ -147,15 +164,6 @@ where
     fn into_jsonb_object_pair(self) -> (String, ValueExpr) {
         (self.0, self.1.into())
     }
-}
-
-fn select_item_jsonb_object_pair(item: impl Into<SelectItem>) -> (String, ValueExpr) {
-    let SelectItem { expr, alias } = item.into();
-    let key = alias
-        .or_else(|| expr.field_meta().map(|meta| meta.api.to_owned()))
-        .unwrap_or_else(|| "value".to_owned());
-
-    (key, expr)
 }
 
 /// Builds `string_agg(expr, delimiter)`.
@@ -277,8 +285,5 @@ pub fn mode(order_by: impl Into<ValueExpr>) -> ValueExpr {
 
 /// Builds `GROUPING(...)` for grouped reports using rollups, cubes, or grouping sets.
 pub fn grouping(args: impl IntoIterator<Item = impl Into<ValueExpr>>) -> ValueExpr {
-    ValueExpr::Function {
-        name: "GROUPING",
-        args: args.into_iter().map(Into::into).collect(),
-    }
+    ValueExpr::function("GROUPING", args.into_iter().map(Into::into).collect())
 }

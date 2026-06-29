@@ -1,6 +1,7 @@
+pub(super) use crate::source::{Join, JoinKind};
 pub(super) use crate::{
-    BindValue, BoolExpr, Cte, Field, FieldRef, IntoFieldMetas, Join, JoinKind, Meta, Param, Source,
-    ValueExpr, cte, raw as raw_sql, subquery,
+    BindValue, BoolExpr, Cte, Field, FieldRef, IntoFieldMetas, Meta, Param, Source, ValueExpr, cte,
+    raw as raw_sql, subquery,
 };
 pub(super) use crate::{Error, Result};
 
@@ -85,18 +86,21 @@ mod update;
 mod validate;
 
 pub use ast::{
-    Assignment, AssignmentValue, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause,
-    ConflictFields, ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem,
-    Insert, InsertBody, Insertable, IntoAssignments, LockMode, LockWait, MatchedMergeBuilder,
-    Merge, MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder,
-    NullsPosition, OrderDirection, OrderItem, RawStmt, RowLimit, RowLock, Select, SelectItem,
-    SetOperator, SetQuery, Stmt, Update,
+    Assignment, Changeset, ColumnConflictBuilder, ConflictFields, ConstraintConflictBuilder,
+    Delete, Insert, Insertable, LockMode, MatchedMergeBuilder, Merge,
+    NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, OrderItem, RawStmt, Select, SetQuery,
+    Stmt, Update,
+};
+pub(crate) use ast::{
+    AssignmentValue, ConflictAction, ConflictClause, ConflictTarget, FetchClause, GroupByItem,
+    InsertBody, IntoAssignments, LockWait, MergeAction, MergeWhen, NullsPosition, OrderDirection,
+    RowLimit, RowLock, SelectItem, SetOperator,
 };
 pub use constructors::{
     delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw, select,
     union, union_all, update,
 };
-pub use items::IntoSelectItems;
+pub use items::{ColumnList, IntoColumn, IntoColumns};
 
 use helpers::*;
 

@@ -14,10 +14,10 @@ pub async fn orders_by_day(db: &PgPool, days: i64) -> rqb::Result<Vec<DailyOrder
     // local variable when SELECT, GROUP BY, and ORDER BY must refer to the
     // same SQL fragment.
     select(orders::table())
-        .item(day.clone().alias("day"))
+        .expr_as(day.clone(), "day")
         .column(orders::STATUS)
-        .item(count_all().alias("order_count"))
-        .item(sum(orders::TOTAL_CENTS).cast("int8").alias("gross_cents"))
+        .expr_as(count_all(), "order_count")
+        .expr_as(sum(orders::TOTAL_CENTS).cast("int8"), "gross_cents")
         .filter(orders::CREATED_AT.gte(since))
         .group_by(day.clone())
         .group_by(orders::STATUS)

@@ -119,20 +119,11 @@ impl<T> FieldRef<Vec<T>> {
         values: impl Into<ValueExpr>,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self.expr(),
-            op,
-            right: values.into(),
-            negated,
-        }
+        BoolExpr::infix(self.expr(), op, values.into(), negated)
     }
 
     fn any_expr_predicate(self, value: impl Into<ValueExpr>, negated: bool) -> BoolExpr {
-        BoolExpr::Any {
-            value: value.into(),
-            array: self.expr(),
-            negated,
-        }
+        BoolExpr::any(value.into(), self.expr(), negated)
     }
 }
 
@@ -167,52 +158,39 @@ where
 
     /// Builds an empty-array predicate.
     pub fn is_empty(self) -> BoolExpr {
-        BoolExpr::ArrayIsEmpty {
-            expr: self.expr(),
-            negated: false,
-        }
+        BoolExpr::array_is_empty(self.expr(), false)
     }
 
     /// Builds a non-empty-array predicate.
     pub fn is_not_empty(self) -> BoolExpr {
-        BoolExpr::ArrayIsEmpty {
-            expr: self.expr(),
-            negated: true,
-        }
+        BoolExpr::array_is_empty(self.expr(), true)
     }
 
     /// Builds an array subscript expression.
     pub fn element(self, index: i32) -> ValueExpr {
-        ValueExpr::Subscript {
-            expr: Box::new(self.expr()),
-            index: Box::new(ValueExpr::Param(Param::typed(index))),
-        }
+        ValueExpr::subscript(self.expr(), ValueExpr::Param(Param::typed(index)))
     }
 
     /// Builds an array slice expression.
     pub fn slice(self, start: Option<i32>, end: Option<i32>) -> ValueExpr {
-        ValueExpr::Slice {
-            expr: Box::new(self.expr()),
-            start: start.map(|value| Box::new(ValueExpr::Param(Param::typed(value)))),
-            end: end.map(|value| Box::new(ValueExpr::Param(Param::typed(value)))),
-        }
+        ValueExpr::slice(
+            self.expr(),
+            start.map(|value| ValueExpr::Param(Param::typed(value))),
+            end.map(|value| ValueExpr::Param(Param::typed(value))),
+        )
     }
 
     fn array_infix(self, op: &'static str, values: Vec<T>, negated: bool) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self.expr(),
+        BoolExpr::infix(
+            self.expr(),
             op,
-            right: ValueExpr::Param(Param::typed(values)),
+            ValueExpr::Param(Param::typed(values)),
             negated,
-        }
+        )
     }
 
     fn any_predicate(self, value: T, negated: bool) -> BoolExpr {
-        BoolExpr::Any {
-            value: ValueExpr::Param(Param::typed(value)),
-            array: self.expr(),
-            negated,
-        }
+        BoolExpr::any(ValueExpr::Param(Param::typed(value)), self.expr(), negated)
     }
 }
 
@@ -327,12 +305,12 @@ where
 {
     /// Builds a range contains element predicate (`@>`).
     pub fn range_contains(self, value: T) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self.expr(),
-            op: "@>",
-            right: ValueExpr::Param(Param::typed(value)),
-            negated: false,
-        }
+        BoolExpr::infix(
+            self.expr(),
+            "@>",
+            ValueExpr::Param(Param::typed(value)),
+            false,
+        )
     }
 
     /// Builds a range contains range predicate (`@>`).
@@ -376,12 +354,12 @@ where
     }
 
     fn range_infix(self, op: &'static str, value: sqlx::postgres::types::PgRange<T>) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self.expr(),
+        BoolExpr::infix(
+            self.expr(),
             op,
-            right: ValueExpr::Param(Param::typed(value)),
-            negated: false,
-        }
+            ValueExpr::Param(Param::typed(value)),
+            false,
+        )
     }
 }
 
@@ -438,19 +416,14 @@ impl FieldRef<serde_json::Value> {
     }
 
     fn json_infix(self, op: &'static str, param: Param) -> BoolExpr {
-        BoolExpr::Infix {
-            left: self.expr(),
-            op,
-            right: ValueExpr::Param(param),
-            negated: false,
-        }
+        BoolExpr::infix(self.expr(), op, ValueExpr::Param(param), false)
     }
 
     fn json_value_infix(self, op: &'static str, param: Param) -> ValueExpr {
-        ValueExpr::Binary {
-            left: Box::new(self.expr()),
-            op: super::ValueOp::Custom(op),
-            right: Box::new(ValueExpr::Param(param)),
-        }
+        ValueExpr::binary(
+            self.expr(),
+            super::ValueOp::Custom(op),
+            ValueExpr::Param(param),
+        )
     }
 }

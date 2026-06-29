@@ -95,16 +95,18 @@ impl Merge {
         }
     }
 
-    /// Adds one item to `RETURNING`.
-    pub fn returning(mut self, field: impl Into<SelectItem>) -> Self {
-        self.returning.push(field.into());
+    /// Adds one field to `RETURNING`.
+    pub fn returning<T>(mut self, field: Field<T>) -> Self {
+        self.returning.push(select_item_for_field(field));
         self
     }
 
-    /// Adds an arbitrary item to `RETURNING`.
-    #[inline]
-    pub fn returning_item(mut self, item: SelectItem) -> Self {
-        self.returning.push(item);
+    /// Adds an aliased expression to `RETURNING`.
+    pub fn returning_as(mut self, expr: impl Into<ValueExpr>, alias: impl Into<String>) -> Self {
+        self.returning.push(SelectItem {
+            expr: expr.into(),
+            alias: Some(alias.into()),
+        });
         self
     }
 
@@ -115,10 +117,7 @@ impl Merge {
         let mut returning = Vec::new();
         self.target.for_each_field(|field| {
             returning.push(SelectItem {
-                expr: ValueExpr::Field {
-                    meta: *field,
-                    qualifier: qualifier.clone(),
-                },
+                expr: ValueExpr::field(*field, qualifier.clone()),
                 alias: field_alias(field),
             });
         });

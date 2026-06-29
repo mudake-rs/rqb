@@ -259,8 +259,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // SQL is needed for common report columns.
     let invoice_report_sql = select(invoices::table())
         .columns((invoices::ID, invoices::DUE_ON))
-        .item(to_char(invoices::DUE_ON, "YYYY-MM-DD").alias("due_day"))
-        .item(range_lower(invoices::SERVICE_DAYS).alias("service_start"))
+        .expr_as(to_char(invoices::DUE_ON, "YYYY-MM-DD"), "due_day")
+        .expr_as(range_lower(invoices::SERVICE_DAYS), "service_start")
         .filter(isempty(invoices::SERVICE_DAYS))
         .build()?;
 

@@ -322,13 +322,13 @@ impl FieldRef<String> {
         case_insensitive: bool,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Like {
-            expr: self.expr(),
-            pattern: ValueExpr::Param(Param::typed(pattern.as_ref().to_owned())),
+        BoolExpr::like(
+            self.expr(),
+            ValueExpr::Param(Param::typed(pattern.as_ref().to_owned())),
             case_insensitive,
             negated,
-            escape: false,
-        }
+            false,
+        )
     }
 
     fn like_expr_predicate(
@@ -337,29 +337,25 @@ impl FieldRef<String> {
         case_insensitive: bool,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Like {
-            expr: self.expr(),
-            pattern: pattern.into(),
+        BoolExpr::like(
+            self.expr(),
+            pattern.into(),
             case_insensitive,
             negated,
-            escape: false,
-        }
+            false,
+        )
     }
 
     fn similar_predicate(self, pattern: impl AsRef<str>, negated: bool) -> BoolExpr {
-        BoolExpr::SimilarTo {
-            expr: self.expr(),
-            pattern: ValueExpr::Param(Param::typed(pattern.as_ref().to_owned())),
+        BoolExpr::similar_to(
+            self.expr(),
+            ValueExpr::Param(Param::typed(pattern.as_ref().to_owned())),
             negated,
-        }
+        )
     }
 
     fn similar_expr_predicate(self, pattern: impl Into<ValueExpr>, negated: bool) -> BoolExpr {
-        BoolExpr::SimilarTo {
-            expr: self.expr(),
-            pattern: pattern.into(),
-            negated,
-        }
+        BoolExpr::similar_to(self.expr(), pattern.into(), negated)
     }
 
     fn affix_predicate(
@@ -369,17 +365,17 @@ impl FieldRef<String> {
         suffix: &'static str,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Like {
-            expr: self.expr(),
-            pattern: ValueExpr::Param(Param::typed(escaped_like_pattern(
+        BoolExpr::like(
+            self.expr(),
+            ValueExpr::Param(Param::typed(escaped_like_pattern(
                 value.as_ref(),
                 prefix,
                 suffix,
             ))),
-            case_insensitive: true,
+            true,
             negated,
-            escape: true,
-        }
+            true,
+        )
     }
 
     fn affix_expr_predicate(
@@ -389,13 +385,13 @@ impl FieldRef<String> {
         suffix: &'static str,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Like {
-            expr: self.expr(),
-            pattern: affix_like_pattern_expr(value, prefix, suffix),
-            case_insensitive: true,
+        BoolExpr::like(
+            self.expr(),
+            affix_like_pattern_expr(value, prefix, suffix),
+            true,
             negated,
-            escape: true,
-        }
+            true,
+        )
     }
 
     fn regex_predicate(
@@ -404,12 +400,12 @@ impl FieldRef<String> {
         case_insensitive: bool,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Regex {
-            expr: self.expr(),
-            pattern: ValueExpr::Param(Param::typed(pattern.into())),
+        BoolExpr::regex(
+            self.expr(),
+            ValueExpr::Param(Param::typed(pattern.into())),
             case_insensitive,
             negated,
-        }
+        )
     }
 
     fn regex_expr_predicate(
@@ -418,12 +414,7 @@ impl FieldRef<String> {
         case_insensitive: bool,
         negated: bool,
     ) -> BoolExpr {
-        BoolExpr::Regex {
-            expr: self.expr(),
-            pattern: pattern.into(),
-            case_insensitive,
-            negated,
-        }
+        BoolExpr::regex(self.expr(), pattern.into(), case_insensitive, negated)
     }
 }
 

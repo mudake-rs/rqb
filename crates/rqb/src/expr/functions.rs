@@ -102,10 +102,7 @@ pub fn literal(value: &'static str) -> ValueExpr {
 /// `??` for a literal question mark; placeholder scanning ignores SQL strings,
 /// quoted identifiers, dollar quotes, and comments.
 pub fn raw_expr(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> ValueExpr {
-    ValueExpr::Raw {
-        sql: sql.into(),
-        params: params.into(),
-    }
+    ValueExpr::raw(sql, params)
 }
 
 /// Builds a server-owned raw predicate with rqb `?` placeholders.
@@ -115,10 +112,7 @@ pub fn raw_expr(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> ValueE
 /// `??` for a literal question mark; bind-count mismatches fail validation
 /// before rendering or execution.
 pub fn raw_predicate(sql: impl Into<String>, params: impl Into<Vec<Param>>) -> BoolExpr {
-    BoolExpr::Raw {
-        sql: sql.into(),
-        params: params.into(),
-    }
+    BoolExpr::raw(sql, params)
 }
 
 /// Builds a scalar subquery value expression.
@@ -136,10 +130,7 @@ pub fn function(
     name: &'static str,
     args: impl IntoIterator<Item = impl Into<ValueExpr>>,
 ) -> ValueExpr {
-    ValueExpr::Function {
-        name,
-        args: args.into_iter().map(Into::into).collect(),
-    }
+    ValueExpr::function(name, args.into_iter().map(Into::into).collect())
 }
 
 /// Builds an SQL array expression from value expressions.
@@ -232,10 +223,7 @@ impl_row_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 /// Builds an array or JSON subscript expression.
 pub fn subscript(expr: impl Into<ValueExpr>, index: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Subscript {
-        expr: Box::new(expr.into()),
-        index: Box::new(index.into()),
-    }
+    ValueExpr::subscript(expr.into(), index.into())
 }
 
 /// Builds an array or JSON slice expression.
@@ -244,36 +232,20 @@ pub fn slice(
     start: Option<impl Into<ValueExpr>>,
     end: Option<impl Into<ValueExpr>>,
 ) -> ValueExpr {
-    ValueExpr::Slice {
-        expr: Box::new(expr.into()),
-        start: start.map(|expr| Box::new(expr.into())),
-        end: end.map(|expr| Box::new(expr.into())),
-    }
+    ValueExpr::slice(expr.into(), start.map(Into::into), end.map(Into::into))
 }
 
 /// Builds a Postgres `||` concatenation expression.
 pub fn concat_op(left: impl Into<ValueExpr>, right: impl Into<ValueExpr>) -> ValueExpr {
-    ValueExpr::Binary {
-        left: Box::new(left.into()),
-        op: ValueOp::Custom("||"),
-        right: Box::new(right.into()),
-    }
+    ValueExpr::binary(left.into(), ValueOp::Custom("||"), right.into())
 }
 
 /// Builds a `SIMILAR TO` predicate.
 pub fn similar_to(expr: impl Into<ValueExpr>, pattern: impl Into<ValueExpr>) -> BoolExpr {
-    BoolExpr::SimilarTo {
-        expr: expr.into(),
-        pattern: pattern.into(),
-        negated: false,
-    }
+    BoolExpr::similar_to(expr.into(), pattern.into(), false)
 }
 
 /// Builds a negated `SIMILAR TO` predicate.
 pub fn not_similar_to(expr: impl Into<ValueExpr>, pattern: impl Into<ValueExpr>) -> BoolExpr {
-    BoolExpr::SimilarTo {
-        expr: expr.into(),
-        pattern: pattern.into(),
-        negated: true,
-    }
+    BoolExpr::similar_to(expr.into(), pattern.into(), true)
 }

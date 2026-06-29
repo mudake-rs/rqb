@@ -1,6 +1,9 @@
+use super::{
+    FetchClause, InsertBody, Join, JoinKind, MergeAction, MergeWhen, RowLimit, SelectItem,
+    SetOperator,
+};
 use crate::{
-    BoolExpr, BoolOp, FetchClause, Field, InsertBody, Join, JoinKind, MergeAction, MergeWhen, Meta,
-    OpSet, OrderItem, Param, RawStmt, RowLimit, Select, SelectItem, SetOperator, SetQuery, Source,
+    BoolExpr, BoolOp, Field, Meta, OpSet, OrderItem, Param, RawStmt, Select, SetQuery, Source,
     ValueExpr, cte, cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
 };
 
@@ -112,6 +115,30 @@ fn fetch_with_ties_requires_order() {
         without_order.validate().unwrap_err(),
         crate::Error::InvalidSelectShape { message }
             if message == "fetch with ties requires order_by"
+    ));
+}
+
+#[test]
+fn projection_and_returning_aliases_cannot_be_empty() {
+    let projection_err = select(users())
+        .expr_as(ID.expr(), "")
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        projection_err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "projection alias cannot be empty"
+    ));
+
+    let returning_err = insert(users())
+        .set(ID.set(1))
+        .returning_as(ID.expr(), "")
+        .validate()
+        .unwrap_err();
+    assert!(matches!(
+        returning_err,
+        crate::Error::InvalidSelectShape { message }
+            if message == "returning alias cannot be empty"
     ));
 }
 
@@ -596,13 +623,13 @@ fn update_from_sources_are_validated() {
 
 #[test]
 fn returning_expressions_are_validated_for_writes() {
-    let insert = insert(users()).set(ID.set(1)).returning_item(SelectItem {
-        expr: ValueExpr::Raw {
+    let insert = insert(users()).set(ID.set(1)).returning_as(
+        ValueExpr::Raw {
             sql: "?".to_owned(),
             params: Vec::new(),
         },
-        alias: Some("broken".to_owned()),
-    });
+        "broken",
+    );
 
     assert!(matches!(
         insert.validate().unwrap_err(),

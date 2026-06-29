@@ -217,8 +217,7 @@ pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
     let o = orders::alias("o");
     let e = events::alias("e");
     let orders_json = jsonb_agg_object![o.id(), o.status(), o.total_cents()]
-        .aggregate_filter(o.id().is_not_null())
-        .alias("orders");
+        .aggregate_filter(o.id().is_not_null());
 
     // The CTE exposes exactly the projected fields. `source().alias("u")`
     // then gives the outer query a normal relation source.
@@ -232,14 +231,13 @@ pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
         .with(active_users)
         .left_join(&o, u.id().eq_field(o.user_id()))
         .left_join(&e, e.order_id().eq_field(o.id()))
-        .column(u.email().alias("email"))
-        .item(
-            count_all()
-                .aggregate_filter(o.id().is_not_null())
-                .alias("order_count"),
+        .expr_as(u.email(), "email")
+        .expr_as(
+            count_all().aggregate_filter(o.id().is_not_null()),
+            "order_count",
         )
-        .item(orders_json)
-        .item(max(e.created_at()).alias("last_event_at"))
+        .expr_as(orders_json, "orders")
+        .expr_as(max(e.created_at()), "last_event_at")
         .group_by(u.email())
         .fetch_all_as::<UserOrderSummaryRow>(db)
         .await

@@ -52,15 +52,17 @@ impl BoolExpr {
 
     pub(crate) fn and_pair(left: Self, right: Self) -> Self {
         match (left, right) {
-            (Self::And(mut left), Self::And(right)) if !left.is_empty() && !right.is_empty() => {
+            (BoolExpr::And(mut left), BoolExpr::And(right))
+                if !left.is_empty() && !right.is_empty() =>
+            {
                 left.extend(right);
                 Self::And(left)
             }
-            (Self::And(mut left), right) if !left.is_empty() => {
+            (BoolExpr::And(mut left), right) if !left.is_empty() => {
                 left.push(right);
                 Self::And(left)
             }
-            (left, Self::And(right)) if !right.is_empty() => {
+            (left, BoolExpr::And(right)) if !right.is_empty() => {
                 let mut exprs = Vec::with_capacity(right.len() + 1);
                 exprs.push(left);
                 exprs.extend(right);
@@ -80,15 +82,17 @@ impl BoolExpr {
 
     pub(crate) fn or_pair(left: Self, right: Self) -> Self {
         match (left, right) {
-            (Self::Or(mut left), Self::Or(right)) if !left.is_empty() && !right.is_empty() => {
+            (BoolExpr::Or(mut left), BoolExpr::Or(right))
+                if !left.is_empty() && !right.is_empty() =>
+            {
                 left.extend(right);
                 Self::Or(left)
             }
-            (Self::Or(mut left), right) if !left.is_empty() => {
+            (BoolExpr::Or(mut left), right) if !left.is_empty() => {
                 left.push(right);
                 Self::Or(left)
             }
-            (left, Self::Or(right)) if !right.is_empty() => {
+            (left, BoolExpr::Or(right)) if !right.is_empty() => {
                 let mut exprs = Vec::with_capacity(right.len() + 1);
                 exprs.push(left);
                 exprs.extend(right);
@@ -169,11 +173,7 @@ impl ValueExpr {
     }
 
     fn boolean_test(self, test: BooleanTest, negated: bool) -> BoolExpr {
-        BoolExpr::IsBoolean {
-            expr: self,
-            test,
-            negated,
-        }
+        BoolExpr::is_boolean(self, test, negated)
     }
 }
 

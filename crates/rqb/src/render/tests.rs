@@ -474,7 +474,7 @@ fn right_full_cross_and_lateral_joins_render_in_clause_order() {
     let recent = select(orders())
         .column(ORDER_USER_ID)
         .filter(TOTAL.gt(100))
-        .try_into_source("recent")
+        .infer_source("recent")
         .unwrap();
 
     let built = select(users().alias("u"))
@@ -1023,12 +1023,12 @@ fn scalar_subquery_renders_inside_delete_predicates() {
 }
 
 #[test]
-fn select_into_source_infers_field_metadata_from_projection() {
+fn select_infer_source_infers_field_metadata_from_projection() {
     let recent = select(orders())
         .column(ORDER_USER_ID)
         .column(TOTAL)
         .filter(TOTAL.gt(1000))
-        .try_into_source("recent_orders")
+        .infer_source("recent_orders")
         .unwrap();
 
     let built = select(recent.alias("r"))
@@ -1045,16 +1045,16 @@ fn select_into_source_infers_field_metadata_from_projection() {
 }
 
 #[test]
-fn select_into_source_rejects_projection_aliases_that_need_explicit_fields() {
+fn select_infer_source_rejects_projection_aliases_that_need_explicit_fields() {
     let err = select(users())
         .column(EMAIL)
-        .try_into_source("emails")
+        .infer_source("emails")
         .unwrap_err();
 
     assert!(matches!(
         err,
         crate::Error::InvalidSelectShape { message }
-            if message == "try_into_source cannot infer fields from aliased projection; use into_source"
+            if message == "infer_source cannot infer fields from aliased projection; use into_source"
     ));
 }
 
@@ -1085,7 +1085,7 @@ fn not_materialized_cte_renders_hint_and_auto_columns() {
     let active = select(users())
         .column(ID)
         .filter(ACTIVE.eq(true))
-        .try_into_cte("active_users")
+        .infer_cte("active_users")
         .unwrap()
         .not_materialized();
 

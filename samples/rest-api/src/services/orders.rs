@@ -226,7 +226,7 @@ pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
         .column(user_fields::ID)
         .column(user_fields::EMAIL)
         .filter(user_fields::ACTIVE.eq(true))
-        .try_into_cte("active_users")?;
+        .infer_cte("active_users")?;
 
     select(active_users.source().alias("u"))
         .with(active_users)

@@ -32,7 +32,7 @@ impl Select {
     /// Inference succeeds for default projection or plain field projections.
     /// Use `into_source(alias, fields)` when projecting computed expressions or
     /// renaming exposed columns.
-    pub fn try_into_source(self, alias: impl Into<String>) -> crate::Result<Source> {
+    pub fn infer_source(self, alias: impl Into<String>) -> crate::Result<Source> {
         let fields = self.inferred_source_fields()?;
         Ok(subquery(self, alias, fields))
     }
@@ -44,8 +44,8 @@ impl Select {
 
     /// Turns this select into a CTE by inferring exposed fields.
     ///
-    /// Inference has the same rules as `try_into_source`.
-    pub fn try_into_cte(self, name: impl Into<String>) -> crate::Result<Cte> {
+    /// Inference has the same rules as `infer_source`.
+    pub fn infer_cte(self, name: impl Into<String>) -> crate::Result<Cte> {
         let fields = self.inferred_source_fields()?;
         Ok(cte(name, self, fields))
     }
@@ -404,12 +404,12 @@ impl Select {
         for item in &self.projection {
             let Some(meta) = item.expr.field_meta() else {
                 return Err(crate::Error::InvalidSelectShape {
-                    message: "try_into_source cannot infer fields from computed projection; use into_source",
+                    message: "infer_source cannot infer fields from computed projection; use into_source",
                 });
             };
             if item.alias.as_deref().is_some_and(|alias| alias != meta.db) {
                 return Err(crate::Error::InvalidSelectShape {
-                    message: "try_into_source cannot infer fields from aliased projection; use into_source",
+                    message: "infer_source cannot infer fields from aliased projection; use into_source",
                 });
             }
             fields.push(*meta);

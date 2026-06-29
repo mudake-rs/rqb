@@ -13,12 +13,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let o = orders::alias("o");
     let last_event_at = rqb::field!("last_event_at": timestamptz => DateTime<Utc>, ordered);
 
-    // `try_into_cte` infers exposed fields from explicit field projections, so
+    // `infer_cte` infers exposed fields from explicit field projections, so
     // common CTEs do not repeat explicit field metadata.
     let active_users = select(users::table())
         .columns((users::ID, users::EMAIL))
         .filter(users::ACTIVE.eq(true))
-        .try_into_cte("active_users")?
+        .infer_cte("active_users")?
         .not_materialized();
     let active_users_source = active_users.source().alias("au");
 

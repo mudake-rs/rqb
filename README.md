@@ -234,7 +234,7 @@ use rqb::prelude::*;
 let paid_orders = select(schema::orders::table())
     .columns((schema::orders::USER_ID, schema::orders::TOTAL_CENTS))
     .filter(schema::orders::STATUS.eq("paid"))
-    .try_into_cte("paid_orders")?;
+    .infer_cte("paid_orders")?;
 
 let po = paid_orders.source().alias("po");
 let u = schema::users::alias("u");
@@ -297,8 +297,8 @@ Grouped analytics can make non-null source columns nullable in result rows.
 dimension values with `NULL`, so downstream `sqlx::FromRow` structs should use
 `Option<T>` for those projected dimensions.
 
-For derived sources, rqb needs exposed field metadata. `Select::try_into_cte`
-and `Select::try_into_source` infer it from explicit field projections.
+For derived sources, rqb needs exposed field metadata. `Select::infer_cte`
+and `Select::infer_source` infer it from explicit field projections.
 Computed columns can use `rqb::field!`:
 
 ```rust
@@ -595,7 +595,7 @@ typed builder instead of falling back to raw SQL:
 let active_ids = select(schema::users::table())
     .column(schema::users::ID)
     .filter(schema::users::ACTIVE.eq(true))
-    .try_into_cte("active_ids")?;
+    .infer_cte("active_ids")?;
 let active_ids_source = active_ids.source().alias("ids");
 let u = schema::users::alias("u");
 

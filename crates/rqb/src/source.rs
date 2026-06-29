@@ -200,7 +200,7 @@ pub fn view(name: &'static str, fields: &'static [&'static Meta]) -> Source {
 
 /// Creates a CTE with explicit exposed field metadata.
 ///
-/// Prefer `Select::try_into_cte(name)` when the CTE projects plain fields and
+/// Prefer `Select::infer_cte(name)` when the CTE projects plain fields and
 /// rqb can infer the exposed metadata from the select list.
 pub fn cte(name: impl Into<String>, stmt: impl Into<Stmt>, fields: impl IntoFieldMetas) -> Cte {
     Cte::new(name, stmt, fields)
@@ -220,7 +220,7 @@ pub fn cte_ref(name: impl Into<String>, fields: impl IntoFieldMetas) -> Source {
 
 /// Creates a subquery source with explicit exposed field metadata.
 ///
-/// Prefer `Select::try_into_source(alias)` when the subquery projects plain
+/// Prefer `Select::infer_source(alias)` when the subquery projects plain
 /// fields and rqb can infer metadata from the select list.
 pub fn subquery(
     stmt: impl Into<Stmt>,

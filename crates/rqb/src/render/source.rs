@@ -15,9 +15,7 @@ impl Renderer {
                 self.sql.push_str(", ");
             }
             write_quoted_ident(&mut self.sql, &cte.name);
-            if !cte.columns.is_empty() {
-                self.render_paren_column_list(cte.columns.iter().map(String::as_str));
-            } else if !cte.fields.is_empty() {
+            if !cte.fields.is_empty() {
                 self.render_paren_column_list(cte.fields.iter().map(|field| field.db));
             }
             self.sql.push_str(" AS");

@@ -150,13 +150,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // `INSERT ... SELECT` stays typed on both sides and validates target column
     // count against the select projection before rendering SQL.
     let seed_open_orders_sql = insert(orders::table())
-        .columns((
-            orders::ID,
-            orders::USER_ID,
-            orders::STATUS,
-            orders::TOTAL_CENTS,
-        ))
         .from_select(
+            (
+                orders::ID,
+                orders::USER_ID,
+                orders::STATUS,
+                orders::TOTAL_CENTS,
+            ),
             select(users::table())
                 .expr(Uuid::nil())
                 .column(users::ID)

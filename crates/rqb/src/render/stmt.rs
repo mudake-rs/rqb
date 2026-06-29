@@ -34,15 +34,12 @@ impl Renderer {
             self.render_bool(having)?;
         }
         self.render_order(&select.order)?;
-        if let Some(limit) = &select.limit {
-            self.sql.push_str(" LIMIT ");
-            self.push_param(limit.clone());
-        }
+        self.render_limit(select.row_limit.as_ref());
         if let Some(offset) = &select.offset {
             self.sql.push_str(" OFFSET ");
             self.push_param(offset.clone());
         }
-        self.render_fetch(select.fetch.as_ref())?;
+        self.render_fetch(select.row_limit.as_ref())?;
         self.render_lock(select.lock.as_ref());
         Ok(())
     }
@@ -55,15 +52,12 @@ impl Renderer {
         self.render_stmt(&set.right)?;
         self.sql.push(')');
         self.render_order(&set.order)?;
-        if let Some(limit) = &set.limit {
-            self.sql.push_str(" LIMIT ");
-            self.push_param(limit.clone());
-        }
+        self.render_limit(set.row_limit.as_ref());
         if let Some(offset) = &set.offset {
             self.sql.push_str(" OFFSET ");
             self.push_param(offset.clone());
         }
-        self.render_fetch(set.fetch.as_ref())?;
+        self.render_fetch(set.row_limit.as_ref())?;
         Ok(())
     }
     pub(super) fn render_projection(&mut self, select: &Select) -> Result<()> {
@@ -104,10 +98,22 @@ impl Renderer {
         Ok(())
     }
     pub(super) fn render_order(&mut self, order: &[crate::OrderItem]) -> Result<()> {
+        self.render_order_clause(" ORDER BY ", order)
+    }
+
+    pub(super) fn render_order_clause(
+        &mut self,
+        prefix: &str,
+        order: &[crate::OrderItem],
+    ) -> Result<()> {
         if order.is_empty() {
             return Ok(());
         }
-        self.sql.push_str(" ORDER BY ");
+        self.sql.push_str(prefix);
+        self.render_order_items(order)
+    }
+
+    pub(super) fn render_order_items(&mut self, order: &[crate::OrderItem]) -> Result<()> {
         for (idx, item) in order.iter().enumerate() {
             if idx > 0 {
                 self.sql.push_str(", ");
@@ -123,8 +129,15 @@ impl Renderer {
         Ok(())
     }
 
-    pub(super) fn render_fetch(&mut self, fetch: Option<&FetchClause>) -> Result<()> {
-        let Some(fetch) = fetch else {
+    pub(super) fn render_limit(&mut self, row_limit: Option<&RowLimit>) {
+        if let Some(RowLimit::Limit(limit)) = row_limit {
+            self.sql.push_str(" LIMIT ");
+            self.push_param(limit.clone());
+        }
+    }
+
+    pub(super) fn render_fetch(&mut self, row_limit: Option<&RowLimit>) -> Result<()> {
+        let Some(RowLimit::Fetch(fetch)) = row_limit else {
             return Ok(());
         };
         self.sql.push_str(" FETCH FIRST ");

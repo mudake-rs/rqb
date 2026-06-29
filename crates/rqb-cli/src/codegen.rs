@@ -837,6 +837,43 @@ mod tests {
     }
 
     #[test]
+    fn cli_ops_tokens_match_schema_macro_contract() {
+        let cases = [
+            (FieldOps::None, "none"),
+            (FieldOps::Equality, "equality"),
+            (FieldOps::Ordered, "ordered"),
+            (FieldOps::Text, "text"),
+        ];
+
+        for (ops, expected) in cases {
+            assert_eq!(super::ops_attr(ops), expected);
+        }
+    }
+
+    #[test]
+    fn cli_json_tokens_match_schema_macro_contract() {
+        let cases = [
+            (None, "none"),
+            (Some(FieldJson::Text), "text"),
+            (Some(FieldJson::Bool), "bool"),
+            (Some(FieldJson::Integer), "integer"),
+            (Some(FieldJson::BigInt), "big_int"),
+            (Some(FieldJson::Float), "float"),
+            (Some(FieldJson::NumericString), "numeric_string"),
+            (Some(FieldJson::Uuid), "uuid"),
+            (Some(FieldJson::Date), "date"),
+            (Some(FieldJson::Time), "time"),
+            (Some(FieldJson::Timestamp), "timestamp"),
+            (Some(FieldJson::Timestamptz), "timestamptz"),
+            (Some(FieldJson::Jsonb), "jsonb"),
+        ];
+
+        for (json, expected) in cases {
+            assert_eq!(super::json_attr(json), expected);
+        }
+    }
+
+    #[test]
     fn renders_postgres_enums_as_sqlx_types_and_typed_fields() {
         let code = render(&SchemaModel {
             enums: vec![enum_type(

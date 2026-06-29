@@ -124,8 +124,6 @@ impl CteMaterialization {
 pub struct Cte {
     /// CTE name.
     pub name: String,
-    /// Optional explicit column aliases.
-    pub columns: Vec<String>,
     /// Whether to render `WITH RECURSIVE`.
     pub recursive: bool,
     /// Optional materialization hint.
@@ -603,22 +601,11 @@ impl Cte {
     ) -> Self {
         Self {
             name: name.into(),
-            columns: Vec::new(),
             recursive: false,
             materialization: None,
             stmt: Box::new(stmt.into()),
             fields: fields.into_field_metas(),
         }
-    }
-
-    /// Sets explicit CTE column aliases.
-    pub fn columns<I, S>(mut self, columns: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.columns = columns.into_iter().map(Into::into).collect();
-        self
     }
 
     /// Marks the CTE and surrounding `WITH` clause as recursive.
@@ -665,12 +652,6 @@ impl Cte {
             return Err(crate::Error::invalid_cte_shape(
                 self.name.clone(),
                 "field count must match SELECT projection count",
-            ));
-        }
-        if !self.columns.is_empty() && self.columns.len() != self.fields.len() {
-            return Err(crate::Error::invalid_cte_shape(
-                self.name.clone(),
-                "column alias count must match exposed field count",
             ));
         }
         self.stmt.validate()
@@ -720,12 +701,6 @@ impl Source {
             Self::Function { .. } => "function",
             Self::Values { .. } => "values",
         }
-    }
-
-    /// Returns true when this source is a table.
-    #[inline]
-    pub const fn is_table(&self) -> bool {
-        matches!(self, Self::Table { .. })
     }
 
     /// Sets or replaces the SQL alias for this source.

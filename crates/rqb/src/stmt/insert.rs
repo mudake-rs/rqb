@@ -6,10 +6,7 @@ impl Insert {
         Self {
             ctes: Vec::new(),
             target: target.into(),
-            columns: Vec::new(),
-            assignments: Vec::new(),
-            source: None,
-            default_values: false,
+            body: InsertBody::Values(Vec::new()),
             conflict: None,
             returning: Vec::new(),
         }
@@ -30,19 +27,14 @@ impl Insert {
     /// generated IDs, tenant IDs, status defaults, or explicit overrides.
     #[inline]
     pub fn set(mut self, assignment: Assignment) -> Self {
-        push_column(&mut self.columns, assignment.field);
-        push_assignment(&mut self.assignments, assignment);
+        push_assignment(self.values_mut(), assignment);
         self
     }
 
     /// Adds multiple column assignments. Later assignments for the same
     /// database column replace earlier values.
     pub fn set_many(mut self, assignments: impl IntoAssignments) -> Self {
-        extend_insert_assignments(
-            &mut self.columns,
-            &mut self.assignments,
-            assignments.into_assignments(),
-        );
+        extend_assignments(self.values_mut(), assignments.into_assignments());
         self
     }
 
@@ -70,11 +62,7 @@ impl Insert {
     /// Call `values(&dto)` first, then `set(...)` for IDs, tenant fields, or
     /// other values owned by the server.
     pub fn values(mut self, values: impl Insertable) -> Self {
-        extend_insert_assignments(
-            &mut self.columns,
-            &mut self.assignments,
-            values.insert_assignments(),
-        );
+        extend_assignments(self.values_mut(), values.insert_assignments());
         self
     }
 
@@ -94,11 +82,7 @@ impl Insert {
         I: IntoIterator<Item = R>,
         R: Insertable,
     {
-        if !self.columns.is_empty()
-            || !self.assignments.is_empty()
-            || self.source.is_some()
-            || self.default_values
-        {
+        if !matches!(&self.body, InsertBody::Values(assignments) if assignments.is_empty()) {
             return Err(Error::InvalidInsertShape {
                 message: "batch insert cannot be combined with existing insert values or source",
             });
@@ -145,24 +129,16 @@ impl Insert {
         Ok(self.from_select_all(crate::values_source(values, alias, columns)))
     }
 
-    /// Adds a target column for `INSERT ... SELECT`.
-    pub fn column<T>(mut self, field: Field<T>) -> Self {
-        push_column(&mut self.columns, *field.meta);
-        self
-    }
-
-    /// Adds multiple target columns for `INSERT ... SELECT`.
-    pub fn columns(mut self, fields: impl IntoFieldMetas) -> Self {
-        for field in fields.into_field_metas() {
-            push_column(&mut self.columns, field);
-        }
-        self
-    }
-
     /// Uses a select statement as the insert source.
-    #[inline]
-    pub fn from_select(mut self, select: Select) -> Self {
-        self.source = Some(Box::new(select));
+    ///
+    /// `columns` owns the complete target-column list for the insert-select
+    /// body. This keeps the AST from carrying pending target columns before a
+    /// select source exists.
+    pub fn from_select(mut self, columns: impl IntoFieldMetas, select: Select) -> Self {
+        self.body = InsertBody::Select {
+            columns: columns.into_field_metas(),
+            select: Box::new(select),
+        };
         self
     }
 
@@ -174,9 +150,10 @@ impl Insert {
     pub fn from_select_all(mut self, source: impl Into<Source>) -> Self {
         let source = source.into();
         let qualifier = source.explicit_alias().map(str::to_owned);
+        let mut columns = Vec::new();
         let mut projection = Vec::new();
         source.for_each_field(|field| {
-            push_column(&mut self.columns, *field);
+            push_column(&mut columns, *field);
             projection.push(SelectItem {
                 expr: ValueExpr::Field {
                     meta: *field,
@@ -187,7 +164,10 @@ impl Insert {
         });
         let mut select = Select::from(source);
         select.projection = projection;
-        self.source = Some(Box::new(select));
+        self.body = InsertBody::Select {
+            columns,
+            select: Box::new(select),
+        };
         self
     }
 
@@ -195,11 +175,11 @@ impl Insert {
     ///
     /// This is for rows where every target column should be populated by its
     /// database default or remain nullable. It can still be combined with
-    /// `RETURNING` and `ON CONFLICT`; validation rejects mixing it with
-    /// `set(...)`, `values(...)`, or `from_select(...)`.
+    /// `RETURNING` and `ON CONFLICT`. Calling a later body method such as
+    /// `set(...)`, `values(...)`, or `from_select(...)` replaces this body.
     #[inline]
     pub fn default_values(mut self) -> Self {
-        self.default_values = true;
+        self.body = InsertBody::DefaultValues;
         self
     }
 
@@ -250,6 +230,16 @@ impl Insert {
     pub fn returning_item(mut self, item: SelectItem) -> Self {
         self.returning.push(item);
         self
+    }
+
+    fn values_mut(&mut self) -> &mut Vec<Assignment> {
+        if !matches!(self.body, InsertBody::Values(_)) {
+            self.body = InsertBody::Values(Vec::new());
+        }
+        let InsertBody::Values(assignments) = &mut self.body else {
+            unreachable!("insert body was just set to values")
+        };
+        assignments
     }
 }
 

@@ -5,32 +5,27 @@ impl Renderer {
         self.render_ctes(&insert.ctes)?;
         self.sql.push_str("INSERT INTO ");
         self.render_write_target(&insert.target);
-        if insert.default_values {
-            self.sql.push_str(" DEFAULT VALUES");
-        } else {
-            self.sql.push(' ');
-            if insert.source.is_some() {
-                self.render_parenthesized_idents(insert.columns.iter().map(|field| field.db));
-            } else {
-                self.render_parenthesized_idents(
-                    insert
-                        .assignments
-                        .iter()
-                        .map(|assignment| assignment.field.db),
-                );
-            }
-            if let Some(source) = &insert.source {
+        match &insert.body {
+            InsertBody::DefaultValues => self.sql.push_str(" DEFAULT VALUES"),
+            InsertBody::Values(assignments) => {
                 self.sql.push(' ');
-                self.render_select(source)?;
-            } else {
+                self.render_parenthesized_idents(
+                    assignments.iter().map(|assignment| assignment.field.db),
+                );
                 self.sql.push_str(" VALUES (");
-                for (idx, assignment) in insert.assignments.iter().enumerate() {
+                for (idx, assignment) in assignments.iter().enumerate() {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
                     self.render_assignment_value(&assignment.value)?;
                 }
                 self.sql.push(')');
+            }
+            InsertBody::Select { columns, select } => {
+                self.sql.push(' ');
+                self.render_parenthesized_idents(columns.iter().map(|field| field.db));
+                self.sql.push(' ');
+                self.render_select(select)?;
             }
         }
         if let Some(conflict) = &insert.conflict {

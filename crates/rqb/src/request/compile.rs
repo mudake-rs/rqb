@@ -1,8 +1,8 @@
 use serde_json::Value as JsonValue;
 
 use crate::{
-    BoolExpr, BoolOp, JsonKind, Meta, OrderDirection, OrderItem, Param, Select, Source, ValueExpr,
-    expr::escaped_like_pattern,
+    BoolExpr, BoolOp, JsonKind, Meta, OrderDirection, OrderItem, Param, RowLimit, Select, Source,
+    ValueExpr, expr::escaped_like_pattern,
 };
 use crate::{Error, Result};
 
@@ -23,7 +23,9 @@ impl SearchRequest {
         let lookup = SearchMetaLookup::new(&select.source);
         let request_filter = self.filter_expr(&lookup)?;
         let order = self.order_items(&lookup)?;
-        let limit = self.limit.map(|limit| Param::typed(i64::from(limit)));
+        let row_limit = self
+            .limit
+            .map(|limit| RowLimit::Limit(Param::typed(i64::from(limit))));
         let offset = self.offset.map(|offset| Param::typed(i64::from(offset)));
         select.filter = match (select.filter, request_filter) {
             (Some(existing), Some(request)) => Some(BoolExpr::and_pair(existing, request)),
@@ -31,7 +33,7 @@ impl SearchRequest {
             (None, Some(request)) => Some(request),
         };
         select.order = order;
-        select.limit = limit;
+        select.row_limit = row_limit;
         select.offset = offset;
         Ok(select)
     }

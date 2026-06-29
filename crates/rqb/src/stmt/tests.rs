@@ -1,7 +1,7 @@
 use crate::{
-    BoolExpr, BoolOp, FetchClause, Field, Join, JoinKind, MergeAction, MergeWhen, Meta, OpSet,
-    OrderItem, Param, RawStmt, Select, SelectItem, SetOperator, SetQuery, Source, ValueExpr, cte,
-    cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
+    BoolExpr, BoolOp, FetchClause, Field, InsertBody, Join, JoinKind, MergeAction, MergeWhen, Meta,
+    OpSet, OrderItem, Param, RawStmt, RowLimit, Select, SelectItem, SetOperator, SetQuery, Source,
+    ValueExpr, cte, cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
 };
 
 static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
@@ -32,9 +32,8 @@ fn subquery_value_expr_renders_nested_params_at_expression_position() {
         group_by: Vec::new(),
         having: None,
         order: Vec::new(),
-        limit: None,
+        row_limit: None,
         offset: None,
-        fetch: None,
         lock: None,
     }));
     let outer = ValueExpr::Subquery(Box::new(subquery));
@@ -78,9 +77,8 @@ fn select_params_follow_sql_text_order() {
         group_by: Vec::new(),
         having: None,
         order: vec![OrderItem::asc(ID)],
-        limit: Some(crate::Param::typed(10_i64)),
+        row_limit: Some(RowLimit::Limit(crate::Param::typed(10_i64))),
         offset: Some(crate::Param::typed(5_i64)),
-        fetch: None,
         lock: None,
     }));
 
@@ -90,7 +88,7 @@ fn select_params_follow_sql_text_order() {
 }
 
 #[test]
-fn fetch_with_ties_requires_order_and_excludes_limit() {
+fn fetch_with_ties_requires_order() {
     let without_order = crate::Stmt::Select(Box::new(Select {
         ctes: Vec::new(),
         source: users(),
@@ -102,12 +100,11 @@ fn fetch_with_ties_requires_order_and_excludes_limit() {
         group_by: Vec::new(),
         having: None,
         order: Vec::new(),
-        limit: None,
-        offset: None,
-        fetch: Some(FetchClause {
+        row_limit: Some(RowLimit::Fetch(FetchClause {
             count: ValueExpr::from(10_i32),
             with_ties: true,
-        }),
+        })),
+        offset: None,
         lock: None,
     }));
 
@@ -116,36 +113,10 @@ fn fetch_with_ties_requires_order_and_excludes_limit() {
         crate::Error::InvalidSelectShape { message }
             if message == "fetch with ties requires order_by"
     ));
-
-    let with_limit = crate::Stmt::Select(Box::new(Select {
-        ctes: Vec::new(),
-        source: users(),
-        joins: Vec::new(),
-        distinct: false,
-        distinct_on: Vec::new(),
-        projection: Vec::new(),
-        filter: None,
-        group_by: Vec::new(),
-        having: None,
-        order: vec![OrderItem::asc(ID)],
-        limit: Some(crate::Param::typed(10_i64)),
-        offset: None,
-        fetch: Some(FetchClause {
-            count: ValueExpr::from(10_i32),
-            with_ties: false,
-        }),
-        lock: None,
-    }));
-
-    assert!(matches!(
-        with_limit.validate().unwrap_err(),
-        crate::Error::InvalidSelectShape { message }
-            if message == "limit and fetch cannot both be set"
-    ));
 }
 
 #[test]
-fn set_query_fetch_with_ties_requires_order_and_excludes_limit() {
+fn set_query_fetch_with_ties_requires_order() {
     let without_order = select(users()).column(ID).union(select(users()).column(ID));
     let err = without_order
         .clone()
@@ -164,20 +135,13 @@ fn set_query_fetch_with_ties_requires_order_and_excludes_limit() {
         operator: SetOperator::Union,
         right: without_order.right,
         order: vec![OrderItem::asc(ID)],
-        limit: Some(Param::typed(10_i64)),
-        offset: None,
-        fetch: Some(FetchClause {
+        row_limit: Some(RowLimit::Fetch(FetchClause {
             count: ValueExpr::from(10_i32),
             with_ties: false,
-        }),
+        })),
+        offset: None,
     };
-    let err = with_limit.validate().unwrap_err();
-
-    assert!(matches!(
-        err,
-        crate::Error::InvalidSelectShape { message }
-            if message == "limit and fetch cannot both be set"
-    ));
+    with_limit.validate().unwrap();
 }
 
 #[test]
@@ -286,9 +250,7 @@ fn select_filter_and_having_chain_with_and_semantics() {
 fn insert_from_select_rejects_projection_count_mismatch() {
     static EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
     const EMAIL: Field<String> = Field::new(&EMAIL_META);
-    let insert = insert(users())
-        .columns((ID, EMAIL))
-        .from_select(select(users()).column(ID));
+    let insert = insert(users()).from_select((ID, EMAIL), select(users()).column(ID));
 
     let err = insert.validate().unwrap_err();
 
@@ -301,7 +263,7 @@ fn insert_from_select_rejects_projection_count_mismatch() {
 
 #[test]
 fn insert_from_select_requires_target_columns() {
-    let insert = insert(users()).from_select(select(users()).column(ID));
+    let insert = insert(users()).from_select((), select(users()).column(ID));
 
     let err = insert.validate().unwrap_err();
 
@@ -325,19 +287,13 @@ fn insert_from_select_all_requires_source_fields() {
 }
 
 #[test]
-fn insert_from_select_rejects_values_assignments() {
+fn insert_from_select_replaces_values_body() {
     let insert = insert(users())
-        .column(ID)
         .set(ID.set(1))
-        .from_select(select(users()).column(ID));
+        .from_select(ID, select(users()).column(ID));
 
-    let err = insert.validate().unwrap_err();
-
-    assert!(matches!(
-        err,
-        crate::Error::InvalidInsertShape { message }
-            if message == "insert-select cannot also contain VALUES assignments"
-    ));
+    insert.validate().unwrap();
+    assert!(matches!(insert.body, InsertBody::Select { .. }));
 }
 
 #[test]
@@ -575,7 +531,7 @@ fn update_and_delete_accept_empty_cte_lists_and_reject_duplicate_names() {
 }
 
 #[test]
-fn insert_default_values_rejects_explicit_values_or_source() {
+fn insert_default_values_body_can_be_replaced() {
     insert(users()).default_values().validate().unwrap();
     insert(users())
         .default_values()
@@ -583,29 +539,15 @@ fn insert_default_values_rejects_explicit_values_or_source() {
         .validate()
         .unwrap();
 
-    let err = insert(users())
-        .default_values()
-        .set(ID.set(1))
-        .validate()
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        crate::Error::InvalidInsertShape {
-            message: "DEFAULT VALUES cannot be combined with insert values or source"
-        }
-    ));
+    let values = insert(users()).default_values().set(ID.set(1));
+    values.validate().unwrap();
+    assert!(matches!(values.body, InsertBody::Values(_)));
 
-    let err = insert(users())
+    let insert_select = insert(users())
         .default_values()
-        .from_select(select(users()).column(ID))
-        .validate()
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        crate::Error::InvalidInsertShape {
-            message: "DEFAULT VALUES cannot be combined with insert values or source"
-        }
-    ));
+        .from_select(ID, select(users()).column(ID));
+    insert_select.validate().unwrap();
+    assert!(matches!(insert_select.body, InsertBody::Select { .. }));
 }
 
 #[test]

@@ -272,115 +272,6 @@ impl BuiltQuery {
     }
 }
 
-impl Stmt {
-    /// Builds and executes the statement.
-    ///
-    /// This is a convenience path; call `build()` first when you need to
-    /// inspect SQL or reuse the same validated query.
-    pub async fn execute<'e>(&self, executor: impl PgExecutor<'e>) -> Result<u64> {
-        self.build()?.execute(executor).await
-    }
-
-    /// Builds the statement and fetches all raw rows.
-    pub async fn fetch_all<'e>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<PgRow>> {
-        self.build()?.fetch_all(executor).await
-    }
-
-    /// Builds the statement and fetches one raw row.
-    pub async fn fetch_one<'e>(&self, executor: impl PgExecutor<'e>) -> Result<PgRow> {
-        self.build()?.fetch_one(executor).await
-    }
-
-    /// Builds the statement and fetches an optional raw row.
-    pub async fn fetch_optional<'e>(&self, executor: impl PgExecutor<'e>) -> Result<Option<PgRow>> {
-        self.build()?.fetch_optional(executor).await
-    }
-
-    /// Builds the statement and streams raw rows from an owned pool-backed query.
-    ///
-    /// For borrowed executor streams, call `build()` and use
-    /// [`BuiltQuery::fetch_stream`].
-    pub fn fetch_stream_pool(self, pool: PgPool) -> Result<BoxStream<'static, Result<PgRow>>> {
-        self.build()?.fetch_stream_pool(pool)
-    }
-
-    /// Builds the statement and fetches all rows into a `sqlx::FromRow` type.
-    ///
-    /// Use scalar helpers when the query returns one column instead of a row
-    /// struct/tuple.
-    pub async fn fetch_all_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
-    where
-        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
-    {
-        self.build()?.fetch_all_as(executor).await
-    }
-
-    /// Builds the statement and fetches one row into a `sqlx::FromRow` type.
-    pub async fn fetch_one_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<T>
-    where
-        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
-    {
-        self.build()?.fetch_one_as(executor).await
-    }
-
-    /// Builds the statement and fetches an optional row into a `sqlx::FromRow` type.
-    pub async fn fetch_optional_as<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Option<T>>
-    where
-        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
-    {
-        self.build()?.fetch_optional_as(executor).await
-    }
-
-    /// Builds the statement and streams rows into a `sqlx::FromRow` type from an owned pool-backed query.
-    ///
-    /// For borrowed executor streams, call `build()` and use
-    /// [`BuiltQuery::fetch_stream_as`].
-    pub fn fetch_stream_pool_as<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
-    where
-        T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'static,
-    {
-        self.build()?.fetch_stream_pool_as(pool)
-    }
-
-    /// Builds the statement and fetches all rows as a single scalar column.
-    pub async fn fetch_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<T>>
-    where
-        T: ScalarValue,
-    {
-        self.build()?.fetch_scalar(executor).await
-    }
-
-    /// Builds the statement and fetches one scalar value.
-    pub async fn fetch_one_scalar<'e, T>(&self, executor: impl PgExecutor<'e>) -> Result<T>
-    where
-        T: ScalarValue,
-    {
-        self.build()?.fetch_one_scalar(executor).await
-    }
-
-    /// Builds the statement and fetches an optional scalar value.
-    pub async fn fetch_optional_scalar<'e, T>(
-        &self,
-        executor: impl PgExecutor<'e>,
-    ) -> Result<Option<T>>
-    where
-        T: ScalarValue,
-    {
-        self.build()?.fetch_optional_scalar(executor).await
-    }
-
-    /// Builds the statement and streams scalar values from an owned pool-backed query.
-    ///
-    /// For borrowed executor streams, call `build()` and use
-    /// [`BuiltQuery::fetch_stream_scalar`].
-    pub fn fetch_stream_pool_scalar<T>(self, pool: PgPool) -> Result<BoxStream<'static, Result<T>>>
-    where
-        T: ScalarValue + 'static,
-    {
-        self.build()?.fetch_stream_pool_scalar(pool)
-    }
-}
-
 impl Select {
     /// Executes a matching `count(*)` query for this select.
     ///
@@ -393,9 +284,8 @@ impl Select {
     pub(crate) fn build_count(&self) -> Result<BuiltQuery> {
         let mut count = self.clone();
         count.order.clear();
-        count.limit = None;
+        count.row_limit = None;
         count.offset = None;
-        count.fetch = None;
         count.lock = None;
         select(subquery(count, "rqb_count", ()))
             .expr(count_all())
@@ -538,3 +428,4 @@ impl_statement_execute!(Update);
 impl_statement_execute!(Delete);
 impl_statement_execute!(Merge);
 impl_statement_execute!(RawStmt);
+impl_statement_execute!(Stmt);

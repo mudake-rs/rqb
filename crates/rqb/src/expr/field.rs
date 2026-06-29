@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::{BindValue, Meta, Param, SelectItem};
 
-use super::{BoolExpr, BoolOp, ValueExpr};
+use super::{BoolExpr, ValueExpr};
 
 /// Typed database field generated from schema metadata.
 ///
@@ -107,7 +107,7 @@ impl<T> Field<T> {
     /// modeled by rqb. Bound values inside the right-hand expression remain
     /// parameters, but PostgreSQL is the final authority on operator validity.
     pub fn op(self, op: &'static str, right: impl Into<ValueExpr>) -> ValueExpr {
-        self.expr().op(op, right)
+        self.reference().op(op, right)
     }
 
     /// Builds a custom boolean infix predicate for this field.
@@ -115,12 +115,12 @@ impl<T> Field<T> {
     /// This is an escape hatch for server-owned PostgreSQL operators not yet
     /// modeled by rqb. Prefer typed helpers when one exists.
     pub fn predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
-        self.expr().predicate(op, right)
+        self.reference().predicate(op, right)
     }
 
     /// Builds a negated custom boolean infix predicate for this field.
     pub fn not_predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
-        self.expr().not_predicate(op, right)
+        self.reference().not_predicate(op, right)
     }
 
     /// Returns this field as an aliased projection item.
@@ -180,37 +180,23 @@ impl<T> Field<T> {
     /// Builds `field IS NULL`.
     #[inline]
     pub fn is_null(self) -> BoolExpr {
-        BoolExpr::IsNull {
-            expr: self.expr(),
-            negated: false,
-        }
+        self.reference().is_null()
     }
 
     /// Builds `field IS NOT NULL`.
     #[inline]
     pub fn is_not_null(self) -> BoolExpr {
-        BoolExpr::IsNull {
-            expr: self.expr(),
-            negated: true,
-        }
+        self.reference().is_not_null()
     }
 
     /// Builds `field IN (subquery)`.
     pub fn in_subquery(self, query: impl Into<crate::Stmt>) -> BoolExpr {
-        BoolExpr::InSubquery {
-            expr: self.expr(),
-            query: Box::new(query.into()),
-            negated: false,
-        }
+        self.reference().in_subquery(query)
     }
 
     /// Builds `field NOT IN (subquery)`.
     pub fn not_in_subquery(self, query: impl Into<crate::Stmt>) -> BoolExpr {
-        BoolExpr::InSubquery {
-            expr: self.expr(),
-            query: Box::new(query.into()),
-            negated: true,
-        }
+        self.reference().not_in_subquery(query)
     }
 
     /// Builds an equality predicate against another field of the same Rust type.
@@ -218,7 +204,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::Eq, right)
+        self.reference().eq_field(right)
     }
 
     /// Builds an inequality predicate against another field of the same Rust type.
@@ -226,7 +212,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::Ne, right)
+        self.reference().ne_field(right)
     }
 
     /// Builds a greater-than predicate against another field of the same Rust type.
@@ -234,7 +220,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::Gt, right)
+        self.reference().gt_field(right)
     }
 
     /// Builds a greater-than-or-equal predicate against another field of the same Rust type.
@@ -242,7 +228,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::Gte, right)
+        self.reference().gte_field(right)
     }
 
     /// Builds a less-than predicate against another field of the same Rust type.
@@ -250,7 +236,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::Lt, right)
+        self.reference().lt_field(right)
     }
 
     /// Builds a less-than-or-equal predicate against another field of the same Rust type.
@@ -258,7 +244,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::Lte, right)
+        self.reference().lte_field(right)
     }
 
     /// Builds `IS DISTINCT FROM` against another field of the same Rust type.
@@ -266,7 +252,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::IsDistinctFrom, right)
+        self.reference().is_distinct_from_field(right)
     }
 
     /// Builds `IS NOT DISTINCT FROM` against another field of the same Rust type.
@@ -274,18 +260,7 @@ impl<T> Field<T> {
     where
         R: IntoFieldRef<T>,
     {
-        self.compare_field(BoolOp::IsNotDistinctFrom, right)
-    }
-
-    fn compare_field<R>(self, op: BoolOp, right: R) -> BoolExpr
-    where
-        R: IntoFieldRef<T>,
-    {
-        BoolExpr::Compare {
-            left: self.expr(),
-            op,
-            right: right.into_field_ref().expr(),
-        }
+        self.reference().is_not_distinct_from_field(right)
     }
 }
 
@@ -305,98 +280,62 @@ impl<T: BindValue> Field<T> {
 
     /// Builds an equality predicate against a bind value.
     pub fn eq(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::Eq, value)
+        self.reference().eq(value)
     }
 
     /// Builds an inequality predicate against a bind value.
     pub fn ne(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::Ne, value)
+        self.reference().ne(value)
     }
 
     /// Builds a greater-than predicate against a bind value.
     pub fn gt(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::Gt, value)
+        self.reference().gt(value)
     }
 
     /// Builds a greater-than-or-equal predicate against a bind value.
     pub fn gte(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::Gte, value)
+        self.reference().gte(value)
     }
 
     /// Builds a less-than predicate against a bind value.
     pub fn lt(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::Lt, value)
+        self.reference().lt(value)
     }
 
     /// Builds a less-than-or-equal predicate against a bind value.
     pub fn lte(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::Lte, value)
+        self.reference().lte(value)
     }
 
     /// Builds an `IS DISTINCT FROM` predicate against a bind value.
     pub fn is_distinct_from(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::IsDistinctFrom, value)
+        self.reference().is_distinct_from(value)
     }
 
     /// Builds an `IS NOT DISTINCT FROM` predicate against a bind value.
     pub fn is_not_distinct_from(self, value: impl Into<T>) -> BoolExpr {
-        self.compare(BoolOp::IsNotDistinctFrom, value)
+        self.reference().is_not_distinct_from(value)
     }
 
     /// Builds `field IN (...)`.
     pub fn in_list(self, values: impl IntoIterator<Item = impl Into<T>>) -> BoolExpr {
-        self.list_predicate(values, false)
+        self.reference().in_list(values)
     }
 
     /// Builds `field NOT IN (...)`.
     pub fn not_in(self, values: impl IntoIterator<Item = impl Into<T>>) -> BoolExpr {
-        self.list_predicate(values, true)
+        self.reference().not_in(values)
     }
 
     /// Builds `field BETWEEN low AND high`.
     pub fn between(self, low: impl Into<T>, high: impl Into<T>) -> BoolExpr {
-        self.between_predicate(low, high, false)
+        self.reference().between(low, high)
     }
 
     /// Builds `field NOT BETWEEN low AND high`.
     pub fn not_between(self, low: impl Into<T>, high: impl Into<T>) -> BoolExpr {
-        self.between_predicate(low, high, true)
-    }
-
-    fn compare(self, op: BoolOp, value: impl Into<T>) -> BoolExpr {
-        BoolExpr::Compare {
-            left: self.expr(),
-            op,
-            right: ValueExpr::Param(Param::typed(value.into())),
-        }
-    }
-
-    fn list_predicate(
-        self,
-        values: impl IntoIterator<Item = impl Into<T>>,
-        negated: bool,
-    ) -> BoolExpr {
-        let values = values
-            .into_iter()
-            .map(|value| ValueExpr::Param(Param::typed(value.into())))
-            .collect::<Vec<_>>();
-        if values.is_empty() {
-            return BoolExpr::Constant(negated);
-        }
-        BoolExpr::InList {
-            expr: self.expr(),
-            values,
-            negated,
-        }
-    }
-
-    fn between_predicate(self, low: impl Into<T>, high: impl Into<T>, negated: bool) -> BoolExpr {
-        BoolExpr::Between {
-            expr: self.expr(),
-            low: ValueExpr::Param(Param::typed(low.into())),
-            high: ValueExpr::Param(Param::typed(high.into())),
-            negated,
-        }
+        self.reference().not_between(low, high)
     }
 }
 

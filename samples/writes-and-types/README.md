@@ -28,7 +28,7 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `values_many(...)` keeps DTO batch upserts from repeating target columns;
   `set_from("alias")` copies update values from the incoming source.
 - Generated constraint name constants feed `on_conflict_constraint(...)`.
-- `insert(...).columns((...)).from_select(...)` validates target column count
+- `insert(...).from_select((...), select(...))` validates target column count
   against the server-owned select projection.
 - Formatting and range helpers such as `to_char`, `range_lower`, and `isempty`
   build common report columns without raw SQL.

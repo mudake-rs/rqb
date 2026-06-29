@@ -259,7 +259,7 @@ Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
 `filter_if(...)` / `filter_option(...)` / `or_filter_option(...)` /
 `set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
 comparisons for cursor pagination, `default_columns()` for root fields plus
-computed projection items, `insert(...).columns((...)).from_select(...)`,
+computed projection items, `insert(...).from_select((...), select(...))`,
 `values_source(...)`, `generate_series_source(...)`,
 `on_conflict((col_a, col_b)).do_update_excluded((...))`, and
 `merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated

@@ -43,6 +43,18 @@ impl FetchClause {
     }
 }
 
+impl RowLimit {
+    fn validate(&self, order: &[OrderItem]) -> Result<()> {
+        match self {
+            Self::Limit(_) => Ok(()),
+            Self::Fetch(fetch) => {
+                validate_fetch_shape(order, fetch)?;
+                fetch.validate()
+            }
+        }
+    }
+}
+
 impl Stmt {
     /// Validates this statement before rendering.
     pub fn validate(&self) -> Result<()> {
@@ -79,9 +91,8 @@ impl SetQuery {
         for item in &self.order {
             item.validate()?;
         }
-        if let Some(fetch) = &self.fetch {
-            validate_fetch_shape(self.limit.as_ref(), &self.order, fetch)?;
-            fetch.validate()?;
+        if let Some(row_limit) = &self.row_limit {
+            row_limit.validate(&self.order)?;
         }
         Ok(())
     }
@@ -116,9 +127,8 @@ impl Select {
         for item in &self.order {
             item.validate()?;
         }
-        if let Some(fetch) = &self.fetch {
-            validate_fetch_shape(self.limit.as_ref(), &self.order, fetch)?;
-            fetch.validate()?;
+        if let Some(row_limit) = &self.row_limit {
+            row_limit.validate(&self.order)?;
         }
         Ok(())
     }
@@ -132,31 +142,19 @@ impl Insert {
             cte.validate()?;
         }
         validate_table_target("insert", &self.target)?;
-        if self.default_values {
-            if self.source.is_some() || !self.assignments.is_empty() || !self.columns.is_empty() {
-                return Err(Error::InvalidInsertShape {
-                    message: "DEFAULT VALUES cannot be combined with insert values or source",
-                });
-            }
-        } else {
-            match (&self.source, self.assignments.is_empty()) {
-                (Some(source), true) => {
-                    validate_nonempty_columns("insert-select", &self.columns)?;
-                    validate_insert_select_columns(&self.columns, source)?;
-                    source.validate()?;
-                }
-                (Some(_), false) => {
-                    return Err(Error::InvalidInsertShape {
-                        message: "insert-select cannot also contain VALUES assignments",
-                    });
-                }
-                (None, true) => validate_nonempty_assignments("insert", &self.assignments)?,
-                (None, false) => {
-                    for assignment in &self.assignments {
-                        validate_assignment_value(&assignment.value)?;
-                    }
+        match &self.body {
+            InsertBody::Values(assignments) => {
+                validate_nonempty_assignments("insert", assignments)?;
+                for assignment in assignments {
+                    validate_assignment_value(&assignment.value)?;
                 }
             }
+            InsertBody::Select { columns, select } => {
+                validate_nonempty_columns("insert-select", columns)?;
+                validate_insert_select_columns(columns, select)?;
+                select.validate()?;
+            }
+            InsertBody::DefaultValues => {}
         }
         if let Some(conflict) = &self.conflict {
             conflict.validate()?;
@@ -253,16 +251,7 @@ fn validate_table_target(statement: &'static str, target: &Source) -> Result<()>
     Err(Error::invalid_write_target(statement, target.kind()))
 }
 
-fn validate_fetch_shape(
-    limit: Option<&Param>,
-    order: &[OrderItem],
-    fetch: &FetchClause,
-) -> Result<()> {
-    if limit.is_some() {
-        return Err(Error::InvalidSelectShape {
-            message: "limit and fetch cannot both be set",
-        });
-    }
+fn validate_fetch_shape(order: &[OrderItem], fetch: &FetchClause) -> Result<()> {
     if fetch.with_ties && order.is_empty() {
         return Err(Error::InvalidSelectShape {
             message: "fetch with ties requires order_by",

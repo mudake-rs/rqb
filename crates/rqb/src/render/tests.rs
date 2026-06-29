@@ -1,7 +1,7 @@
 use crate::{
-    Assignment, AssignmentValue, BoolExpr, Field, Insert, IntoSelectItems, Meta, OpSet, Param,
-    RawStmt, Select, SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and, case,
-    coalesce, count_all, count_distinct, cte, current_date, current_timestamp, delete_from,
+    Assignment, AssignmentValue, BoolExpr, Field, Insert, InsertBody, IntoSelectItems, Meta, OpSet,
+    Param, RawStmt, Select, SelectItem, Source, Stmt, ValueExpr, and, array, array_agg, bool_and,
+    case, coalesce, count_all, count_distinct, cte, current_date, current_timestamp, delete_from,
     extract, function_source, insert, json_agg, json_get_text, lag, merge_into, param,
     percentile_cont, raw, raw_expr, raw_predicate, row, row_number, scalar_subquery, select, slice,
     subscript, table, to_jsonb, true_, update, values_source, window,
@@ -65,9 +65,8 @@ fn select_renders_typed_predicate_and_default_projection() {
         group_by: Vec::new(),
         having: None,
         order: Vec::new(),
-        limit: None,
+        row_limit: None,
         offset: None,
-        fetch: None,
         lock: None,
     }));
 
@@ -99,9 +98,8 @@ fn raw_fragments_are_numbered_in_render_order() {
         group_by: Vec::new(),
         having: None,
         order: Vec::new(),
-        limit: None,
+        row_limit: None,
         offset: None,
-        fetch: None,
         lock: None,
     }));
 
@@ -146,15 +144,12 @@ fn insert_renders_columns_values_and_returning() {
     let insert = Insert {
         ctes: Vec::new(),
         target: users(),
-        columns: Vec::new(),
-        assignments: vec![Assignment {
+        body: InsertBody::Values(vec![Assignment {
             field: EMAIL_META,
             value: AssignmentValue::Expr(ValueExpr::Param(Param::typed(
                 "egor@example.com".to_owned(),
             ))),
-        }],
-        source: None,
-        default_values: false,
+        }]),
         conflict: None,
         returning: vec![SelectItem {
             expr: ID.expr(),
@@ -209,9 +204,8 @@ fn typed_field_can_bind_any_sqlx_supported_type() {
         group_by: Vec::new(),
         having: None,
         order: Vec::new(),
-        limit: None,
+        row_limit: None,
         offset: None,
-        fetch: None,
         lock: None,
     }));
 
@@ -857,8 +851,7 @@ fn later_write_assignments_replace_earlier_ones_for_same_column() {
 fn insert_from_select_renders_columns_and_nested_select_params() {
     let source = select(users()).columns((ID, EMAIL)).filter(ID.gt(10));
     let built = insert(users())
-        .columns((ID, EMAIL))
-        .from_select(source)
+        .from_select((ID, EMAIL), source)
         .returning(ID)
         .build()
         .unwrap();
@@ -877,8 +870,7 @@ fn insert_from_select_default_projection_ignores_joined_fields() {
         ID.at("u").eq_field(ORDER_USER_ID.at("o")),
     );
     let built = insert(users())
-        .columns((ID, EMAIL))
-        .from_select(source)
+        .from_select((ID, EMAIL), source)
         .build()
         .unwrap();
 
@@ -1140,13 +1132,12 @@ fn joined_cte_definitions_render_before_select_and_keep_params() {
 }
 
 #[test]
-fn cte_column_aliases_must_match_exposed_fields() {
+fn cte_fields_must_match_select_projection() {
     let invalid = cte(
         "broken",
         select(users()).column(ID),
         vec![ID_META, EMAIL_META],
-    )
-    .columns(["id"]);
+    );
 
     let err = select(invalid.source()).with(invalid).build().unwrap_err();
 
@@ -1859,7 +1850,6 @@ fn cte_hints_function_sources_and_merge_render() {
         select(series),
         vec![SERIES_META, ORDINALITY_META],
     )
-    .columns(["value", "ordinality"])
     .materialized();
 
     let built = select(generated.source())

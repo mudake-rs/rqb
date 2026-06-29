@@ -179,11 +179,11 @@ pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use stmt::{
     Assignment, AssignmentValue, Changeset, ColumnConflictBuilder, ConflictAction, ConflictClause,
     ConflictFields, ConflictTarget, ConstraintConflictBuilder, Delete, FetchClause, GroupByItem,
-    Insert, Insertable, IntoAssignments, IntoSelectItems, LockMode, LockWait, MatchedMergeBuilder,
-    Merge, MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder,
-    NullsPosition, OrderDirection, OrderItem, RawStmt, RowLock, Select, SelectItem, SetOperator,
-    SetQuery, Stmt, Update, delete_from, except, except_all, insert, intersect, intersect_all,
-    merge_into, raw, select, union, union_all, update,
+    Insert, InsertBody, Insertable, IntoAssignments, IntoSelectItems, LockMode, LockWait,
+    MatchedMergeBuilder, Merge, MergeAction, MergeWhen, NotMatchedBySourceMergeBuilder,
+    NotMatchedMergeBuilder, NullsPosition, OrderDirection, OrderItem, RawStmt, RowLimit, RowLock,
+    Select, SelectItem, SetOperator, SetQuery, Stmt, Update, delete_from, except, except_all,
+    insert, intersect, intersect_all, merge_into, raw, select, union, union_all, update,
 };
 
 /// Creates a metadata-backed computed field for CTEs, subqueries, and projections.

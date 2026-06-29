@@ -8,9 +8,8 @@ impl SetQuery {
             operator,
             right: Box::new(right.into()),
             order: Vec::new(),
-            limit: None,
+            row_limit: None,
             offset: None,
-            fetch: None,
         }
     }
 
@@ -87,31 +86,28 @@ impl SetQuery {
         self
     }
 
-    /// Sets a `LIMIT` value and clears any `FETCH FIRST` clause.
+    /// Sets a `LIMIT` value.
     #[inline]
     pub fn limit(mut self, limit: u32) -> Self {
-        self.limit = Some(Param::typed(i64::from(limit)));
-        self.fetch = None;
+        self.row_limit = Some(RowLimit::Limit(Param::typed(i64::from(limit))));
         self
     }
 
-    /// Sets a `FETCH FIRST` clause and clears any `LIMIT`.
+    /// Sets a `FETCH FIRST` clause.
     pub fn fetch_first(mut self, count: impl Into<ValueExpr>) -> Self {
-        self.fetch = Some(FetchClause {
+        self.row_limit = Some(RowLimit::Fetch(FetchClause {
             count: count.into(),
             with_ties: false,
-        });
-        self.limit = None;
+        }));
         self
     }
 
-    /// Sets `FETCH FIRST ... WITH TIES` and clears any `LIMIT`.
+    /// Sets `FETCH FIRST ... WITH TIES`.
     pub fn fetch_first_with_ties(mut self, count: impl Into<ValueExpr>) -> Self {
-        self.fetch = Some(FetchClause {
+        self.row_limit = Some(RowLimit::Fetch(FetchClause {
             count: count.into(),
             with_ties: true,
-        });
-        self.limit = None;
+        }));
         self
     }
 

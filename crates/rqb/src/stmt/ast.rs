@@ -68,6 +68,17 @@ pub struct FetchClause {
     pub with_ties: bool,
 }
 
+/// Mutually exclusive row-limit mode for `SELECT` and set queries.
+#[derive(Clone, Debug)]
+#[must_use]
+#[non_exhaustive]
+pub enum RowLimit {
+    /// SQL `LIMIT`.
+    Limit(Param),
+    /// SQL `FETCH FIRST`.
+    Fetch(FetchClause),
+}
+
 /// PostgreSQL row lock mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LockMode {
@@ -132,6 +143,27 @@ impl From<ValueExpr> for AssignmentValue {
     fn from(value: ValueExpr) -> Self {
         Self::Expr(value)
     }
+}
+
+/// Body form for an `INSERT` statement.
+///
+/// Exactly one SQL body is active: explicit `VALUES`, `INSERT ... SELECT`, or
+/// `DEFAULT VALUES`.
+#[derive(Clone, Debug)]
+#[must_use]
+#[non_exhaustive]
+pub enum InsertBody {
+    /// `INSERT ... VALUES (...)`.
+    Values(Vec<Assignment>),
+    /// `INSERT ... SELECT`.
+    Select {
+        /// Target columns in insert order.
+        columns: Vec<Meta>,
+        /// Select source for inserted rows.
+        select: Box<Select>,
+    },
+    /// `INSERT ... DEFAULT VALUES`.
+    DefaultValues,
 }
 
 /// Converts one or more write assignments into a vector.
@@ -464,12 +496,10 @@ pub struct Select {
     pub having: Option<BoolExpr>,
     /// Ordering expressions.
     pub order: Vec<OrderItem>,
-    /// Optional `LIMIT` parameter.
-    pub limit: Option<Param>,
+    /// Optional row-limit clause.
+    pub row_limit: Option<RowLimit>,
     /// Optional `OFFSET` parameter.
     pub offset: Option<Param>,
-    /// Optional SQL `FETCH FIRST` clause.
-    pub fetch: Option<FetchClause>,
     /// Optional row lock clause.
     pub lock: Option<RowLock>,
 }
@@ -483,14 +513,8 @@ pub struct Insert {
     pub ctes: Vec<Cte>,
     /// Target table or view.
     pub target: Source,
-    /// Target columns in insert order.
-    pub columns: Vec<Meta>,
-    /// Values for insert rows or explicit assignments.
-    pub assignments: Vec<Assignment>,
-    /// Optional `INSERT ... SELECT` source.
-    pub source: Option<Box<Select>>,
-    /// Whether to render `INSERT ... DEFAULT VALUES`.
-    pub default_values: bool,
+    /// Active insert body.
+    pub body: InsertBody,
     /// Optional conflict handling clause.
     pub conflict: Option<ConflictClause>,
     /// Optional `RETURNING` projection.
@@ -655,12 +679,10 @@ pub struct SetQuery {
     pub right: Box<Stmt>,
     /// Ordering after the set expression.
     pub order: Vec<OrderItem>,
-    /// Optional limit.
-    pub limit: Option<Param>,
+    /// Optional row-limit clause.
+    pub row_limit: Option<RowLimit>,
     /// Optional offset.
     pub offset: Option<Param>,
-    /// Optional SQL `FETCH FIRST` clause.
-    pub fetch: Option<FetchClause>,
 }
 
 /// Any top-level query statement rqb can render.

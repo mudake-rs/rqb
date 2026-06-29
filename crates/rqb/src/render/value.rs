@@ -228,21 +228,7 @@ impl Renderer {
                 self.render_value(arg)?;
             }
         }
-        if !order_by.is_empty() {
-            self.sql.push_str(" ORDER BY ");
-            for (idx, item) in order_by.iter().enumerate() {
-                if idx > 0 {
-                    self.sql.push_str(", ");
-                }
-                self.render_value(&item.expr)?;
-                self.sql.push(' ');
-                self.sql.push_str(item.direction.as_sql());
-                if let Some(nulls) = item.nulls {
-                    self.sql.push(' ');
-                    self.sql.push_str(nulls.as_sql());
-                }
-            }
-        }
+        self.render_order_clause(" ORDER BY ", order_by)?;
         self.sql.push(')');
         Ok(())
     }
@@ -262,18 +248,7 @@ impl Renderer {
             self.render_value(arg)?;
         }
         self.sql.push_str(") WITHIN GROUP (ORDER BY ");
-        for (idx, item) in within_group.iter().enumerate() {
-            if idx > 0 {
-                self.sql.push_str(", ");
-            }
-            self.render_value(&item.expr)?;
-            self.sql.push(' ');
-            self.sql.push_str(item.direction.as_sql());
-            if let Some(nulls) = item.nulls {
-                self.sql.push(' ');
-                self.sql.push_str(nulls.as_sql());
-            }
-        }
+        self.render_order_items(within_group)?;
         self.sql.push(')');
         Ok(())
     }
@@ -294,19 +269,7 @@ impl Renderer {
             if needs_space {
                 self.sql.push(' ');
             }
-            self.sql.push_str("ORDER BY ");
-            for (idx, item) in spec.order_by.iter().enumerate() {
-                if idx > 0 {
-                    self.sql.push_str(", ");
-                }
-                self.render_value(&item.expr)?;
-                self.sql.push(' ');
-                self.sql.push_str(item.direction.as_sql());
-                if let Some(nulls) = item.nulls {
-                    self.sql.push(' ');
-                    self.sql.push_str(nulls.as_sql());
-                }
-            }
+            self.render_order_clause("ORDER BY ", &spec.order_by)?;
             needs_space = true;
         }
         if let Some(frame) = &spec.frame {

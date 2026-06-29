@@ -1070,3 +1070,47 @@ fn is_rust_keyword(value: &str) -> bool {
             | "yield"
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SchemaInput;
+
+    #[test]
+    fn schema_accepts_cli_ops_and_json_contract_tokens() {
+        let input = r#"
+            table public.contract_tokens {
+                #[rqb(ops = none, json = none)]
+                none_token: text = String,
+                #[rqb(ops = equality, json = text)]
+                text_token: text = String,
+                #[rqb(ops = ordered, json = bool)]
+                bool_token: bool = bool,
+                #[rqb(ops = text, json = integer)]
+                integer_token: int4 = i32,
+                #[rqb(ops = ordered, json = big_int)]
+                big_int_token: int8 = i64,
+                #[rqb(ops = ordered, json = float)]
+                float_token: float8 = f64,
+                #[rqb(ops = ordered, json = numeric_string)]
+                numeric_string_token: numeric = sqlx::types::BigDecimal,
+                #[rqb(ops = ordered, json = uuid)]
+                uuid_token: uuid = uuid::Uuid,
+                #[rqb(ops = ordered, json = date)]
+                date_token: date = chrono::NaiveDate,
+                #[rqb(ops = ordered, json = time)]
+                time_token: time = chrono::NaiveTime,
+                #[rqb(ops = ordered, json = timestamp)]
+                timestamp_token: timestamp = chrono::NaiveDateTime,
+                #[rqb(ops = ordered, json = timestamptz)]
+                timestamptz_token: timestamptz = chrono::DateTime<chrono::Utc>,
+                #[rqb(ops = equality, json = jsonb)]
+                jsonb_token: jsonb = serde_json::Value,
+            }
+        "#;
+
+        let schema = syn::parse_str::<SchemaInput>(input).unwrap();
+        let expanded = schema.expand().to_string();
+
+        assert!(expanded.contains("contract_tokens"));
+    }
+}

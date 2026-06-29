@@ -1,16 +1,5 @@
 use super::*;
 
-pub(super) fn extend_insert_assignments(
-    columns: &mut Vec<Meta>,
-    assignments: &mut Vec<Assignment>,
-    next: Vec<Assignment>,
-) {
-    for assignment in next {
-        push_column(columns, assignment.field);
-        push_assignment(assignments, assignment);
-    }
-}
-
 pub(super) fn extend_assignments(assignments: &mut Vec<Assignment>, next: Vec<Assignment>) {
     for assignment in next {
         push_assignment(assignments, assignment);

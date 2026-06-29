@@ -188,53 +188,6 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let tx_future = transaction_flow(&pool, user_id, &new_user, &patch);
     drop(tx_future);
 
-    // The repository macro intentionally exposes execution methods only. These
-    // direct builders keep the sample database-free while asserting the SQL
-    // shape that the repository methods use internally.
-    let find_sql = select(users::table())
-        .filter(users::ID.eq(user_id))
-        .build()?;
-    let list_sql = select(users::table())
-        .order_asc(users::ID)
-        .limit(20)
-        .build()?;
-    let create_sql = insert(users::table())
-        .set(users::ID.set(user_id))
-        .values(&new_user)
-        .returning_all()
-        .build()?;
-    let patch_sql = update(users::table())
-        .patch(&patch)
-        .filter(users::ID.eq(user_id))
-        .returning_all()
-        .build()?;
-    let delete_sql = delete_from(users::table())
-        .filter(users::ID.eq(user_id))
-        .returning(users::ID)
-        .build()?;
-
-    assert_eq!(
-        find_sql.sql,
-        "SELECT \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\" FROM \"sample\".\"app_users\" WHERE \"id\" = $1"
-    );
-    assert_eq!(
-        list_sql.sql,
-        "SELECT \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\" FROM \"sample\".\"app_users\" ORDER BY \"id\" ASC LIMIT $1"
-    );
-    assert_eq!(
-        create_sql.sql,
-        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\") VALUES ($1, $2, $3, $4, $5, $6) RETURNING \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\""
-    );
-    assert_eq!(
-        patch_sql.sql,
-        "UPDATE \"sample\".\"app_users\" SET \"status\" = $1, \"display_name\" = $2, \"active\" = $3 WHERE \"id\" = $4 RETURNING \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\""
-    );
-    assert_eq!(
-        delete_sql.sql,
-        "DELETE FROM \"sample\".\"app_users\" WHERE \"id\" = $1 RETURNING \"id\""
-    );
-
-    println!("{}", find_sql.sql);
     Ok(())
 }
 

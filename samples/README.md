@@ -44,8 +44,8 @@ executable API documentation.
 - [`custom-types`](custom-types/): raw-only schema metadata for extension types
   outside the typed subset. Renders SQL and asserts it.
 - [`crud-repository`](crud-repository/): sample-local execution-only CRUD
-  repository macro plus a GAT `Db` wrapper. Renders SQL and compile-checks
-  pool/transaction flows without connecting.
+  repository macro plus a GAT `Db` wrapper. Compile-checks pool/transaction
+  flows without connecting.
 - [`rest-api`](rest-api/): service-layer REST shape with pool execution,
   closure-style transactions, cursor pagination, aggregate reports, streaming
   export, and JSON search. Builds the router without listening or connecting.

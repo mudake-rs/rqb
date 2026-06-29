@@ -3,8 +3,8 @@
 Experimental application-level sample for a tiny execution-only CRUD repository
 macro plus a GAT-based `Db` wrapper around sqlx executors.
 
-Execution mode: renders SQL and compile-checks pool and transaction flows
-without opening a database connection.
+Execution mode: compile-checks pool and transaction flows without opening a
+database connection.
 
 ## What This Shows
 

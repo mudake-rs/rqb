@@ -120,6 +120,43 @@ fn search_request_merges_filter_and_applies_sort_limit_offset() {
 }
 
 #[test]
+fn search_request_composes_with_server_join_and_base_filter() {
+    let request: SearchRequest = serde_json::from_value(json!({
+        "filter": {
+            "and": [
+                { "field": "status", "operator": "equals", "value": "paid" },
+                { "field": "active", "operator": "equals", "value": true }
+            ]
+        },
+        "sort": [{ "field": "id", "dir": "desc" }],
+        "limit": 20,
+        "offset": 40
+    }))
+    .unwrap();
+
+    let audit = Source::Table {
+        name: "public.order_audit",
+        alias: None,
+        fields: &FIELDS,
+    };
+
+    let built = crate::select(source().alias("o"))
+        .join(audit.alias("a"), ID.at("o").eq_field(ID.at("a")))
+        .filter(ID.at("o").gt(10))
+        .apply_search(request)
+        .unwrap()
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "SELECT \"o\".\"id\", \"o\".\"status\", \"o\".\"active\", \"o\".\"internal\" FROM \"public\".\"orders\" AS \"o\" JOIN \"public\".\"order_audit\" AS \"a\" ON \"o\".\"id\" = \"a\".\"id\" WHERE (\"o\".\"id\" > $1 AND \"o\".\"status\" = $2 AND \"o\".\"active\" = $3) ORDER BY \"o\".\"id\" DESC LIMIT $4 OFFSET $5"
+    );
+    assert_eq!(built.params.len(), 5);
+    assert!(built.cacheable);
+}
+
+#[test]
 fn search_request_applies_multiple_sort_keys_in_client_order() {
     let request: SearchRequest = serde_json::from_value(json!({
         "sort": [

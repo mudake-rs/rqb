@@ -476,6 +476,46 @@ fn joins_render_qualified_fields_and_keep_param_order() {
 }
 
 #[test]
+fn select_clause_stack_preserves_global_param_order() {
+    let active_ids = cte(
+        "active_ids",
+        select(users()).column(ID).filter(ACTIVE.eq(true)),
+        ID,
+    );
+
+    let built = select(users().alias("u"))
+        .with(active_ids.clone())
+        .join(
+            active_ids.source().alias("a"),
+            ID.at("u").eq_field(ID.at("a")),
+        )
+        .join(
+            orders().alias("o"),
+            and([
+                ID.at("u").eq_field(ORDER_USER_ID.at("o")),
+                TOTAL.at("o").gt(1000_i64),
+            ]),
+        )
+        .column(EMAIL.at("u"))
+        .expr_as(count_all(), "rows")
+        .filter(ID.at("u").gt(10))
+        .group_by(EMAIL.at("u"))
+        .having(count_all().gt(1_i64))
+        .order_asc(EMAIL.at("u"))
+        .limit(25)
+        .offset(50)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "WITH \"active_ids\" (\"id\") AS (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"active\" = $1) SELECT \"u\".\"email_address\" AS \"u_email\", count(*) AS \"rows\" FROM \"public\".\"app_users\" AS \"u\" JOIN \"active_ids\" AS \"a\" ON \"u\".\"id\" = \"a\".\"id\" JOIN \"public\".\"orders\" AS \"o\" ON (\"u\".\"id\" = \"o\".\"user_id\" AND \"o\".\"total_cents\" > $2) WHERE \"u\".\"id\" > $3 GROUP BY \"u\".\"email_address\" HAVING count(*) > $4 ORDER BY \"u\".\"email_address\" ASC LIMIT $5 OFFSET $6"
+    );
+    assert_eq!(built.params.len(), 6);
+    assert!(built.cacheable);
+}
+
+#[test]
 fn right_full_cross_and_lateral_joins_render_in_clause_order() {
     let recent = select(orders())
         .column(ORDER_USER_ID)
@@ -968,6 +1008,38 @@ fn default_assignments_render_in_conflict_and_merge_actions() {
 }
 
 #[test]
+fn merge_with_using_subquery_keeps_param_order_across_actions() {
+    let incoming = select(orders())
+        .columns((ORDER_USER_ID, TOTAL))
+        .filter(TOTAL.gt(500_i64))
+        .infer_source("incoming")
+        .unwrap();
+
+    let built = merge_into(
+        users().alias("u"),
+        incoming,
+        and([
+            ID.at("u").eq_field(ORDER_USER_ID.at("incoming")),
+            TOTAL.at("incoming").gt(750_i64),
+        ]),
+    )
+    .when_matched_if(TOTAL.at("incoming").gt(1000_i64))
+    .update(EMAIL.set("merged@example.com".to_owned()))
+    .when_not_matched()
+    .insert((ID.set(1), EMAIL.set("new@example.com".to_owned())))
+    .returning_as(ID.at("u"), "id")
+    .build()
+    .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "MERGE INTO \"public\".\"app_users\" AS \"u\" USING (SELECT \"user_id\", \"total_cents\" FROM \"public\".\"orders\" WHERE \"total_cents\" > $1) AS \"incoming\" (\"user_id\", \"total_cents\") ON (\"u\".\"id\" = \"incoming\".\"user_id\" AND \"incoming\".\"total_cents\" > $2) WHEN MATCHED AND \"incoming\".\"total_cents\" > $3 THEN UPDATE SET \"email_address\" = $4 WHEN NOT MATCHED THEN INSERT (\"id\", \"email_address\") VALUES ($5, $6) RETURNING \"u\".\"id\" AS \"id\""
+    );
+    assert_eq!(built.params.len(), 6);
+    assert!(built.cacheable);
+}
+
+#[test]
 fn set_queries_render_with_order_limit_and_param_order() {
     let left = select(users()).column(ID).filter(ID.gt(10));
     let right = select(users()).column(ID).filter(ID.lt(3));
@@ -1285,6 +1357,31 @@ fn count_query_renders_through_normal_ast_path() {
     );
     assert_eq!(count.params.len(), 1);
     assert!(count.cacheable);
+}
+
+#[test]
+fn count_query_preserves_ctes_and_strips_runtime_clauses() {
+    let ids = cte("ids", raw("SELECT ?::int4 AS id").bind(1_i32), ID);
+
+    let count = select(users().alias("u"))
+        .with(ids.clone())
+        .join(ids.source().alias("i"), ID.at("u").eq_field(ID.at("i")))
+        .column(ID.at("u"))
+        .filter(raw_predicate("\"u\".\"id\" > ?", [Param::typed(2_i32)]))
+        .order_desc(ID.at("u"))
+        .limit(10)
+        .offset(20)
+        .for_update()
+        .skip_locked()
+        .build_count()
+        .unwrap();
+
+    assert_eq!(
+        count.sql,
+        "SELECT count(*) FROM (WITH \"ids\" (\"id\") AS (SELECT $1::int4 AS id) SELECT \"u\".\"id\" AS \"u_id\" FROM \"public\".\"app_users\" AS \"u\" JOIN \"ids\" AS \"i\" ON \"u\".\"id\" = \"i\".\"id\" WHERE \"u\".\"id\" > $2) AS \"rqb_count\""
+    );
+    assert_eq!(count.params.len(), 2);
+    assert!(!count.cacheable);
 }
 
 #[test]

@@ -73,44 +73,28 @@ macro_rules! crud_repository {
         impl $repo {
             // This sample pins repository IDs to Uuid to keep the macro focused
             // on rqb query shape rather than becoming a generic ORM framework.
-            fn find_query(id: Uuid) -> Select {
-                select($table::table()).filter($table::$id.eq(id))
+            async fn find(db: impl PgExecutor<'_>, id: Uuid) -> rqb::Result<$row> {
+                select($table::table())
+                    .filter($table::$id.eq(id))
+                    .fetch_one_as::<$row>(db)
+                    .await
             }
 
-            fn list_query(limit: u32) -> Select {
-                select($table::table()).order_asc($table::$id).limit(limit)
+            async fn list(db: impl PgExecutor<'_>, limit: u32) -> rqb::Result<Vec<$row>> {
+                select($table::table())
+                    .order_asc($table::$id)
+                    .limit(limit)
+                    .fetch_all_as::<$row>(db)
+                    .await
             }
 
-            fn create_query(id: Uuid, input: &$new) -> Insert {
+            async fn create(db: impl PgExecutor<'_>, id: Uuid, input: &$new) -> rqb::Result<$row> {
                 insert($table::table())
                     .set($table::$id.set(id))
                     .values(input)
                     .returning_all()
-            }
-
-            fn patch_query(id: Uuid, patch: &$patch) -> Update {
-                update($table::table())
-                    .patch(patch)
-                    .filter($table::$id.eq(id))
-                    .returning_all()
-            }
-
-            fn delete_query(id: Uuid) -> Delete {
-                delete_from($table::table())
-                    .filter($table::$id.eq(id))
-                    .returning($table::$id)
-            }
-
-            async fn find(db: impl PgExecutor<'_>, id: Uuid) -> rqb::Result<$row> {
-                Self::find_query(id).fetch_one_as::<$row>(db).await
-            }
-
-            async fn list(db: impl PgExecutor<'_>, limit: u32) -> rqb::Result<Vec<$row>> {
-                Self::list_query(limit).fetch_all_as::<$row>(db).await
-            }
-
-            async fn create(db: impl PgExecutor<'_>, id: Uuid, input: &$new) -> rqb::Result<$row> {
-                Self::create_query(id, input).fetch_one_as::<$row>(db).await
+                    .fetch_one_as::<$row>(db)
+                    .await
             }
 
             async fn patch(
@@ -118,13 +102,18 @@ macro_rules! crud_repository {
                 id: Uuid,
                 patch: &$patch,
             ) -> rqb::Result<Option<$row>> {
-                Self::patch_query(id, patch)
+                update($table::table())
+                    .patch(patch)
+                    .filter($table::$id.eq(id))
+                    .returning_all()
                     .fetch_optional_as::<$row>(db)
                     .await
             }
 
             async fn delete(db: impl PgExecutor<'_>, id: Uuid) -> rqb::Result<Option<Uuid>> {
-                Self::delete_query(id)
+                delete_from($table::table())
+                    .filter($table::$id.eq(id))
+                    .returning($table::$id)
                     .fetch_optional_scalar::<Uuid>(db)
                     .await
             }
@@ -199,11 +188,30 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let tx_future = transaction_flow(&pool, user_id, &new_user, &patch);
     drop(tx_future);
 
-    let find_sql = UserRepo::find_query(user_id).build()?;
-    let list_sql = UserRepo::list_query(20).build()?;
-    let create_sql = UserRepo::create_query(user_id, &new_user).build()?;
-    let patch_sql = UserRepo::patch_query(user_id, &patch).build()?;
-    let delete_sql = UserRepo::delete_query(user_id).build()?;
+    // The repository macro intentionally exposes execution methods only. These
+    // direct builders keep the sample database-free while asserting the SQL
+    // shape that the repository methods use internally.
+    let find_sql = select(users::table())
+        .filter(users::ID.eq(user_id))
+        .build()?;
+    let list_sql = select(users::table())
+        .order_asc(users::ID)
+        .limit(20)
+        .build()?;
+    let create_sql = insert(users::table())
+        .set(users::ID.set(user_id))
+        .values(&new_user)
+        .returning_all()
+        .build()?;
+    let patch_sql = update(users::table())
+        .patch(&patch)
+        .filter(users::ID.eq(user_id))
+        .returning_all()
+        .build()?;
+    let delete_sql = delete_from(users::table())
+        .filter(users::ID.eq(user_id))
+        .returning(users::ID)
+        .build()?;
 
     assert_eq!(
         find_sql.sql,

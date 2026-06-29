@@ -43,9 +43,9 @@ executable API documentation.
   control. Renders SQL and compile-checks transaction flows without connecting.
 - [`custom-types`](custom-types/): raw-only schema metadata for extension types
   outside the typed subset. Renders SQL and asserts it.
-- [`crud-repository`](crud-repository/): sample-local CRUD repository macro
-  plus a GAT `Db` wrapper. Renders SQL and compile-checks pool/transaction
-  flows without connecting.
+- [`crud-repository`](crud-repository/): sample-local execution-only CRUD
+  repository macro plus a GAT `Db` wrapper. Renders SQL and compile-checks
+  pool/transaction flows without connecting.
 - [`rest-api`](rest-api/): service-layer REST shape with pool execution,
   closure-style transactions, cursor pagination, aggregate reports, streaming
   export, and JSON search. Builds the router without listening or connecting.
@@ -59,9 +59,9 @@ executable API documentation.
   recommended service style unless the wrapper proves more ergonomic than
   `&PgPool`, reusable query-shape helpers, and targeted `PgExecutor<'_>`
   helpers.
-- [`crud-repository`](crud-repository/): optional design probe for a macro-built
-  repository shape on top of normal rqb builders and the same GAT executor
-  wrapper idea.
+- [`crud-repository`](crud-repository/): optional design probe for a
+  macro-built executing repository on top of normal rqb builders and the same
+  GAT executor wrapper idea.
 
 ## Running Against A Database
 

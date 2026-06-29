@@ -1,7 +1,7 @@
 # CRUD Repository
 
-Experimental application-level sample for a tiny CRUD repository macro plus a
-GAT-based `Db` wrapper around sqlx executors.
+Experimental application-level sample for a tiny execution-only CRUD repository
+macro plus a GAT-based `Db` wrapper around sqlx executors.
 
 Execution mode: renders SQL and compile-checks pool and transaction flows
 without opening a database connection.
@@ -10,8 +10,10 @@ without opening a database connection.
 
 - rqb query shapes can be wrapped in local repository-style APIs when an
   application wants that convention.
-- The macro is sample-local glue over normal rqb builders; it is not an ORM
-  layer and it does not add runtime reflection.
+- The macro is sample-local glue over normal rqb builders and exposes executing
+  methods, not reusable query objects. Use normal rqb query-shape helpers when
+  composition is the goal.
+- The macro is not an ORM layer and it does not add runtime reflection.
 - The macro assumes this module's imports (`rqb::prelude::*` and `uuid::Uuid`);
   it is written for readability, not for publishing as a reusable macro crate.
 - `Db` hides sqlx's executor lifetime for multi-statement helpers that need to

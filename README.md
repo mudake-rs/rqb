@@ -1,26 +1,20 @@
-# rqb — Rust Query Builder
+# rqb
 
-Rust Query Builder for Postgres, built on sqlx.
+Postgres-only Rust query builder on top of sqlx. It is not an ORM.
 
-rqb is not an ORM. It builds parameterized SQL from server-owned query shape and
-small field metadata. Typed Rust values go straight into sqlx bind arguments;
-JSON search is a constrained adapter for filters, sort, limit, and offset.
-
-## TL;DR
-
-Start with [`samples`](samples). They are short, compile-checked, and show the
-actual API faster than prose.
+Start with [`samples`](samples) when you want code first. They are short,
+compile-checked, and use the public API directly.
 
 ## Contents
 
-- [Why rqb](#why-rqb)
+- [Core Model](#core-model)
 - [Status](#status)
 - [Install](#install)
-- [Basic Query](#basic-query)
+- [First Query](#first-query)
 - [Execution](#execution)
-- [Server-Owned SQL Shape](#server-owned-sql-shape)
+- [Query Composition](#query-composition)
 - [JSON Search](#json-search)
-- [Raw Escape Hatches](#raw-escape-hatches)
+- [Raw SQL](#raw-sql)
 - [Error Handling](#error-handling)
 - [Writes](#writes)
 - [Transactions](#transactions)
@@ -30,19 +24,22 @@ actual API faster than prose.
 - [Checks](#checks)
 - [License](#license)
 
-## Why rqb
+## Core Model
 
-- You write Postgres, not generic SQL. rqb does not hide the dialect.
-- Query shape is owned by Rust code and validated before SQL is rendered.
+- You write PostgreSQL, not generic SQL. rqb does not hide the dialect.
+- Rust code owns query shape: sources, joins, projection, writes, raw fragments,
+  locks, conflict handling, and returning clauses.
+- Field metadata tells rqb which columns exist, which operators are allowed, and
+  which fields may be exposed to JSON search.
+- Values become sqlx Postgres bind arguments. User values are not interpolated
+  into SQL.
 - Client JSON can filter, sort, limit, and offset only through exposed metadata;
   it cannot define joins, raw SQL, CTEs, writes, or projections.
-- Values bind through sqlx Postgres arguments directly. Writes do not pass
-  through a serde JSON bridge.
 
-rqb gives Rust code typed field metadata, typed bind paths, and pre-render
-validation. It is not a full compile-time SQL type system: some shape and
-operator mistakes are rejected at `.build()?`, and PostgreSQL remains the final
-authority for name resolution, constraints, permissions, and query planning.
+Validation runs before rendering. This is not a full compile-time SQL proof:
+some shape and operator mistakes are rejected at `.build()?`, and PostgreSQL
+remains the final authority for name resolution, constraints, permissions, and
+query planning.
 
 ## Status
 
@@ -90,18 +87,15 @@ date/time values, `PgInterval` / durations, `BigDecimal`, `Vec<u8>`, and
 `serde_json::Value`; `param(value)` remains the explicit fallback for any other
 sqlx-supported value.
 
-## Basic Query
+## First Query
+
+rqb needs schema metadata. For examples and small tests, define it inline with
+`rqb::schema!`. For real applications, run `rqb generate`, check the generated
+module into the app, and import it as `schema`; see [CLI](#cli).
 
 Generated schema modules are normal Rust modules. `table()` / `view()` provide
 the source metadata, uppercase constants are typed fields, and `alias("u")`
-returns an alias-bound handle for join-heavy queries.
-
-Use alias handles as soon as a query or write has more than one source. rqb can
-validate field capabilities and query shape, but PostgreSQL owns final name
-resolution; unqualified columns that exist in both sources can still fail at
-execution with an ambiguous-column error. The same applies to `MERGE`: alias the
-target and incoming source when the `ON` clause or branch conditions compare
-same-named columns.
+returns an alias-bound handle for joins and other multi-source queries.
 
 ```rust
 use rqb::prelude::*;
@@ -212,8 +206,9 @@ let query = select(schema::users::table())
 let rows = query.fetch_all_as::<UserRow>(&pool).await?;
 ```
 
-Scalar queries use `fetch_one_scalar::<T>()`; raw SQL uses `raw("... ? ...")`
-with `?` placeholders. `??` renders a literal question mark.
+Scalar queries use `fetch_scalar::<T>()` for many rows or
+`fetch_one_scalar::<T>()` for one row. Raw SQL uses `raw("... ? ...")` with `?`
+placeholders. `??` renders a literal question mark.
 
 For HTTP response streams, pass a cloned pool handle into the owned streaming
 helpers: `fetch_stream_pool`, `fetch_stream_pool_as::<T>()`, or
@@ -222,10 +217,23 @@ pool handle. `BuiltQuery::fetch_stream*` remains available when you build once
 and keep the built query alive yourself. HTTP handlers should still choose their
 own chunking policy; rqb yields rows, application code formats response chunks.
 
-## Server-Owned SQL Shape
+## Query Composition
 
 Rust code owns joins, CTEs, subqueries, set queries, aggregates, windows, locks,
 and write conflict handling. Client JSON never defines these shapes.
+
+In this section: [Builder Surface](#builder-surface),
+[Selected Columns](#selected-columns), [Counts](#counts),
+[Postgres Semantics](#postgres-semantics), [Derived Sources](#derived-sources),
+[DSL Helpers](#dsl-helpers), [Window Expressions](#window-expressions), and
+[SQL Vocabulary Values](#sql-vocabulary-values).
+
+Use alias handles as soon as a query or write has more than one source. rqb can
+validate field capabilities and query shape, but PostgreSQL owns final name
+resolution; unqualified columns that exist in both sources can still fail at
+execution with an ambiguous-column error. The same applies to `MERGE`: alias the
+target and incoming source when the `ON` clause or branch conditions compare
+same-named columns.
 
 ```rust
 use rqb::dsl::{exists, sum};
@@ -253,20 +261,26 @@ let rows = select(&u)
     .await?;
 ```
 
-Typed helpers cover the common Postgres clauses: `distinct_on`, `group_by`,
-`having`, row locks, `union_all`, `in_subquery`, `count_distinct`, aggregate
-`FILTER`, window functions, array/jsonb/range predicates, conditional
-`filter_if(...)` / `filter_option(...)` / `or_filter_option(...)` /
-`set_if(...)` / `set_option(...)` helpers, `set_many((...))`, row-value
-comparisons for cursor pagination, `default_columns()` for root fields plus
-computed projection items, `insert(...).from_select((...), select(...))`,
-`values_source(...)`, `generate_series_source(...)`,
-`on_conflict((col_a, col_b)).do_update_excluded((...))`, and
-`merge_into(...).when_matched_if(...).update(...)`. MERGE actions are validated
-against Postgres `WHEN` clause rules before rendering. REST-style pagination stays
-in application code; the REST sample shows `limit` / `offset` plus
-`Select::count()` for a matching count query, cursor pagination, and
-pool-owned streaming CSV responses into axum `Body::from_stream`.
+### Builder Surface
+
+rqb covers common Postgres application-query shapes without trying to mirror the
+whole SQL grammar:
+
+- Projection: `column`, `columns`, `expr`, `expr_as`, and `default_columns`.
+- Filtering and paging: `filter_if`, `filter_option`, `or_filter_option`,
+  row-value cursor predicates, `limit`, `offset`, and `Select::count`.
+- Derived sources: joins, CTEs, subqueries, set queries, `values_source`, and
+  set-returning function sources such as `generate_series_source`.
+- Aggregation: `group_by`, `having`, `count_distinct`, aggregate `FILTER`, and
+  window expressions.
+- Postgres data shapes: array, JSONB, range, full-text, date/time, UUID, and
+  scalar expression helpers in `rqb::dsl`.
+- Writes: `set_many`, `set_if`, `set_option`, `insert(...).from_select(...)`,
+  upserts, batch `VALUES`, and `merge_into`.
+- Locks: row-lock builders on `SELECT` and transaction-scoped advisory-lock
+  helpers in `rqb::dsl`.
+
+### Selected Columns
 
 Projection calls are explicit: `.column(...)`, `.columns(...)`, `.expr(...)`,
 and `.expr_as(...)` replace the default root projection with the values you
@@ -283,20 +297,32 @@ let query = select(schema::orders::table())
     .build()?;
 ```
 
+### Counts
+
 `Select::count()` is a matching-row count helper, not a locked-query replay. It
 removes ordering, page limits, `FETCH`, and row-lock clauses before wrapping the
 query in `count(*)`. For `FOR UPDATE SKIP LOCKED`-style workflows, count the
 locked result set explicitly in server-owned SQL if lock semantics matter.
+REST-style pagination stays in application code; the REST sample shows
+`limit` / `offset`, cursor pagination, and `Select::count()` for a matching
+count query.
+
+### Postgres Semantics
 
 Postgres `MERGE ... RETURNING` reports rows affected by each executed action,
 including rows deleted by `WHEN NOT MATCHED BY SOURCE THEN DELETE`. If an API
 needs the final table state after that branch, run a follow-up `SELECT` with the
 same server-owned scope.
 
+MERGE actions are validated against Postgres `WHEN` clause rules before
+rendering.
+
 Grouped analytics can make non-null source columns nullable in result rows.
 `ROLLUP`, `CUBE`, and `GROUPING SETS` emit subtotal rows by replacing grouped
 dimension values with `NULL`, so downstream `sqlx::FromRow` structs should use
 `Option<T>` for those projected dimensions.
+
+### Derived Sources
 
 For derived sources, rqb needs exposed field metadata. `Select::infer_cte`
 and `Select::infer_source` infer it from explicit field projections.
@@ -314,6 +340,8 @@ let order_size = case()
 
 Raw SQL, computed columns with custom aliases, and renamed projections can still
 use the explicit `cte(...)`, `subquery(...)`, or `raw_source(...)` constructors.
+
+### DSL Helpers
 
 SQL expression helpers are available as qualified `rqb::...` calls, but they
 live outside the prelude so broad names like `left`, `right`, `lower`,
@@ -344,6 +372,8 @@ Common helper families in the flat catalog:
 | UUID | `uuidv7`, `uuid_extract_timestamp`, `gen_random_uuid` |
 | Window functions | `window`, `row_number`, `rank`, `lag`, `preceding`, `unbounded_preceding` |
 
+### Window Expressions
+
 Aggregate calls can also be used as PostgreSQL window functions:
 
 ```rust
@@ -354,6 +384,8 @@ select(schema::orders::table())
         "user_total_cents",
     );
 ```
+
+### SQL Vocabulary Values
 
 When PostgreSQL expects a stable SQL vocabulary literal rather than user data,
 use typed helpers or `literal(...)` instead of a bind parameter:
@@ -425,7 +457,7 @@ stable client errors without parsing strings:
 
 See `samples/json-search` for exact payloads and error mapping.
 
-## Raw Escape Hatches
+## Raw SQL
 
 The typed DSL is not meant to mirror every PostgreSQL catalog function. For
 simple unlisted functions, use `function(...)`, `aggregate(...)`, or
@@ -514,6 +546,14 @@ See `samples/error-handling` for standalone matching examples and
 Writes use field assignments or derive-generated assignments. There is no
 serde write bridge.
 
+In this section: [Assignments](#assignments),
+[Database Defaults](#database-defaults), [Conditional Changes](#conditional-changes),
+[Writes With CTEs](#writes-with-ctes), [DTO Mappings](#dto-mappings),
+[Upserts And Batch Inserts](#upserts-and-batch-inserts), and
+[Concurrency](#concurrency).
+
+### Assignments
+
 ```rust
 let created = insert(schema::users::table())
     .set_many((
@@ -567,6 +607,8 @@ update(schema::invoices::table())
 rqb renders the assignment; PostgreSQL still enforces `NOT NULL` constraints at
 execution time.
 
+### Database Defaults
+
 For a row populated entirely by database defaults, use `DEFAULT VALUES`:
 
 ```rust
@@ -576,6 +618,8 @@ let id = insert(schema::jobs::table())
     .fetch_one_scalar::<Uuid>(&pool)
     .await?;
 ```
+
+### Conditional Changes
 
 Conditional write helpers keep service code linear when a field depends on
 application state:
@@ -590,8 +634,10 @@ update(schema::users::table())
     .await?;
 ```
 
-`INSERT`, `UPDATE`, and `DELETE` also accept CTEs, so write statements can stay in the
-typed builder instead of falling back to raw SQL:
+### Writes With CTEs
+
+`INSERT`, `UPDATE`, and `DELETE` also accept CTEs, so write statements can stay
+in the typed builder instead of falling back to raw SQL:
 
 ```rust
 let active_ids = select(schema::users::table())
@@ -609,6 +655,8 @@ update(&u)
     .execute(&pool)
     .await?;
 ```
+
+### DTO Mappings
 
 With generated schema modules, request DTOs can derive write mappings:
 
@@ -639,6 +687,8 @@ For `Insertable`, `#[rqb(skip_none)]` skips `None` on an `Option<T>` field;
 otherwise the `Option<T>` itself is inserted as the value. `Changeset` always
 treats `Option<T>` as patch semantics: `Some` sets the column, `None` leaves it
 unchanged.
+
+### Upserts And Batch Inserts
 
 Upserts can update several columns from `EXCLUDED` without repeating
 `set_excluded()` per field:
@@ -675,6 +725,8 @@ insert(schema::products::table())
     .execute(&pool)
     .await?;
 ```
+
+### Concurrency
 
 Optimistic locking stays normal update SQL: include both the row id and expected
 version in `WHERE`, increment the version in `SET`, and use `RETURNING` to tell

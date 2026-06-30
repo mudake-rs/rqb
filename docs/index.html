@@ -9,51 +9,26 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="shell">
-    <aside class="side">
-      <div class="brand">
-        <a href="index.html">rqb</a>
-        <span>Rust + Postgres + sqlx</span>
-      </div>
-
-      <div class="side-nav">
-        <div class="nav-label">pages</div>
-        <a class="current" href="index.html">home</a>
-        <a href="tutorial.html">tutorial</a>
-        <a href="https://docs.rs/rqb">api docs</a>
-        <a href="https://github.com/mudake-rs/rqb/tree/main/samples">samples</a>
-        <a href="https://github.com/mudake-rs/rqb">source</a>
-
-        <div class="nav-label">this page</div>
-        <a href="#what">what it is</a>
-        <a href="#example">60-second example</a>
-        <a href="#contract">core contract</a>
-        <a href="#map">feature map</a>
-        <a href="#safety">safety boundaries</a>
-        <a href="#install">install</a>
-      </div>
-
-      <div class="side-box">
-        <p>not an ORM</p>
-        <p>Postgres-only</p>
-        <p>parameterized SQL</p>
-        <p>current: 0.1.2</p>
-      </div>
-    </aside>
-
-    <main class="content">
-      <header class="page-head">
-        <p class="kicker">project home</p>
+  <div class="page">
+    <header>
+      <div class="topline">
         <h1>rqb</h1>
-        <p class="lede">Postgres-only Rust query builder on top of sqlx. rqb validates typed query shapes, renders parameterized SQL, and stays out of ORM territory.</p>
-        <div class="badges">
-          <a href="https://crates.io/crates/rqb"><img alt="rqb on crates.io" src="https://img.shields.io/crates/v/rqb.svg?style=flat-square"></a>
-          <a href="https://docs.rs/rqb"><img alt="rqb docs.rs" src="https://docs.rs/rqb/badge.svg"></a>
-          <a href="https://crates.io/crates/rqb-cli"><img alt="rqb-cli on crates.io" src="https://img.shields.io/crates/v/rqb-cli.svg?label=rqb-cli&style=flat-square"></a>
-        </div>
-      </header>
+        <nav>
+          <a href="index.html">home</a>
+          <a href="tutorial.html">tutorial</a>
+          <a href="https://docs.rs/rqb">api docs</a>
+          <a href="https://github.com/mudake-rs/rqb">source</a>
+        </nav>
+      </div>
+      <p class="lede">Postgres-only Rust query builder on top of sqlx. rqb validates typed query shapes, renders parameterized SQL, and stays out of ORM territory.</p>
+      <div class="badges">
+        <a href="https://crates.io/crates/rqb"><img alt="rqb on crates.io" src="https://img.shields.io/crates/v/rqb.svg?style=flat-square"></a>
+        <a href="https://docs.rs/rqb"><img alt="rqb docs.rs" src="https://docs.rs/rqb/badge.svg"></a>
+        <a href="https://crates.io/crates/rqb-cli"><img alt="rqb-cli on crates.io" src="https://img.shields.io/crates/v/rqb-cli.svg?label=rqb-cli&style=flat-square"></a>
+      </div>
+    </header>
 
-      <pre class="ascii">rqb                     Rust/Postgres Query Builder                     rqb
+    <pre class="ascii">rqb                     Rust/Postgres Query Builder                     rqb
 
 NAME
      rqb - typed Postgres query construction and sqlx execution helpers
@@ -62,34 +37,52 @@ SYNOPSIS
      Rust owns query shape.  User values become Postgres bind parameters.
      JSON search can filter and sort only fields exposed by metadata.</pre>
 
-      <h2 id="what">What It Is</h2>
-      <p>rqb is a library for service code that wants to build Postgres queries in Rust without introducing an ORM model. It models tables, fields, expressions, writes, CTEs, joins, locks, and JSON search boundaries. It validates the shape before SQL rendering and executes through sqlx Postgres executors.</p>
+    <h2>What It Is</h2>
+    <p>rqb is a library for service code that wants to build Postgres queries in Rust without becoming an ORM. It models tables, fields, expressions, writes, CTEs, joins, locks, and JSON search boundaries. It validates the shape before SQL rendering and executes through sqlx Postgres executors.</p>
 
-      <div class="cols">
-        <section>
-          <h3>Use it when</h3>
-          <ul>
-            <li>the application owns SQL shape but wants Rust composition;</li>
-            <li>you need joins, CTEs, writes, locks, and raw escape hatches;</li>
-            <li>client JSON should filter/sort only approved fields;</li>
-            <li>you want sqlx execution and row decoding, not a second DB layer.</li>
-          </ul>
-        </section>
-        <section>
-          <h3>Do not use it for</h3>
-          <ul>
-            <li>generic SQL across several database engines;</li>
-            <li>database migrations or schema diffing;</li>
-            <li>entity graphs, identity maps, or lazy loading;</li>
-            <li>letting HTTP clients construct arbitrary SQL.</li>
-          </ul>
-        </section>
-      </div>
+    <div class="cols">
+      <section>
+        <h3>rqb does</h3>
+        <ul>
+          <li>render parameterized Postgres SQL with <code>$N</code> placeholders;</li>
+          <li>bind Rust values through sqlx, not string interpolation;</li>
+          <li>validate field/operator/query-shape mistakes before rendering;</li>
+          <li>generate compact schema metadata from Postgres;</li>
+          <li>let server code own joins, CTEs, writes, raw SQL, and locks;</li>
+          <li>let client JSON control only safe search fields.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>rqb does not</h3>
+        <ul>
+          <li>hide the Postgres dialect;</li>
+          <li>define database migrations;</li>
+          <li>generate row models or entity graphs;</li>
+          <li>turn HTTP JSON into arbitrary SQL;</li>
+          <li>try to prove the whole SQL program at compile time;</li>
+          <li>support non-Postgres backends.</li>
+        </ul>
+      </section>
+    </div>
 
-      <h2 id="example">60-Second Example</h2>
-      <p>Start with schema metadata, build a query, and inspect the generated SQL shape without exposing values.</p>
+    <h2>Install</h2>
+    <pre><code>[dependencies]
+rqb = "0.1.2"
+sqlx = { version = "0.9.0", features = [
+    "postgres",
+    "derive",
+    "uuid",
+    "chrono",
+    "json",
+    "runtime-tokio",
+    "tls-rustls",
+] }</code></pre>
 
-      <pre><code>use rqb::prelude::*;
+    <p>Install the schema generator when you want to introspect a live database:</p>
+    <pre><code>cargo install rqb-cli</code></pre>
+
+    <h2>Small Query</h2>
+    <pre><code>use rqb::prelude::*;
 use uuid::Uuid;
 
 rqb::schema! {
@@ -109,106 +102,52 @@ let query = select(app_users::table())
 
 println!("{}", query.pretty());</code></pre>
 
-      <pre><code>SQL:
-SELECT "id", "email" FROM "public"."app_users" WHERE "status" = $1 ORDER BY "email" ASC LIMIT $2
+    <p>The built query contains SQL with placeholders, ordered bind parameters, and cacheability metadata. <code>query.pretty()</code> is for logs and does not interpolate values into SQL.</p>
 
-Params (2):
-$1: &amp;str
-$2: i64
+    <h2>Core Model</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Part</th>
+          <th>Owner</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Schema metadata</td>
+          <td>Server</td>
+          <td>Fields, Postgres types, operator capabilities, JSON visibility.</td>
+        </tr>
+        <tr>
+          <td>Query shape</td>
+          <td>Server Rust code</td>
+          <td>Sources, joins, projection, CTEs, writes, locks, raw fragments.</td>
+        </tr>
+        <tr>
+          <td>Values</td>
+          <td>Application or request</td>
+          <td>Bound through sqlx as Postgres parameters.</td>
+        </tr>
+        <tr>
+          <td>JSON search</td>
+          <td>Client, inside metadata limits</td>
+          <td>Filter, sort, limit, and offset over exposed fields only.</td>
+        </tr>
+      </tbody>
+    </table>
 
-Cacheable: true</code></pre>
+    <h2>Read Next</h2>
+    <ul>
+      <li><a href="tutorial.html">Tutorial</a> starts from schema metadata and ends with writes, JSON search, and transactions.</li>
+      <li><a href="https://docs.rs/rqb">API docs</a> are generated by docs.rs.</li>
+      <li><a href="https://github.com/mudake-rs/rqb/tree/main/samples">Samples</a> are compile-checked application snippets.</li>
+      <li><a href="https://crates.io/crates/rqb">rqb on crates.io</a> and <a href="https://crates.io/crates/rqb-cli">rqb-cli on crates.io</a>.</li>
+    </ul>
 
-      <h2 id="contract">Core Contract</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Part</th>
-            <th>Owner</th>
-            <th>Meaning</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Schema metadata</td>
-            <td>Server</td>
-            <td>Fields, Postgres types, operator capabilities, JSON visibility.</td>
-          </tr>
-          <tr>
-            <td>Query shape</td>
-            <td>Server Rust code</td>
-            <td>Sources, joins, projection, CTEs, subqueries, writes, locks, raw fragments.</td>
-          </tr>
-          <tr>
-            <td>Values</td>
-            <td>Application or request</td>
-            <td>Bound through sqlx as Postgres parameters. No user value is interpolated into SQL.</td>
-          </tr>
-          <tr>
-            <td>JSON search</td>
-            <td>Client, inside metadata limits</td>
-            <td>Filter, sort, limit, and offset over exposed fields only.</td>
-          </tr>
-          <tr>
-            <td>Rendering</td>
-            <td>rqb</td>
-            <td>Validated AST becomes Postgres SQL with stable placeholder order.</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h2 id="map">Feature Map</h2>
-      <div class="feature-grid">
-        <section>
-          <h3>Reads</h3>
-          <p>Selects, projections, predicates, ordering, pagination, row-value cursors, counts, set queries, joins, lateral joins, CTEs, subqueries, aggregates, windows.</p>
-        </section>
-        <section>
-          <h3>Writes</h3>
-          <p>Insert, update, delete, returning, defaults, nulls, DTO-derived <code>Insertable</code> and <code>Changeset</code>, upserts, batch <code>VALUES</code>, <code>INSERT ... SELECT</code>, and <code>MERGE</code>.</p>
-        </section>
-        <section>
-          <h3>Postgres Surface</h3>
-          <p>Arrays, JSON/JSONB, ranges, full-text helpers, advisory locks, row locks, raw statements, raw expressions, raw predicates, raw sources.</p>
-        </section>
-        <section>
-          <h3>Generated Schema</h3>
-          <p><code>rqb-cli</code> introspects Postgres and emits compact <code>rqb::schema!</code> source with typed fields, aliases, enum types, constraints, and custom type mapping.</p>
-        </section>
-      </div>
-
-      <h2 id="safety">Safety Boundaries</h2>
-      <ul>
-        <li>Validation owns correctness checks that rqb can know before rendering.</li>
-        <li>Rendering assumes validated input and emits parameterized Postgres SQL.</li>
-        <li>Raw SQL is server-owned and still uses rqb placeholders and bind validation.</li>
-        <li><code>SearchRequest</code> cannot define projection, joins, CTEs, raw SQL, writes, or subqueries.</li>
-        <li>Postgres remains the final authority for permissions, constraints, name resolution, and planning.</li>
-      </ul>
-
-      <h2 id="install">Install</h2>
-      <pre><code>[dependencies]
-rqb = "0.1.2"
-sqlx = { version = "0.9.0", features = [
-    "postgres",
-    "derive",
-    "uuid",
-    "chrono",
-    "json",
-    "runtime-tokio",
-    "tls-rustls",
-] }</code></pre>
-
-      <p>Install the schema generator when you want to introspect a live database:</p>
-      <pre class="command"><code>cargo install rqb-cli</code></pre>
-
-      <div class="callout">
-        <p>Read the <a href="tutorial.html">tutorial</a> next. The exhaustive Rust API reference lives on <a href="https://docs.rs/rqb">docs.rs/rqb</a>, and runnable examples live in <a href="https://github.com/mudake-rs/rqb/tree/main/samples">samples/</a>.</p>
-      </div>
-
-      <footer>
-        rqb is licensed under MIT OR Apache-2.0. Source: <a href="https://github.com/mudake-rs/rqb">github.com/mudake-rs/rqb</a>.
-      </footer>
-    </main>
+    <footer>
+      rqb is licensed under MIT OR Apache-2.0. Source: <a href="https://github.com/mudake-rs/rqb">github.com/mudake-rs/rqb</a>.
+    </footer>
   </div>
 </body>
 </html>

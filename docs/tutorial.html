@@ -9,51 +9,35 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="shell">
-    <aside class="side">
-      <div class="brand">
-        <a href="index.html">rqb</a>
-        <span>Rust + Postgres + sqlx</span>
+  <div class="page">
+    <header>
+      <div class="topline">
+        <h1>rqb tutorial</h1>
+        <nav>
+          <a href="index.html">home</a>
+          <a href="tutorial.html">tutorial</a>
+          <a href="https://docs.rs/rqb">api docs</a>
+          <a href="https://github.com/mudake-rs/rqb/tree/main/samples">samples</a>
+        </nav>
       </div>
+      <p class="lede">A practical route through the public API. The examples assume a sqlx Postgres pool and generated schema module.</p>
+    </header>
 
-      <div class="side-nav">
-        <div class="nav-label">pages</div>
-        <a href="index.html">home</a>
-        <a class="current" href="tutorial.html">tutorial</a>
-        <a href="https://docs.rs/rqb">api docs</a>
-        <a href="https://github.com/mudake-rs/rqb/tree/main/samples">samples</a>
-        <a href="https://github.com/mudake-rs/rqb">source</a>
+    <ol class="toc">
+      <li><a href="#install">Install</a></li>
+      <li><a href="#schema">Schema Metadata</a></li>
+      <li><a href="#select">Select</a></li>
+      <li><a href="#execute">Execute</a></li>
+      <li><a href="#reuse">Reuse Query Shape</a></li>
+      <li><a href="#search">JSON Search</a></li>
+      <li><a href="#writes">Writes</a></li>
+      <li><a href="#transactions">Transactions</a></li>
+      <li><a href="#debug">Debug Output</a></li>
+      <li><a href="#cli">CLI</a></li>
+    </ol>
 
-        <div class="nav-label">this page</div>
-        <a href="#install">install</a>
-        <a href="#schema">schema</a>
-        <a href="#select">select</a>
-        <a href="#execute">execute</a>
-        <a href="#composition">composition</a>
-        <a href="#json-search">json search</a>
-        <a href="#writes">writes</a>
-        <a href="#transactions">transactions</a>
-        <a href="#raw">raw sql</a>
-        <a href="#errors">errors</a>
-        <a href="#cli">cli</a>
-      </div>
-
-      <div class="side-box">
-        <p>no JS</p>
-        <p>no ORM</p>
-        <p>docs.rs for API details</p>
-      </div>
-    </aside>
-
-    <main class="content">
-      <header class="page-head">
-        <p class="kicker">tutorial</p>
-        <h1>Building queries with rqb</h1>
-        <p class="lede">A practical route through the public API. The examples assume a sqlx Postgres pool and a generated schema module.</p>
-      </header>
-
-      <h2 id="install">1. Install</h2>
-      <pre><code>[dependencies]
+    <h2 id="install">1. Install</h2>
+    <pre><code>[dependencies]
 rqb = "0.1.2"
 sqlx = { version = "0.9.0", features = [
     "postgres",
@@ -68,13 +52,13 @@ uuid = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"</code></pre>
 
-      <p>The CLI is a separate crate with a binary named <code>rqb</code>:</p>
-      <pre class="command"><code>cargo install rqb-cli</code></pre>
+    <p>The CLI is a separate crate with a binary named <code>rqb</code>:</p>
+    <pre><code>cargo install rqb-cli</code></pre>
 
-      <h2 id="schema">2. Schema Metadata</h2>
-      <p>rqb queries start from metadata. Small examples can use <code>rqb::schema!</code> directly. Applications usually generate the module with <code>rqb generate</code> and check it into source control.</p>
+    <h2 id="schema">2. Schema Metadata</h2>
+    <p>rqb queries start from metadata. Small examples can use <code>rqb::schema!</code> directly. Applications usually generate the module with <code>rqb generate</code> and check it into source control.</p>
 
-      <pre><code>use rqb::prelude::*;
+    <pre><code>use rqb::prelude::*;
 use uuid::Uuid;
 
 rqb::schema! {
@@ -82,15 +66,14 @@ rqb::schema! {
         id: uuid = Uuid,
         email: text = String,
         status: text = String,
-        display_name: text = String,
         active: bool = bool,
     }
 }</code></pre>
 
-      <p>The generated module exposes <code>users::table()</code>, typed field constants such as <code>users::EMAIL</code>, and alias handles such as <code>users::alias("u")</code>. Use alias handles as soon as a query has more than one source.</p>
+    <p>The generated module exposes <code>users::table()</code>, typed field constants such as <code>users::EMAIL</code>, and alias handles such as <code>users::alias("u")</code>.</p>
 
-      <h2 id="select">3. Select</h2>
-      <pre><code>let query = select(users::table())
+    <h2 id="select">3. Select</h2>
+    <pre><code>let query = select(users::table())
     .columns((users::ID, users::EMAIL))
     .filter(users::STATUS.eq("active"))
     .filter(users::ACTIVE.eq(true))
@@ -98,37 +81,23 @@ rqb::schema! {
     .limit(20)
     .build()?;</code></pre>
 
-      <p><code>select(table())</code> uses metadata fields as the default root projection. Joins and computed columns are explicit:</p>
+    <p><code>select(table())</code> uses metadata fields as the default root projection. Joins and computed columns are explicit:</p>
 
-      <pre><code>use rqb::dsl::{count_all, sum};
+    <pre><code>use rqb::dsl::count_all;
 
 let u = users::alias("u");
-let o = orders::alias("o");
-
-let report = select(&amp;u)
-    .join(&amp;o, u.id().eq_field(o.user_id()))
+let rows = select(&u)
+    .column(u.id())
     .column(u.email())
-    .expr_as(sum(o.total_cents()), "gross_cents")
     .expr_as(count_all(), "row_count")
+    .group_by(u.id())
     .group_by(u.email())
     .build()?;</code></pre>
 
-      <p>Window expressions stay in the same projection layer:</p>
+    <h2 id="execute">4. Execute</h2>
+    <p>Builders execute through sqlx Postgres executors. Use typed row structs with <code>sqlx::FromRow</code>.</p>
 
-      <pre><code>use rqb::dsl::{sum, window};
-
-let ranked = select(orders::table())
-    .column(orders::USER_ID)
-    .expr_as(
-        sum(orders::TOTAL_CENTS).over(window().partition_by(orders::USER_ID)),
-        "user_total_cents",
-    )
-    .build()?;</code></pre>
-
-      <h2 id="execute">4. Execute</h2>
-      <p>Builders execute through sqlx Postgres executors. Use typed row structs with <code>sqlx::FromRow</code>.</p>
-
-      <pre><code>#[derive(sqlx::FromRow)]
+    <pre><code>#[derive(sqlx::FromRow)]
 struct UserRow {
     id: Uuid,
     email: String,
@@ -137,68 +106,43 @@ struct UserRow {
 let rows = select(users::table())
     .columns((users::ID, users::EMAIL))
     .filter(users::STATUS.eq("active"))
-    .fetch_all_as::&lt;UserRow&gt;(&amp;pool)
+    .fetch_all_as::&lt;UserRow&gt;(&pool)
     .await?;</code></pre>
 
-      <p>Counts are an execution helper on <code>Select</code>. The count query strips ordering, limits, offsets, fetch clauses, and row locks before wrapping the select.</p>
+    <p><code>Select::count()</code> runs a matching-row count and strips order, page, fetch, and row-lock clauses before wrapping the select.</p>
 
-      <pre><code>let total = select(users::table())
+    <pre><code>let total = select(users::table())
     .filter(users::ACTIVE.eq(true))
-    .count(&amp;pool)
+    .count(&pool)
     .await?;</code></pre>
 
-      <h2 id="composition">5. Composition</h2>
-      <p>Reusable query shape is usually a plain sync function. That keeps executor lifetimes out of normal service signatures and still works inside transactions.</p>
+    <h2 id="reuse">5. Reuse Query Shape</h2>
+    <p>Prefer reusing synchronous query-construction helpers. This keeps lifetimes out of normal service APIs and still works inside transactions.</p>
 
-      <pre><code>fn find_user_query(id: Uuid) -&gt; Select {
+    <pre><code>fn find_user_query(id: Uuid) -&gt; Select {
     select(users::table())
         .columns((users::ID, users::EMAIL))
         .filter(users::ID.eq(id))
 }
 
-async fn find_user(pool: &amp;PgPool, id: Uuid) -&gt; rqb::Result&lt;UserRow&gt; {
+async fn find_user(pool: &PgPool, id: Uuid) -&gt; rqb::Result&lt;UserRow&gt; {
     find_user_query(id).fetch_one_as::&lt;UserRow&gt;(pool).await
 }</code></pre>
 
-      <p>CTEs and subqueries remain server-owned query shapes. When a select projects plain fields, <code>infer_cte</code> can infer the exposed field metadata.</p>
+    <p>Inside a transaction, execute the same shape with a reborrowed connection:</p>
 
-      <pre><code>let active_users = select(users::table())
-    .columns((users::ID, users::EMAIL))
-    .filter(users::ACTIVE.eq(true))
-    .infer_cte("active_users")?
-    .not_materialized();
+    <pre><code>tx!(&pool, |conn| {
+    let user = find_user_query(id)
+        .fetch_one_as::&lt;UserRow&gt;(&mut *conn)
+        .await?;
+    Ok(user)
+})
+.await?;</code></pre>
 
-let au = active_users.source().alias("au");
+    <h2 id="search">6. JSON Search</h2>
+    <p><code>SearchRequest</code> lets client JSON control filters, sort, limit, and offset only over fields exposed by metadata. Server Rust code still owns sources, joins, projection, raw SQL, CTEs, and writes.</p>
 
-let active_report = select(au)
-    .with(active_users)
-    .column(users::EMAIL.at("au"))
-    .build()?;</code></pre>
-
-      <p>Subqueries work in predicates and value expressions:</p>
-
-      <pre><code>use rqb::dsl::{exists, scalar_subquery};
-
-let paid_orders = select(orders::table())
-    .column(orders::USER_ID)
-    .filter(orders::STATUS.eq("paid"));
-
-let u = users::alias("u");
-let o = orders::alias("o");
-
-let paid_users = select(&amp;u)
-    .filter(u.id().in_subquery(paid_orders))
-    .filter(exists(
-        select(&amp;o)
-            .column(o.id())
-            .filter(o.user_id().eq_field(u.id())),
-    ))
-    .build()?;</code></pre>
-
-      <h2 id="json-search">6. JSON Search</h2>
-      <p><code>SearchRequest</code> lets client JSON control filters, sort, limit, and offset only over fields exposed by metadata. Server Rust code still owns sources, joins, projection, raw SQL, CTEs, and writes.</p>
-
-      <pre><code>{
+    <pre><code>{
   "filter": {
     "and": [
       { "field": "status", "operator": "equals", "value": "active" },
@@ -209,19 +153,19 @@ let paid_users = select(&amp;u)
   "limit": 20
 }</code></pre>
 
-      <pre><code>let query = select(users::table())
+    <pre><code>let query = select(users::table())
     .filter(users::ACTIVE.eq(true))
     .apply_search(search_request)?
     .build()?;</code></pre>
 
-      <div class="warning">
-        Install tenant, user, RBAC, and soft-delete filters before <code>apply_search</code>. Request filters are combined with server filters using <code>AND</code>; request sort, limit, and offset are request-owned clauses.
-      </div>
+    <div class="warning">
+      Install tenant, user, RBAC, and soft-delete filters before <code>apply_search</code>. Request filters are combined with server filters using <code>AND</code>; request sort, limit, and offset are request-owned clauses.
+    </div>
 
-      <h2 id="writes">7. Writes</h2>
-      <p>Writes use field assignments or derive-generated mappings. rqb does not accept arbitrary JSON as a write shape.</p>
+    <h2 id="writes">7. Writes</h2>
+    <p>Writes use field assignments or derive-generated mappings. rqb does not accept arbitrary JSON as a write shape.</p>
 
-      <pre><code>let created_id = insert(users::table())
+    <pre><code>let created_id = insert(users::table())
     .set_many((
         users::ID.set(user_id),
         users::EMAIL.set("ada@example.com"),
@@ -229,52 +173,29 @@ let paid_users = select(&amp;u)
         users::ACTIVE.set(true),
     ))
     .returning(users::ID)
-    .fetch_one_scalar::&lt;Uuid&gt;(&amp;pool)
+    .fetch_one_scalar::&lt;Uuid&gt;(&pool)
     .await?;</code></pre>
 
-      <p><code>Insertable</code> and <code>Changeset</code> map DTO fields to generated schema fields without routing values through JSON.</p>
+    <p>DTOs can derive assignments when a request shape intentionally matches a database write shape:</p>
 
-      <pre><code>#[derive(rqb::Changeset)]
+    <pre><code>#[derive(rqb::Insertable)]
 #[rqb(table = users)]
-struct UserPatch {
-    email: Option&lt;String&gt;,
-    status: Option&lt;String&gt;,
+struct NewUser {
+    email: String,
+    status: String,
+    active: bool,
 }
 
-update(users::table())
-    .patch(&amp;patch)
-    .filter(users::ID.eq(user_id))
-    .returning(users::ID)
-    .execute(&amp;pool)
+insert(users::table())
+    .set(users::ID.set(user_id))
+    .values(&new_user)
+    .execute(&pool)
     .await?;</code></pre>
 
-      <p>Common upserts can update several fields from <code>EXCLUDED</code> without repeating <code>set_excluded()</code>.</p>
+    <h2 id="transactions">8. Transactions</h2>
+    <p>Use <code>tx!</code> for closure-style transactions. Use explicit <code>begin</code> and <code>commit</code> only when you need sqlx transaction ownership or savepoint control outside the closure.</p>
 
-      <pre><code>insert(users::table())
-    .values(&amp;new_user)
-    .on_conflict(users::EMAIL)
-    .do_update_excluded((users::STATUS, users::DISPLAY_NAME))
-    .returning(users::ID)
-    .execute(&amp;pool)
-    .await?;</code></pre>
-
-      <p>Batch DTO inserts expose an incoming <code>VALUES</code> source, so conflict updates can copy from the same alias.</p>
-
-      <pre><code>insert(users::table())
-    .values_many(&amp;incoming_users, "incoming")?
-    .on_conflict(users::EMAIL)
-    .do_update_set((
-        users::STATUS.set_from("incoming"),
-        users::DISPLAY_NAME.set_from("incoming"),
-    ))
-    .returning(users::ID)
-    .execute(&amp;pool)
-    .await?;</code></pre>
-
-      <h2 id="transactions">8. Transactions</h2>
-      <p>Use <code>tx!</code> for closure-style transactions. Use explicit <code>begin</code> and <code>commit</code> only when you need sqlx transaction ownership or savepoint control outside the closure.</p>
-
-      <pre><code>tx!(&amp;pool, |conn| {
+    <pre><code>tx!(&pool, |conn| {
     let created_id = insert(users::table())
         .set_many((
             users::ID.set(user_id),
@@ -288,102 +209,42 @@ update(users::table())
 })
 .await?;</code></pre>
 
-      <p>Row locks stay on <code>SELECT</code>. Transaction-scoped advisory locks live in <code>rqb::dsl</code> and are safer than session locks when using connection pools.</p>
+    <h2 id="debug">9. Debug Output</h2>
+    <p>Build once when you want to inspect generated SQL or execute the same validated query more than once.</p>
 
-      <pre><code>use rqb::dsl::try_advisory_xact_lock_named;
-
-let order = select(orders::table())
-    .filter(orders::ID.eq(order_id))
-    .for_update()
-    .skip_locked()
-    .fetch_optional_as::&lt;OrderRow&gt;(&amp;mut *conn)
-    .await?;
-
-let acquired = try_advisory_xact_lock_named(format!("job:{job_id}"))
-    .fetch_one_scalar::&lt;bool&gt;(&amp;mut *conn)
-    .await?;</code></pre>
-
-      <h2 id="raw">9. Raw SQL</h2>
-      <p>The typed DSL is not meant to mirror every PostgreSQL construct. Raw fragments are server-owned escape hatches at exact AST slots, and bind counts are still validated.</p>
-
-      <pre><code>let raw_stmt = raw("SELECT ?? AS marker, ?::uuid AS id")
-    .bind(user_id)
+    <pre><code>let built = select(users::table())
+    .filter(users::EMAIL.eq("ada@example.com"))
     .build()?;
 
-assert_eq!(raw_stmt.sql, "SELECT ? AS marker, $1::uuid AS id");</code></pre>
+println!("{}", built.pretty());</code></pre>
 
-      <p>Raw expressions and raw sources compose with typed queries. Any raw fragment marks the built query as non-cacheable because rqb cannot prove the text is a stable prepared-statement shape.</p>
+    <p>Output is safe for logs because it shows placeholders and bind type names, not bind values:</p>
 
-      <pre><code>let extension_score = raw_expr(
-    "custom_extension_score(payload, ?::text)",
-    [Param::typed("strict".to_owned())],
-);
+    <pre><code>SQL:
+SELECT "id", "email", "status", "active" FROM "public"."users" WHERE "email" = $1
 
-let scored = select(events::table())
-    .column(events::ID)
-    .expr_as(extension_score, "extension_score")
-    .build()?;</code></pre>
+Params (1):
+$1: &amp;str
 
-      <h2 id="errors">10. Errors</h2>
-      <p>rqb returns one structured <code>Error</code> enum for validation failures, sqlx execution failures, and mapped Postgres SQLSTATE errors. Application code matches variants instead of parsing message text.</p>
+Cacheable: true</code></pre>
 
-      <pre><code>match insert(users::table())
-    .set(users::EMAIL.set("ada@example.com"))
-    .execute(&amp;pool)
-    .await
-{
-    Ok(_) =&gt; Ok(()),
-    Err(rqb::Error::UniqueViolation(err)) =&gt; {
-        let constraint = err.constraint;
-        Ok(())
-    }
-    Err(error) =&gt; Err(error),
-}</code></pre>
+    <h2 id="cli">10. CLI</h2>
+    <p>Generate schema metadata from a real Postgres database:</p>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Error</th>
-            <th>Typical API response</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>UniqueViolation</code></td>
-            <td>409 Conflict</td>
-          </tr>
-          <tr>
-            <td><code>ForeignKeyViolation</code>, <code>NotNullViolation</code></td>
-            <td>400 Bad Request</td>
-          </tr>
-          <tr>
-            <td><code>InvalidSearchField</code>, <code>InvalidSearchOperator</code></td>
-            <td>400 Bad Request</td>
-          </tr>
-          <tr>
-            <td><code>SerializationFailure</code>, <code>DeadlockDetected</code></td>
-            <td>retry or 503</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h2 id="cli">11. CLI</h2>
-      <p>Generate schema metadata from a real Postgres database:</p>
-
-      <pre class="command"><code>rqb generate \
+    <pre><code>rqb generate \
   --database-url "$DATABASE_URL" \
   --schema public \
   --out src/schema.rs</code></pre>
 
-      <p>Use a checked-in config for project-owned domains and extension types:</p>
+    <p>Use a checked-in config for project-owned domains and extension types:</p>
 
-      <pre><code>[type_map."bitcoin.uint256"]
+    <pre><code>[type_map."bitcoin.uint256"]
 rust = "crate::types::PgU256"
 ops = "ordered"
 json = "text"
 array = true</code></pre>
 
-      <pre class="command"><code>rqb generate \
+    <pre><code>rqb generate \
   --database-url "$DATABASE_URL" \
   --schema public \
   --config rqb.toml \
@@ -391,14 +252,17 @@ array = true</code></pre>
   --check \
   --report</code></pre>
 
-      <div class="callout">
-        <p>Use <a href="https://docs.rs/rqb">docs.rs/rqb</a> for exhaustive API docs and <a href="https://github.com/mudake-rs/rqb/tree/main/samples">samples/</a> for compile-checked recipes.</p>
-      </div>
+    <h2>Where To Go Next</h2>
+    <ul>
+      <li><a href="https://docs.rs/rqb">docs.rs/rqb</a> for API docs.</li>
+      <li><a href="https://github.com/mudake-rs/rqb/tree/main/samples/basic-queries">samples/basic-queries</a> for first queries.</li>
+      <li><a href="https://github.com/mudake-rs/rqb/tree/main/samples/rest-api">samples/rest-api</a> for service-layer patterns.</li>
+      <li><a href="https://github.com/mudake-rs/rqb/tree/main/samples/custom-types">samples/custom-types</a> for CLI type mapping.</li>
+    </ul>
 
-      <footer>
-        rqb is licensed under MIT OR Apache-2.0. Source: <a href="https://github.com/mudake-rs/rqb">github.com/mudake-rs/rqb</a>.
-      </footer>
-    </main>
+    <footer>
+      rqb is licensed under MIT OR Apache-2.0. Source: <a href="https://github.com/mudake-rs/rqb">github.com/mudake-rs/rqb</a>.
+    </footer>
   </div>
 </body>
 </html>

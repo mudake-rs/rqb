@@ -1,0 +1,193 @@
+html {
+  background: #ffffff;
+  color: #111111;
+  font: 16px/1.5 Georgia, "Times New Roman", serif;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 20px 18px 48px;
+}
+
+a {
+  color: #0000aa;
+}
+
+a:visited {
+  color: #551a8b;
+}
+
+a:hover {
+  color: #aa0000;
+}
+
+header {
+  border-bottom: 3px double #111111;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+}
+
+.topline {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  justify-content: space-between;
+}
+
+h1,
+h2,
+h3 {
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 34px;
+  margin: 0;
+}
+
+h2 {
+  border-bottom: 1px solid #999999;
+  font-size: 22px;
+  margin: 30px 0 10px;
+  padding-bottom: 3px;
+}
+
+h3 {
+  font-size: 18px;
+  margin: 22px 0 8px;
+}
+
+p {
+  margin: 10px 0;
+}
+
+nav {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+}
+
+nav a {
+  margin-right: 14px;
+  white-space: nowrap;
+}
+
+.lede {
+  font-size: 19px;
+  max-width: 760px;
+}
+
+.note,
+.warning {
+  border: 1px solid #777777;
+  margin: 16px 0;
+  padding: 10px 12px;
+}
+
+.warning {
+  background: #fff8dc;
+}
+
+.toc {
+  columns: 2;
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 14px 0 20px;
+  padding-left: 22px;
+}
+
+.toc li {
+  break-inside: avoid;
+  margin: 3px 0;
+}
+
+.badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.badges img {
+  display: block;
+  height: 20px;
+}
+
+.ascii {
+  background: #f5f5f5;
+  border: 1px solid #999999;
+  overflow-x: auto;
+  padding: 10px 12px;
+}
+
+code,
+pre,
+kbd {
+  font-family: "Courier New", Courier, monospace;
+}
+
+code {
+  background: #f5f5f5;
+  padding: 0 3px;
+}
+
+pre {
+  background: #f5f5f5;
+  border: 1px solid #999999;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+table {
+  border-collapse: collapse;
+  margin: 14px 0;
+  width: 100%;
+}
+
+th,
+td {
+  border: 1px solid #999999;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #eeeeee;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.cols {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+footer {
+  border-top: 1px solid #999999;
+  color: #555555;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  margin-top: 36px;
+  padding-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 16px 12px 36px;
+  }
+
+  .cols {
+    grid-template-columns: 1fr;
+  }
+
+  .toc {
+    columns: 1;
+  }
+}

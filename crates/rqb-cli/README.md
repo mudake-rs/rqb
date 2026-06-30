@@ -7,10 +7,10 @@ The crate installs a binary named `rqb`.
 
 ## Install
 
-Install from GitHub:
+Install from crates.io:
 
 ```bash
-cargo install --git https://github.com/mudake-rs/rqb rqb-cli
+cargo install rqb-cli
 ```
 
 The package name is `rqb-cli`; the installed binary is `rqb`.

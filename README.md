@@ -2,6 +2,8 @@
 
 Postgres-only Rust query builder on top of sqlx. It is not an ORM.
 
+Home page: <https://mudake-rs.github.io/rqb/>
+
 Start with [`samples`](samples) when you want code first. They are short,
 compile-checked, and use the public API directly.
 
@@ -54,11 +56,11 @@ runs against Postgres 18.
 
 ## Install
 
-rqb is distributed as a git dependency:
+rqb is distributed through crates.io:
 
 ```toml
 [dependencies]
-rqb = { git = "https://github.com/mudake-rs/rqb" }
+rqb = "0.1.2"
 chrono = "0.4.45"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
@@ -74,7 +76,7 @@ sqlx = { version = "0.9.0", features = [
 uuid = "1.23.4"
 ```
 
-For reproducible application builds, pin a commit:
+For source-pinned application builds, use the GitHub repository:
 
 ```toml
 rqb = { git = "https://github.com/mudake-rs/rqb", rev = "<commit>" }
@@ -813,10 +815,10 @@ setup, or transaction ownership that crosses helper boundaries.
 `rqb-cli` introspects Postgres and writes a compact `rqb::schema!` module. The
 macro expands to `Meta`, `Field<T>`, `FIELDS`, and `table()` / `view()` items.
 
-Install the CLI from GitHub; the installed binary is `rqb`.
+Install the CLI from crates.io; the installed binary is `rqb`.
 
 ```bash
-cargo install --git https://github.com/mudake-rs/rqb rqb-cli
+cargo install rqb-cli
 ```
 
 The package name is `rqb-cli`; the binary name is `rqb`.

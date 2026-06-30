@@ -1,4 +1,4 @@
-# rqb
+# rqb 💩
 
 Postgres-only Rust query builder on top of sqlx. It is not an ORM.
 

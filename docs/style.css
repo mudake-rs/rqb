@@ -1,23 +1,51 @@
 html {
-  background: #f7f7f0;
-  color: #111111;
+  background: #070808;
+  color: #e9e3d0;
   font: 16px/1.55 Georgia, "Times New Roman", serif;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
+  background:
+    linear-gradient(120deg, rgba(255, 77, 31, 0.08), transparent 32%),
+    linear-gradient(260deg, rgba(45, 226, 230, 0.08), transparent 42%),
+    #070808;
   margin: 0;
+  min-height: 100vh;
+}
+
+body::before {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.04) 0,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 0;
 }
 
 a {
-  color: #0000aa;
+  color: #3ff7ff;
+  text-decoration-color: rgba(63, 247, 255, 0.45);
+  text-underline-offset: 3px;
 }
 
 a:visited {
-  color: #551a8b;
+  color: #f46dff;
 }
 
 a:hover {
-  color: #aa0000;
+  color: #ffcf5a;
+  text-decoration-color: currentColor;
 }
 
 .shell {
@@ -27,63 +55,95 @@ a:hover {
   margin: 0 auto;
   max-width: 1160px;
   padding: 20px 18px 48px;
+  position: relative;
+  z-index: 1;
 }
 
 .side {
   align-self: start;
-  border-right: 2px solid #111111;
+  background: rgba(9, 12, 14, 0.86);
+  border: 1px solid rgba(255, 207, 90, 0.45);
+  border-right: 3px solid #ff4d1f;
+  box-shadow:
+    0 0 0 1px rgba(63, 247, 255, 0.12),
+    0 0 28px rgba(255, 77, 31, 0.14);
   font-family: "Courier New", Courier, monospace;
   font-size: 14px;
-  padding-right: 18px;
+  padding: 15px 14px;
   position: sticky;
   top: 16px;
+  z-index: 5;
 }
 
 .brand {
-  border-bottom: 3px double #111111;
+  border-bottom: 1px solid rgba(255, 207, 90, 0.75);
   margin-bottom: 16px;
   padding-bottom: 12px;
 }
 
 .brand a {
-  color: #111111;
+  color: #ffcf5a;
   display: inline-block;
   font-size: 25px;
   font-weight: 700;
   text-decoration: none;
+  text-shadow: 0 0 18px rgba(255, 207, 90, 0.35);
 }
 
 .brand span {
+  color: #a9f8ff;
   display: block;
   margin-top: 4px;
 }
 
 .nav-label {
-  color: #8a3b12;
+  color: #ff4d1f;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.11em;
   margin: 18px 0 5px;
   text-transform: uppercase;
 }
 
-.side-nav a {
-  display: block;
-  margin: 3px 0;
-  padding: 2px 0;
-  text-decoration: none;
+.side-nav {
+  display: grid;
+  gap: 4px;
 }
 
-.side-nav a:hover {
-  text-decoration: underline;
+.side-nav a {
+  background: rgba(63, 247, 255, 0.04);
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  display: block;
+  min-height: 32px;
+  padding: 5px 7px;
+  position: relative;
+  text-decoration: none;
+  z-index: 6;
+}
+
+.side-nav a:hover,
+.side-nav a:focus {
+  background: rgba(255, 207, 90, 0.10);
+  border-color: rgba(255, 207, 90, 0.45);
+  border-left-color: #ff4d1f;
+  color: #ffcf5a;
+  outline: 0;
+}
+
+.side-nav a.current {
+  color: #ffcf5a;
+  border-left-color: #3ff7ff;
 }
 
 .side-nav a.current::before {
-  content: "> ";
+  color: #3ff7ff;
+  content: "// ";
 }
 
 .side-box {
-  border-top: 1px solid #777777;
+  border-top: 1px solid rgba(255, 207, 90, 0.45);
+  color: #c2bba5;
   margin-top: 18px;
   padding-top: 10px;
 }
@@ -94,10 +154,12 @@ a:hover {
 
 .content {
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .page-head {
-  border-bottom: 3px double #111111;
+  border-bottom: 3px double rgba(255, 207, 90, 0.8);
   margin-bottom: 22px;
   padding-bottom: 14px;
 }
@@ -110,12 +172,17 @@ h3 {
 }
 
 h1 {
+  color: #f7f1dc;
   font-size: 36px;
   margin: 0;
+  text-shadow:
+    0 0 18px rgba(63, 247, 255, 0.25),
+    0 0 30px rgba(255, 77, 31, 0.12);
 }
 
 h2 {
-  border-bottom: 1px solid #999999;
+  border-bottom: 1px solid rgba(255, 207, 90, 0.45);
+  color: #ffcf5a;
   font-size: 23px;
   margin: 34px 0 10px;
   padding-bottom: 3px;
@@ -123,10 +190,12 @@ h2 {
 }
 
 h2:target {
-  background: #fff8dc;
+  background: rgba(255, 77, 31, 0.14);
+  box-shadow: 0 0 0 4px rgba(255, 77, 31, 0.14);
 }
 
 h3 {
+  color: #f7f1dc;
   font-size: 18px;
   margin: 22px 0 8px;
 }
@@ -141,11 +210,11 @@ p {
 }
 
 .kicker {
-  color: #8a3b12;
+  color: #ff4d1f;
   font-family: "Courier New", Courier, monospace;
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   margin: 0 0 6px;
   text-transform: uppercase;
 }
@@ -165,8 +234,12 @@ p {
 
 .ascii,
 pre {
-  background: #f1f1ec;
-  border: 1px solid #999999;
+  background:
+    linear-gradient(180deg, rgba(63, 247, 255, 0.06), rgba(255, 77, 31, 0.05)),
+    #0c0f10;
+  border: 1px solid rgba(63, 247, 255, 0.35);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.35);
+  color: #e8f8ec;
   overflow-x: auto;
   padding: 12px;
 }
@@ -178,28 +251,31 @@ kbd {
 }
 
 code {
-  background: #f1f1ec;
+  background: rgba(63, 247, 255, 0.08);
+  color: #dffcff;
   padding: 0 3px;
 }
 
 .command {
   background: #111111;
-  color: #f5f5f5;
+  border-color: rgba(255, 207, 90, 0.55);
+  color: #ffcf5a;
 }
 
 .callout,
 .warning {
-  border: 1px solid #777777;
+  border: 1px solid rgba(255, 207, 90, 0.48);
   margin: 16px 0;
   padding: 10px 12px;
 }
 
 .callout {
-  background: #ffffff;
+  background: rgba(63, 247, 255, 0.06);
 }
 
 .warning {
-  background: #fff8dc;
+  background: rgba(255, 77, 31, 0.13);
+  border-color: rgba(255, 77, 31, 0.55);
 }
 
 .cols,
@@ -210,7 +286,7 @@ code {
 }
 
 .feature-grid section {
-  border-left: 3px solid #8a3b12;
+  border-left: 3px solid #ff4d1f;
   padding-left: 12px;
 }
 
@@ -222,20 +298,21 @@ table {
 
 th,
 td {
-  border: 1px solid #999999;
+  border: 1px solid rgba(255, 207, 90, 0.35);
   padding: 6px 8px;
   text-align: left;
   vertical-align: top;
 }
 
 th {
-  background: #e9e9df;
+  background: rgba(255, 207, 90, 0.12);
+  color: #ffcf5a;
   font-family: Arial, Helvetica, sans-serif;
 }
 
 footer {
-  border-top: 1px solid #999999;
-  color: #555555;
+  border-top: 1px solid rgba(255, 207, 90, 0.35);
+  color: #a9a18f;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 13px;
   margin-top: 36px;
@@ -249,16 +326,29 @@ footer {
   }
 
   .side {
-    border-bottom: 2px solid #111111;
+    border-bottom: 2px solid #ff4d1f;
     border-right: 0;
     margin-bottom: 20px;
     padding: 0 0 14px;
     position: static;
   }
 
+  .side-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+
+  .nav-label {
+    flex: 0 0 100%;
+    margin: 16px 0 0;
+  }
+
   .side-nav a {
     display: inline-block;
-    margin-right: 12px;
+    margin-right: 0;
+    min-height: 36px;
+    padding: 7px 9px;
   }
 
   .side-box {

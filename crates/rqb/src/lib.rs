@@ -114,7 +114,7 @@ mod tx;
 extern crate self as rqb;
 
 pub use advisory::AdvisoryLockKey;
-pub use built::BuiltQuery;
+pub use built::{BuiltQuery, PrettyQuery, pretty_query};
 pub use error::{
     ColumnError, ConstraintError, CteShapeError, DatabaseFailure, DbErrorInfo, DbErrorPosition,
     Error, OperatorError, PgFailure, SearchValueError, WriteTargetError,

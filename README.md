@@ -134,7 +134,9 @@ let query = select(app_users::table())
 ```
 
 `query.sql` contains `$N` placeholders and `query.arguments()?` creates
-`sqlx::postgres::PgArguments` at execution time.
+`sqlx::postgres::PgArguments` at execution time. Use `query.pretty()` or
+`rqb::pretty_query(&query)` for debug logs that show SQL, bind count, bind type
+names, and cacheability without interpolating values into SQL.
 
 ## Execution
 

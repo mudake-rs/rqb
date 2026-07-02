@@ -1,5 +1,7 @@
 use crate::{Error, Result};
 
+// Keep SQL literal/comment boundary handling aligned with the debug formatter in
+// `summary`; raw remains the bind-count authority for execution paths.
 pub(crate) enum RawToken<'a> {
     Text(&'a str),
     EscapedQuestion,

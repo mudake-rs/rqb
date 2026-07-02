@@ -136,9 +136,10 @@ let query = select(app_users::table())
 ```
 
 `query.sql` contains `$N` placeholders and `query.arguments()?` creates
-`sqlx::postgres::PgArguments` at execution time. Use `query.pretty()` or
-`rqb::pretty_query(&query)` for debug logs that show SQL, bind count, bind type
-names, and cacheability without interpolating values into SQL.
+`sqlx::postgres::PgArguments` at execution time. Use `query.pretty_sql()` for
+formatted SQL only, or `query.summary()` for debug logs that show
+pretty-printed SQL, bind count, bind type names, and cacheability without
+interpolating values into SQL.
 
 ## Execution
 
@@ -156,6 +157,16 @@ let rows = select(schema::users::table())
     .fetch_all_as::<UserRow>(&pool)
     .await?;
 ```
+
+Built queries pass `cacheable` to sqlx `.persistent(...)`. For Postgres, sqlx
+keeps a bounded prepared-statement cache per connection, defaulting to 100
+entries with LRU eviction; tune it with
+`PgConnectOptions::statement_cache_capacity(...)` or the
+`statement-cache-capacity` URL parameter. rqb marks raw SQL fragments as
+non-cacheable because it cannot prove their text is a stable statement shape.
+Typed queries remain cacheable, but high-cardinality generated shapes such as
+many different `IN` list lengths or optional-filter combinations can churn the
+cache even though memory stays bounded.
 
 Service functions can usually accept `&PgPool`. When a query must be reused
 inside a transaction, prefer reusing the query shape instead of making the async

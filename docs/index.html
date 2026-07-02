@@ -100,9 +100,9 @@ let query = select(app_users::table())
     .limit(20)
     .build()?;
 
-println!("{}", query.pretty());</code></pre>
+println!("{}", query.summary());</code></pre>
 
-    <p>The built query contains SQL with placeholders, ordered bind parameters, and cacheability metadata. <code>query.pretty()</code> is for logs and does not interpolate values into SQL.</p>
+    <p>The built query contains SQL with placeholders, ordered bind parameters, and cacheability metadata. <code>query.pretty_sql()</code> prints formatted SQL only; <code>query.summary()</code> adds bind type names and cacheability without interpolating values into SQL.</p>
 
     <h2>Core Model</h2>
     <table>

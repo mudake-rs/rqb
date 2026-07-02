@@ -216,12 +216,18 @@ insert(users::table())
     .filter(users::EMAIL.eq("ada@example.com"))
     .build()?;
 
-println!("{}", built.pretty());</code></pre>
+println!("{}", built.summary());</code></pre>
 
     <p>Output is safe for logs because it shows placeholders and bind type names, not bind values:</p>
 
     <pre><code>SQL:
-SELECT "id", "email", "status", "active" FROM "public"."users" WHERE "email" = $1
+SELECT
+    "id",
+    "email",
+    "status",
+    "active"
+FROM "public"."users"
+WHERE "email" = $1
 
 Params (1):
 $1: &amp;str

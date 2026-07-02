@@ -1,9 +1,8 @@
-use std::fmt;
-
 use sqlx::postgres::PgArguments;
 
 use crate::Params;
 use crate::Result;
+use crate::summary::{format_query_sql, format_query_summary};
 
 /// Rendered SQL plus its bind parameters.
 ///
@@ -20,8 +19,17 @@ pub struct BuiltQuery {
     pub params: Params,
     /// Whether this query is safe to reuse as a stable prepared statement shape.
     ///
-    /// Raw SQL fragments make the query non-cacheable because rqb cannot prove
-    /// that their text is a stable statement shape.
+    /// rqb passes this to sqlx `.persistent(cacheable)`. SQLx keeps a bounded
+    /// per-connection prepared-statement cache for Postgres, with a default
+    /// capacity of 100 entries. Raw SQL fragments make the query non-cacheable
+    /// because rqb cannot prove that their text is a stable statement shape.
+    ///
+    /// High-cardinality typed query shapes, such as many different `IN` list
+    /// lengths or optional-filter combinations, stay memory-bounded by sqlx's
+    /// LRU cache but can still churn prepared statements. Tune sqlx with
+    /// `PgConnectOptions::statement_cache_capacity` or the
+    /// `statement-cache-capacity` URL parameter when an application needs a
+    /// different cache size.
     pub cacheable: bool,
 }
 
@@ -34,69 +42,27 @@ impl BuiltQuery {
         self.params.arguments()
     }
 
-    /// Returns a display adapter for debug-friendly query output.
+    /// Returns debug-friendly query output.
     ///
-    /// The output includes the rendered SQL, bind parameter count and Rust type
-    /// names, and cacheability. It never interpolates bind values into SQL.
-    pub fn pretty(&self) -> PrettyQuery<'_> {
-        pretty_query(self)
+    /// The output includes pretty-printed rendered SQL, bind parameter count,
+    /// Rust type names, and cacheability. It never interpolates bind values
+    /// into SQL.
+    pub fn summary(&self) -> String {
+        format_query_summary(self)
     }
-}
 
-/// Display adapter for debug-friendly [`BuiltQuery`] output.
-///
-/// Use [`BuiltQuery::pretty`] or [`pretty_query`] when logging generated SQL:
-///
-/// ```
-/// rqb::schema! {
-///     table public.users {
-///         id: int4 = i32,
-///     }
-/// }
-///
-/// # fn main() -> rqb::Result<()> {
-/// let built = rqb::select(users::table()).build()?;
-/// println!("{}", built.pretty());
-/// # Ok(())
-/// # }
-/// ```
-#[must_use]
-pub struct PrettyQuery<'a> {
-    query: &'a BuiltQuery,
-}
-
-impl fmt::Display for PrettyQuery<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "SQL:")?;
-        writeln!(f, "{}", self.query.sql)?;
-        writeln!(f)?;
-
-        let params = self.query.params.as_slice();
-        if params.is_empty() {
-            writeln!(f, "Params: none")?;
-        } else {
-            writeln!(f, "Params ({}):", params.len())?;
-            for (index, param) in params.iter().enumerate() {
-                writeln!(f, "${}: {}", index + 1, param.debug_name())?;
-            }
-        }
-
-        writeln!(f)?;
-        write!(f, "Cacheable: {}", self.query.cacheable)
+    /// Returns only the formatted SQL text for human-readable logs.
+    ///
+    /// This does not change [`BuiltQuery::sql`], which remains the exact SQL
+    /// text used for execution.
+    pub fn pretty_sql(&self) -> String {
+        format_query_sql(&self.sql)
     }
-}
-
-/// Returns a display adapter for debug-friendly [`BuiltQuery`] output.
-///
-/// This is equivalent to [`BuiltQuery::pretty`].
-#[inline]
-pub fn pretty_query(query: &BuiltQuery) -> PrettyQuery<'_> {
-    PrettyQuery { query }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{BuiltQuery, Param, Params, pretty_query};
+    use crate::{BuiltQuery, Param, Params};
 
     #[test]
     fn built_query_arguments_delegate_to_stored_params() {
@@ -121,57 +87,6 @@ mod tests {
         assert_eq!(cloned.sql, "select $1");
         assert_eq!(cloned.params.len(), 1);
         assert!(!cloned.cacheable);
-    }
-
-    #[test]
-    fn pretty_query_formats_sql_params_and_cacheability() {
-        let built = BuiltQuery {
-            sql: "select $1, $2".to_owned(),
-            params: Params::from_vec(vec![Param::typed(1_i32), Param::typed("x".to_owned())]),
-            cacheable: false,
-        };
-
-        let rendered = pretty_query(&built).to_string();
-
-        assert_eq!(
-            rendered,
-            format!(
-                concat!(
-                    "SQL:\n",
-                    "select $1, $2\n",
-                    "\n",
-                    "Params (2):\n",
-                    "$1: {}\n",
-                    "$2: {}\n",
-                    "\n",
-                    "Cacheable: false"
-                ),
-                std::any::type_name::<i32>(),
-                std::any::type_name::<String>()
-            )
-        );
-        assert_eq!(built.pretty().to_string(), rendered);
-    }
-
-    #[test]
-    fn pretty_query_formats_empty_params() {
-        let built = BuiltQuery {
-            sql: "select 1".to_owned(),
-            params: Params::new(),
-            cacheable: true,
-        };
-
-        assert_eq!(
-            built.pretty().to_string(),
-            concat!(
-                "SQL:\n",
-                "select 1\n",
-                "\n",
-                "Params: none\n",
-                "\n",
-                "Cacheable: true"
-            )
-        );
     }
 
     #[test]

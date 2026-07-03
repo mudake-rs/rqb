@@ -60,7 +60,7 @@ rqb is distributed through crates.io:
 
 ```toml
 [dependencies]
-rqb = "0.1.2"
+rqb = "0.1.3"
 chrono = "0.4.45"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"

@@ -1,6 +1,6 @@
 use async_stream::try_stream;
 use futures_util::{Stream, TryStreamExt};
-use rqb::dsl::{count_all, max, row};
+use rqb::dsl::{coalesce, count_all, literal, max, row};
 use rqb::prelude::*;
 use rqb_sample_schema::{app_users as user_fields, events, order_search_view, orders};
 use serde_json::json;
@@ -215,9 +215,14 @@ pub fn export_csv_stream(
 pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
     let u = user_fields::alias("u");
     let o = orders::alias("o");
-    let e = events::alias("e");
-    let orders_json = jsonb_agg_object![o.id(), o.status(), o.total_cents()]
-        .aggregate_filter(o.id().is_not_null());
+    let last_event_at =
+        rqb::field!("last_event_at": timestamptz => chrono::DateTime<chrono::Utc>, ordered);
+    let orders_json = coalesce([
+        jsonb_agg_object![o.id(), o.status(), o.total_cents()]
+            .aggregate_order_desc(o.created_at())
+            .aggregate_filter(o.id().is_not_null()),
+        literal("[]").cast("jsonb"),
+    ]);
 
     // The CTE exposes exactly the projected fields. `source().alias("u")`
     // then gives the outer query a normal relation source.
@@ -226,18 +231,26 @@ pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
         .column(user_fields::EMAIL)
         .filter(user_fields::ACTIVE.eq(true))
         .infer_cte("active_users")?;
+    let order_events = select(events::table())
+        .column(events::ORDER_ID)
+        .expr_as(max(events::CREATED_AT), "last_event_at")
+        .filter(events::ORDER_ID.is_not_null())
+        .group_by(events::ORDER_ID)
+        .into_cte("order_events", (events::ORDER_ID, last_event_at));
+    let order_events_source = order_events.source().alias("oe");
 
     select(active_users.source().alias("u"))
         .with(active_users)
+        .with(order_events)
         .left_join(&o, u.id().eq_field(o.user_id()))
-        .left_join(&e, e.order_id().eq_field(o.id()))
+        .left_join(order_events_source, events::ORDER_ID.at("oe").eq_field(o.id()))
         .expr_as(u.email(), "email")
         .expr_as(
             count_all().aggregate_filter(o.id().is_not_null()),
             "order_count",
         )
         .expr_as(orders_json, "orders")
-        .expr_as(max(e.created_at()), "last_event_at")
+        .expr_as(max(last_event_at.at("oe")), "last_event_at")
         .group_by(u.email())
         .fetch_all_as::<UserOrderSummaryRow>(db)
         .await

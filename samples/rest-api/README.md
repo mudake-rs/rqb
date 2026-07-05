@@ -21,6 +21,8 @@ service code:
   `do_update_excluded((name, price_cents, attributes, tags))`.
 - `GET /reports/orders-by-day` shows aggregate report code with `date_trunc_part`,
   `GROUP BY`, `sum`, and `count_all`.
+- `GET /orders/summary` builds a `jsonb_agg_object!` child collection and maps
+  it into `#[sqlx(json)] Vec<OrderSummaryItem>`.
 - `GET /orders/export.csv` streams Postgres rows into HTTP response chunks with
   `fetch_stream_pool_as` and `Body::from_stream`.
 - `POST /orders/search` applies JSON `SearchRequest` only after the service has

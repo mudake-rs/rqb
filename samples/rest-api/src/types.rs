@@ -54,8 +54,16 @@ pub struct OrderSearchRow {
 pub struct UserOrderSummaryRow {
     pub email: String,
     pub order_count: i64,
-    pub orders: Option<Value>,
+    #[sqlx(json)]
+    pub orders: Vec<OrderSummaryItem>,
     pub last_event_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrderSummaryItem {
+    pub id: Uuid,
+    pub status: String,
+    pub total_cents: i64,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

@@ -695,6 +695,37 @@ The derive maps Rust fields to generated schema fields. It does not serialize
 the whole DTO through `serde_json`, so database types stay on the sqlx encode
 path.
 
+Result DTOs can also decode JSON aggregate columns into typed nested structs.
+rqb builds the JSON shape; sqlx and serde decode the returned `jsonb` column:
+
+```rust
+#[derive(serde::Deserialize, serde::Serialize)]
+struct OrderSummaryItem {
+    id: Uuid,
+    status: String,
+    total_cents: i64,
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+struct UserOrderSummaryRow {
+    email: String,
+    order_count: i64,
+    #[sqlx(json)]
+    orders: Vec<OrderSummaryItem>,
+}
+
+let orders_json = coalesce([
+    jsonb_agg_object![o.id(), o.status(), o.total_cents()]
+        .aggregate_order_desc(o.created_at())
+        .aggregate_filter(o.id().is_not_null()),
+    literal("[]").cast("jsonb"),
+]);
+```
+
+`jsonb_agg_object!` uses field metadata keys such as `total_cents`, so the
+nested DTO field names, or their serde renames, must match. The `coalesce`
+keeps empty left-join groups as `[]` instead of SQL `NULL`.
+
 Derives map `snake_case` Rust fields to generated `SHOUTY_SNAKE_CASE` schema
 constants by default. Use `#[rqb(field = schema::table::FIELD)]` when a DTO field
 name differs from the database column, and `#[rqb(skip)]` for local-only fields.

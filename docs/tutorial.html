@@ -90,6 +90,8 @@ rqb::schema! {
 
       <p>The generated module exposes <code>users::table()</code>, typed field constants such as <code>users::EMAIL</code>, and alias handles such as <code>users::alias("u")</code>. Use alias handles as soon as a query has more than one source.</p>
 
+      <p>Later snippets assume generated <code>users</code>, <code>orders</code>, and <code>events</code> modules plus ordinary application values such as <code>user_id</code>, <code>order_id</code>, <code>patch</code>, <code>new_user</code>, <code>incoming_users</code>, and <code>search_request</code>. Runnable versions of these patterns live in <a href="https://github.com/mudake-rs/rqb/tree/main/samples">samples/</a>.</p>
+
       <h2 id="select">3. Select</h2>
       <pre><code>let query = select(users::table())
     .columns((users::ID, users::EMAIL))
@@ -125,6 +127,46 @@ let ranked = select(orders::table())
         "user_total_cents",
     )
     .build()?;</code></pre>
+
+      <p>JSON aggregates can still decode into typed Rust structs. rqb builds the JSON shape; sqlx and serde decode the returned <code>jsonb</code> column.</p>
+
+      <pre><code>use rqb::dsl::{coalesce, literal};
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct OrderSummaryItem {
+    id: Uuid,
+    status: String,
+    total_cents: i64,
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+struct UserSummaryRow {
+    email: String,
+    #[sqlx(json)]
+    orders: Vec&lt;OrderSummaryItem&gt;,
+}
+
+let u = users::alias("u");
+let o = orders::alias("o");
+
+let rows = select(&amp;u)
+    .left_join(&amp;o, u.id().eq_field(o.user_id()))
+    .column(u.email())
+    .expr_as(
+        coalesce([
+            jsonb_agg_object![o.id(), o.status(), o.total_cents()]
+                .aggregate_order_desc(o.created_at())
+                .aggregate_filter(o.id().is_not_null()),
+            literal("[]").cast("jsonb"),
+        ]),
+        "orders",
+    )
+    .group_by(u.id())
+    .group_by(u.email())
+    .fetch_all_as::&lt;UserSummaryRow&gt;(&amp;pool)
+    .await?;</code></pre>
+
+      <p><code>jsonb_agg_object!</code> uses field metadata keys such as <code>total_cents</code>. The nested struct field names, or serde renames, must match those JSON keys. The <code>coalesce</code> keeps users with no orders as <code>[]</code> instead of SQL <code>NULL</code>.</p>
 
       <h2 id="execute">4. Execute</h2>
       <p>Builders execute through sqlx Postgres executors. Use typed row structs with <code>sqlx::FromRow</code>.</p>
@@ -293,16 +335,23 @@ update(users::table())
 
       <pre><code>use rqb::dsl::try_advisory_xact_lock_named;
 
-let order = select(orders::table())
-    .filter(orders::ID.eq(order_id))
-    .for_update()
-    .skip_locked()
-    .fetch_optional_as::&lt;OrderRow&gt;(&amp;mut *conn)
-    .await?;
+let order = tx!(&amp;pool, |conn| {
+    let acquired = try_advisory_xact_lock_named(format!("job:{job_id}"))
+        .fetch_one_scalar::&lt;bool&gt;(&amp;mut *conn)
+        .await?;
 
-let acquired = try_advisory_xact_lock_named(format!("job:{job_id}"))
-    .fetch_one_scalar::&lt;bool&gt;(&amp;mut *conn)
-    .await?;</code></pre>
+    if acquired {
+        select(orders::table())
+            .filter(orders::ID.eq(order_id))
+            .for_update()
+            .skip_locked()
+            .fetch_optional_as::&lt;OrderRow&gt;(&amp;mut *conn)
+            .await
+    } else {
+        Ok(None)
+    }
+})
+.await?;</code></pre>
 
       <h2 id="debug">9. Debug Output</h2>
       <p>Build once when you want to inspect generated SQL or execute the same validated query more than once.</p>
@@ -324,7 +373,7 @@ FROM "public"."users"
 WHERE "email" = $1
 
 Params (1):
-$1: &amp;str
+$1: alloc::string::String
 
 Cacheable: true</code></pre>
 
@@ -360,10 +409,7 @@ let scored = select(events::table())
     .await
 {
     Ok(_) =&gt; Ok(()),
-    Err(rqb::Error::UniqueViolation(err)) =&gt; {
-        let constraint = err.constraint;
-        Ok(())
-    }
+    Err(rqb::Error::UniqueViolation(_err)) =&gt; Ok(()),
     Err(error) =&gt; Err(error),
 }</code></pre>
 
@@ -384,7 +430,7 @@ let scored = select(events::table())
             <td>400 Bad Request</td>
           </tr>
           <tr>
-            <td><code>InvalidSearchField</code>, <code>InvalidSearchOperator</code></td>
+            <td><code>InvalidSearchField</code>, <code>SearchFieldNotExposed</code>, <code>InvalidSearchOperator</code>, <code>InvalidSearchValue</code>, <code>InvalidSort</code>, <code>EmptySearchLogical</code></td>
             <td>400 Bad Request</td>
           </tr>
           <tr>

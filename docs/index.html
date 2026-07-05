@@ -37,7 +37,6 @@
         <p>not an ORM</p>
         <p>Postgres-only</p>
         <p>parameterized SQL</p>
-        <p>current: 0.1.3</p>
       </div>
     </aside>
 
@@ -119,7 +118,7 @@ ORDER BY "email" ASC
 LIMIT $2
 
 Params (2):
-$1: &amp;str
+$1: alloc::string::String
 $2: i64
 
 Cacheable: true</code></pre>
@@ -176,7 +175,7 @@ Cacheable: true</code></pre>
         </section>
         <section>
           <h3>Postgres Surface</h3>
-          <p>Arrays, JSON/JSONB, ranges, full-text helpers, advisory locks, row locks, raw statements, raw expressions, raw predicates, raw sources.</p>
+          <p>Arrays, JSON/JSONB builders, <code>jsonb_agg_object!</code>, ranges, full-text helpers, advisory locks, row locks, raw statements, raw expressions, raw predicates, raw sources.</p>
         </section>
         <section>
           <h3>Generated Schema</h3>
@@ -204,7 +203,8 @@ sqlx = { version = "0.9.0", features = [
     "json",
     "runtime-tokio",
     "tls-rustls",
-] }</code></pre>
+] }
+uuid = "1"</code></pre>
 
       <p>Install the schema generator when you want to introspect a live database:</p>
       <pre class="command"><code>cargo install rqb-cli</code></pre>

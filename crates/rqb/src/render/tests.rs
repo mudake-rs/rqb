@@ -170,6 +170,49 @@ fn insert_renders_columns_values_and_returning() {
 }
 
 #[test]
+fn write_returning_accepts_tuple_columns() {
+    let insert_sql = insert(users())
+        .set(ID.set(1))
+        .returning((ID, EMAIL))
+        .build()
+        .unwrap();
+    let update_sql = update(users())
+        .set(EMAIL.set("ada@example.com".to_owned()))
+        .filter(ID.eq(1))
+        .returning((ID, EMAIL))
+        .build()
+        .unwrap();
+    let delete_sql = delete_from(users())
+        .filter(ID.eq(1))
+        .returning((ID, EMAIL))
+        .build()
+        .unwrap();
+    let merge_sql = merge_into(users(), orders(), ID.eq_field(ORDER_USER_ID))
+        .when_matched()
+        .update(EMAIL.set("merged@example.com".to_owned()))
+        .returning((ID, EMAIL))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        insert_sql.sql,
+        "INSERT INTO \"public\".\"app_users\" (\"id\") VALUES ($1) RETURNING \"id\", \"email_address\" AS \"email\""
+    );
+    assert_eq!(
+        update_sql.sql,
+        "UPDATE \"public\".\"app_users\" SET \"email_address\" = $1 WHERE \"id\" = $2 RETURNING \"id\", \"email_address\" AS \"email\""
+    );
+    assert_eq!(
+        delete_sql.sql,
+        "DELETE FROM \"public\".\"app_users\" WHERE \"id\" = $1 RETURNING \"id\", \"email_address\" AS \"email\""
+    );
+    assert_eq!(
+        merge_sql.sql,
+        "MERGE INTO \"public\".\"app_users\" USING \"public\".\"orders\" ON \"id\" = \"user_id\" WHEN MATCHED THEN UPDATE SET \"email_address\" = $1 RETURNING \"id\", \"email_address\" AS \"email\""
+    );
+}
+
+#[test]
 fn raw_stmt_rejects_bind_mismatch_before_rendering() {
     let err = RawStmt {
         sql: "select ?".to_owned(),

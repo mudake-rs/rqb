@@ -95,9 +95,12 @@ impl Merge {
         }
     }
 
-    /// Adds one field to `RETURNING`.
-    pub fn returning<T>(mut self, field: Field<T>) -> Self {
-        self.returning.push(select_item_for_field(field));
+    /// Adds one or more fields to `RETURNING`.
+    ///
+    /// Use a field for one returned column or tuple syntax for a small
+    /// heterogeneous field list: `.returning((users::ID, users::EMAIL))`.
+    pub fn returning(mut self, fields: impl IntoColumns) -> Self {
+        self.returning.extend(fields.into_columns().items);
         self
     }
 

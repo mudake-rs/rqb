@@ -20,6 +20,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   defaults to PostgreSQL.
 - `set_if(...)` and `set_option(...)` keep conditional assignments in the
   builder chain.
+- `returning((...))` accepts a compact tuple/list of fields for write response
+  shapes.
 - `returning_all()` uses generated metadata for explicit `RETURNING` columns.
 - Column conflict targets can carry predicates through `.target_where(...)`,
   then use `do_update_set_where(...)` for a filtered `DO UPDATE`.

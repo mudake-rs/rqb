@@ -14,8 +14,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(raw_stmt.params.len(), 1);
     assert!(!raw_stmt.cacheable);
 
-    // A raw source can join typed queries, but rqb still needs the columns it
-    // exposes so later `.column(...)` calls can render qualified fields.
+    // Slot-level raw helpers take explicit Param::typed(...) binds. A raw
+    // source can join typed queries, but rqb still needs the columns it exposes
+    // so later `.column(...)` calls can render qualified fields.
     let raw_orders = raw_source(
         "SELECT ?::uuid AS id, ?::bigint AS total_cents",
         "recent",

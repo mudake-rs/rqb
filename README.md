@@ -138,8 +138,8 @@ let query = select(app_users::table())
 `query.sql` contains `$N` placeholders and `query.arguments()?` creates
 `sqlx::postgres::PgArguments` at execution time. Use `query.pretty_sql()` for
 formatted SQL only, or `query.summary()` for debug logs that show
-pretty-printed SQL, bind count, bind type names, and cacheability without
-interpolating values into SQL.
+pretty-printed SQL, bind count, short bind type names for common types, and
+cacheability without interpolating values into SQL.
 
 ## Execution
 
@@ -470,7 +470,10 @@ stable client errors without parsing strings:
 | `InvalidSort` | `400`, field is visible but not sortable |
 | `EmptySearchLogical` | `400`, `and` / `or` group is empty |
 
-See `samples/json-search` for exact payloads and error mapping.
+See `samples/json-search` for exact payloads and error mapping. Malformed JSON
+body errors happen before rqb sees a `SearchRequest`; in axum, map the `Json`
+extractor rejection at the HTTP boundary when parse failures should use the
+same client error envelope as rqb validation failures.
 
 ## Raw SQL
 
@@ -513,6 +516,11 @@ let extension_rows = raw_source(
 let scored = select(extension_rows)
     .expr_as(extension_score, "extension_score");
 ```
+
+`raw("...")` has fluent `.bind(value)` calls. Slot-level raw fragments
+currently take already-erased params, so use `Param::typed(value)` for
+`raw_expr(...)`, `raw_predicate(...)`, and `raw_source(...)`, especially when a
+single fragment binds values of different Rust types.
 
 Any raw fragment marks the whole built query as non-cacheable, so execution uses
 `sqlx` with persistent prepared-statement caching disabled for that query. Keep
@@ -585,6 +593,18 @@ update(schema::users::table())
     .filter(schema::users::ID.eq(user_id))
     .execute(&pool)
     .await?;
+```
+
+`returning(...)` accepts either one field or a tuple/list of fields:
+
+```rust
+let query = insert(schema::users::table())
+    .set_many((
+        schema::users::ID.set(user_id),
+        schema::users::EMAIL.set("ada@example.com"),
+    ))
+    .returning((schema::users::ID, schema::users::EMAIL))
+    .build()?;
 ```
 
 Computed writes use `set_expr(...)`, and PostgreSQL 18 `RETURNING old.field` /
@@ -669,6 +689,21 @@ update(&u)
     .filter(u.id().eq_field(schema::users::ID.at("ids")))
     .execute(&pool)
     .await?;
+```
+
+Derived sources such as CTEs, subqueries, and raw sources expose metadata but
+do not yet have generated alias-bound handles. For repeated references, keep
+the alias in one constant and use `.at(ALIAS)`:
+
+```rust
+const IDS: &str = "ids";
+
+let active_ids_source = active_ids.source().alias(IDS);
+
+update(&u)
+    .with(active_ids)
+    .from(active_ids_source)
+    .filter(u.id().eq_field(schema::users::ID.at(IDS)));
 ```
 
 ### DTO Mappings

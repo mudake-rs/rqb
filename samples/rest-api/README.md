@@ -41,6 +41,8 @@ service code:
 - Query-string parsing stays in axum/serde structs before service calls; bad
   `min_total`, `from_date`, or `limit` values become field-specific `400`
   errors before rqb sees typed Rust values.
+- JSON extractor failures also happen before rqb sees `SearchRequest`; production
+  APIs can map axum's rejection type when they need the same error envelope.
 - `ApiError` maps structured rqb errors to HTTP responses without parsing
   database message strings.
 - Generated alias handles and typed fields keep joins and writes readable

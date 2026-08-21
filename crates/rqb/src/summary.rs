@@ -13,13 +13,45 @@ pub(crate) fn format_query_summary(query: &BuiltQuery) -> String {
     } else {
         output.push_str(&format!("Params ({}):\n", params.len()));
         for (index, param) in params.iter().enumerate() {
-            output.push_str(&format!("${}: {}\n", index + 1, param.debug_name()));
+            output.push_str(&format!(
+                "${}: {}\n",
+                index + 1,
+                display_param_type(param.debug_name())
+            ));
         }
     }
 
     output.push('\n');
     output.push_str(&format!("Cacheable: {}", query.cacheable));
     output
+}
+
+fn display_param_type(name: &'static str) -> &'static str {
+    match name {
+        name if name == std::any::type_name::<String>() => "String",
+        name if name == std::any::type_name::<Vec<u8>>() => "Vec<u8>",
+        name if name == std::any::type_name::<Vec<String>>() => "Vec<String>",
+        name if name == std::any::type_name::<bool>() => "bool",
+        name if name == std::any::type_name::<i16>() => "i16",
+        name if name == std::any::type_name::<i32>() => "i32",
+        name if name == std::any::type_name::<i64>() => "i64",
+        name if name == std::any::type_name::<f32>() => "f32",
+        name if name == std::any::type_name::<f64>() => "f64",
+        name if name == std::any::type_name::<uuid::Uuid>() => "Uuid",
+        name if name == std::any::type_name::<std::time::Duration>() => "Duration",
+        name if name == std::any::type_name::<sqlx::postgres::types::PgInterval>() => "PgInterval",
+        name if name == std::any::type_name::<sqlx::types::BigDecimal>() => "BigDecimal",
+        name if name == std::any::type_name::<chrono::Duration>() => "chrono::Duration",
+        name if name == std::any::type_name::<chrono::DateTime<chrono::Utc>>() => "DateTime<Utc>",
+        name if name == std::any::type_name::<chrono::DateTime<chrono::FixedOffset>>() => {
+            "DateTime<FixedOffset>"
+        }
+        name if name == std::any::type_name::<chrono::NaiveDate>() => "NaiveDate",
+        name if name == std::any::type_name::<chrono::NaiveDateTime>() => "NaiveDateTime",
+        name if name == std::any::type_name::<chrono::NaiveTime>() => "NaiveTime",
+        name if name == std::any::type_name::<serde_json::Value>() => "serde_json::Value",
+        _ => name,
+    }
 }
 
 pub(crate) fn format_query_sql(sql: &str) -> String {
@@ -610,25 +642,21 @@ mod tests {
 
         assert_eq!(
             rendered,
-            format!(
-                concat!(
-                    "SQL:\n",
-                    "SELECT\n",
-                    "    \"id\",\n",
-                    "    \"email\"\n",
-                    "FROM \"public\".\"users\"\n",
-                    "WHERE \"email\" = $1\n",
-                    "ORDER BY \"email\" ASC\n",
-                    "LIMIT $2\n",
-                    "\n",
-                    "Params (2):\n",
-                    "$1: {}\n",
-                    "$2: {}\n",
-                    "\n",
-                    "Cacheable: false"
-                ),
-                std::any::type_name::<i32>(),
-                std::any::type_name::<String>()
+            concat!(
+                "SQL:\n",
+                "SELECT\n",
+                "    \"id\",\n",
+                "    \"email\"\n",
+                "FROM \"public\".\"users\"\n",
+                "WHERE \"email\" = $1\n",
+                "ORDER BY \"email\" ASC\n",
+                "LIMIT $2\n",
+                "\n",
+                "Params (2):\n",
+                "$1: i32\n",
+                "$2: String\n",
+                "\n",
+                "Cacheable: false"
             )
         );
         assert_eq!(
@@ -664,6 +692,18 @@ mod tests {
                 "\n",
                 "Cacheable: true"
             )
+        );
+    }
+
+    #[test]
+    fn summary_type_display_shortens_common_array_types() {
+        assert_eq!(
+            super::display_param_type(std::any::type_name::<Vec<String>>()),
+            "Vec<String>"
+        );
+        assert_eq!(
+            super::display_param_type("my_crate::DomainId"),
+            "my_crate::DomainId"
         );
     }
 

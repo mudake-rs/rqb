@@ -12,6 +12,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   without a manual `ValueExpr::Raw` struct literal.
 - `raw_predicate(...)` plugs a server-owned predicate into a typed query without
   a manual `BoolExpr::Raw` struct literal.
+- Slot-level raw helpers take explicit `Param::typed(value)` binds; this keeps
+  mixed-type raw fragments honest.
 - Placeholder scanning skips quoted strings, dollar-quoted bodies, quoted
   identifiers, and comments.
 - `??` renders a literal question mark outside those SQL contexts without

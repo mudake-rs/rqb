@@ -144,7 +144,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         ))
         .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
         .do_nothing()
-        .returning(users::ID)
+        .returning((users::ID, users::EMAIL))
         .build()?;
 
     // `INSERT ... SELECT` stays typed on both sides and validates target column
@@ -275,7 +275,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(
         ignore_duplicate_sql.sql,
-        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\") VALUES ($1, $2, $3) ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO NOTHING RETURNING \"id\""
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\") VALUES ($1, $2, $3) ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO NOTHING RETURNING \"id\", \"email\""
     );
     assert_eq!(
         seed_open_orders_sql.sql,

@@ -17,6 +17,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   rendering.
 - Search validation errors can be mapped into stable API error payloads without
   parsing display strings.
+- JSON parse/extractor failures happen before rqb sees `SearchRequest`; map
+  those separately at the HTTP boundary if your API needs one error envelope.
 - Client input can control filter/sort/page, but not joins, projection, raw SQL,
   or subqueries.
 - The sample asserts exact rendered SQL and parameter count without a database.

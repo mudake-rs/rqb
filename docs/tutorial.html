@@ -275,7 +275,7 @@ let paid_users = select(&amp;u)
     .fetch_one_scalar::&lt;Uuid&gt;(&amp;pool)
     .await?;</code></pre>
 
-      <p><code>Insertable</code> and <code>Changeset</code> map DTO fields to generated schema fields without routing values through JSON.</p>
+      <p><code>returning(...)</code> accepts one field or a tuple/list of fields. <code>Insertable</code> and <code>Changeset</code> map DTO fields to generated schema fields without routing values through JSON.</p>
 
       <pre><code>#[derive(rqb::Changeset)]
 #[rqb(table = users)]
@@ -373,7 +373,7 @@ FROM "public"."users"
 WHERE "email" = $1
 
 Params (1):
-$1: alloc::string::String
+$1: String
 
 Cacheable: true</code></pre>
 
@@ -388,7 +388,7 @@ Cacheable: true</code></pre>
 
 assert_eq!(raw_stmt.sql, "SELECT ? AS marker, $1::uuid AS id");</code></pre>
 
-      <p>Raw expressions and raw sources compose with typed queries. Any raw fragment marks the built query as non-cacheable because rqb cannot prove the text is a stable prepared-statement shape.</p>
+      <p>Raw expressions and raw sources compose with typed queries. <code>raw("...")</code> uses fluent <code>.bind(value)</code>; slot-level helpers such as <code>raw_expr(...)</code>, <code>raw_predicate(...)</code>, and <code>raw_source(...)</code> take explicit <code>Param::typed(value)</code> binds. Any raw fragment marks the built query as non-cacheable because rqb cannot prove the text is a stable prepared-statement shape.</p>
 
       <pre><code>let extension_score = raw_expr(
     "custom_extension_score(payload, ?::text)",

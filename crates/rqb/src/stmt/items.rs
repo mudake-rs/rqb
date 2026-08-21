@@ -67,6 +67,15 @@ impl IntoColumn for &Meta {
     }
 }
 
+impl<T> IntoColumns for T
+where
+    T: IntoColumn,
+{
+    fn into_columns(self) -> ColumnList {
+        self.into_column()
+    }
+}
+
 impl<T> IntoColumns for Vec<Field<T>> {
     fn into_columns(self) -> ColumnList {
         ColumnList {

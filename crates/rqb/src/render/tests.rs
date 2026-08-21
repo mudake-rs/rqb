@@ -828,7 +828,8 @@ fn variadic_select_projection_helpers_render() {
         .into_columns();
     let built = select(users())
         .columns((ID, EMAIL))
-        .exprs([crate::lower(EMAIL), crate::upper(EMAIL)])
+        .expr(crate::lower(EMAIL))
+        .expr(crate::upper(EMAIL))
         .expr_as(crate::length(EMAIL), "email_length")
         .expr_as(crate::count_all(), "rows")
         .build()
@@ -848,10 +849,10 @@ fn frame_bound_constructors_render_without_manual_boxing() {
         .column(ORDER_USER_ID)
         .expr_as(
             lag(TOTAL).over(
-                window().partition_by(ORDER_USER_ID).order_asc(TOTAL).frame(
-                    crate::rows(crate::FrameBound::preceding(2_i32))
-                        .between(crate::FrameBound::following(1_i32)),
-                ),
+                window()
+                    .partition_by(ORDER_USER_ID)
+                    .order_asc(TOTAL)
+                    .frame(crate::rows(crate::preceding(2_i32)).between(crate::following(1_i32))),
             ),
             "nearby_total",
         )
@@ -1946,6 +1947,23 @@ fn set_query_fetch_with_ties_renders_after_order_by() {
         "(SELECT \"id\" FROM \"public\".\"app_users\") UNION (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"id\" > $1) ORDER BY \"id\" ASC FETCH FIRST $2 ROWS WITH TIES"
     );
     assert_eq!(built.params.len(), 2);
+}
+
+#[test]
+fn free_set_query_constructor_renders_raw_left_operand() {
+    let built = crate::union(
+        raw("SELECT ?::int4 AS id").bind(1_i32),
+        select(users()).column(ID).filter(ID.gt(10)),
+    )
+    .build()
+    .unwrap();
+
+    assert_eq!(
+        built.sql,
+        "(SELECT $1::int4 AS id) UNION (SELECT \"id\" FROM \"public\".\"app_users\" WHERE \"id\" > $2)"
+    );
+    assert_eq!(built.params.len(), 2);
+    assert!(!built.cacheable);
 }
 
 #[test]

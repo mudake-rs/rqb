@@ -1,4 +1,4 @@
-use crate::built::BuiltQuery;
+use crate::{built::BuiltQuery, sql_scan};
 
 #[must_use]
 pub(crate) fn format_query_summary(query: &BuiltQuery) -> String {
@@ -75,8 +75,8 @@ fn tokenize_sql(sql: &str) -> Vec<SqlToken<'_>> {
             continue;
         }
 
-        if starts_escape_string(bytes, index) {
-            index = scan_single_quoted(bytes, index + 1);
+        if sql_scan::starts_escape_string(sql, index) {
+            index = sql_scan::skip_single_quoted(sql, index + 1, true);
             tokens.push(SqlToken {
                 text: &sql[start..index],
                 kind: SqlTokenKind::Literal,
@@ -84,8 +84,8 @@ fn tokenize_sql(sql: &str) -> Vec<SqlToken<'_>> {
             continue;
         }
 
-        if starts_unicode_escape_string(bytes, index) {
-            index = scan_single_quoted(bytes, index + 2);
+        if sql_scan::starts_unicode_escape_string(sql, index) {
+            index = sql_scan::skip_single_quoted(sql, index + 2, false);
             tokens.push(SqlToken {
                 text: &sql[start..index],
                 kind: SqlTokenKind::Literal,
@@ -95,21 +95,21 @@ fn tokenize_sql(sql: &str) -> Vec<SqlToken<'_>> {
 
         match byte {
             b'"' => {
-                index = scan_double_quoted(bytes, index);
+                index = sql_scan::skip_double_quoted(sql, index);
                 tokens.push(SqlToken {
                     text: &sql[start..index],
                     kind: SqlTokenKind::Quoted,
                 });
             }
             b'\'' => {
-                index = scan_single_quoted(bytes, index);
+                index = sql_scan::skip_single_quoted(sql, index, false);
                 tokens.push(SqlToken {
                     text: &sql[start..index],
                     kind: SqlTokenKind::Literal,
                 });
             }
             b'$' => {
-                if let Some(end) = scan_dollar_quoted(sql, index) {
+                if let Some(end) = sql_scan::skip_dollar_quoted(sql, index) {
                     index = end;
                     tokens.push(SqlToken {
                         text: &sql[start..index],
@@ -127,22 +127,14 @@ fn tokenize_sql(sql: &str) -> Vec<SqlToken<'_>> {
                 }
             }
             b'-' if bytes.get(index + 1) == Some(&b'-') => {
-                index += 2;
-                while index < bytes.len() && bytes[index] != b'\n' {
-                    index += 1;
-                }
+                index = sql_scan::skip_line_comment(sql, index);
                 tokens.push(SqlToken {
                     text: &sql[start..index],
                     kind: SqlTokenKind::Comment,
                 });
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index += 2;
-                while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/')
-                {
-                    index += 1;
-                }
-                index = (index + 2).min(bytes.len());
+                index = sql_scan::skip_block_comment(sql, index);
                 tokens.push(SqlToken {
                     text: &sql[start..index],
                     kind: SqlTokenKind::Comment,
@@ -197,67 +189,6 @@ fn tokenize_sql(sql: &str) -> Vec<SqlToken<'_>> {
     tokens
 }
 
-fn starts_escape_string(bytes: &[u8], index: usize) -> bool {
-    matches!(bytes.get(index), Some(b'e' | b'E')) && bytes.get(index + 1) == Some(&b'\'')
-}
-
-fn starts_unicode_escape_string(bytes: &[u8], index: usize) -> bool {
-    matches!(bytes.get(index), Some(b'u' | b'U'))
-        && bytes.get(index + 1) == Some(&b'&')
-        && bytes.get(index + 2) == Some(&b'\'')
-}
-
-fn scan_single_quoted(bytes: &[u8], mut index: usize) -> usize {
-    index += 1;
-    while index < bytes.len() {
-        if bytes[index] == b'\'' {
-            if bytes.get(index + 1) == Some(&b'\'') {
-                index += 2;
-            } else {
-                index += 1;
-                break;
-            }
-        } else {
-            index += 1;
-        }
-    }
-    index
-}
-
-fn scan_double_quoted(bytes: &[u8], mut index: usize) -> usize {
-    index += 1;
-    while index < bytes.len() {
-        if bytes[index] == b'"' {
-            if bytes.get(index + 1) == Some(&b'"') {
-                index += 2;
-            } else {
-                index += 1;
-                break;
-            }
-        } else {
-            index += 1;
-        }
-    }
-    index
-}
-
-fn scan_dollar_quoted(sql: &str, start: usize) -> Option<usize> {
-    let bytes = sql.as_bytes();
-    let mut index = start + 1;
-    while index < bytes.len() && is_dollar_tag_byte(bytes[index]) {
-        index += 1;
-    }
-    if bytes.get(index) != Some(&b'$') {
-        return None;
-    }
-
-    let delimiter_end = index + 1;
-    let delimiter = &sql[start..delimiter_end];
-    sql[delimiter_end..]
-        .find(delimiter)
-        .map(|offset| delimiter_end + offset + delimiter.len())
-}
-
 fn scan_operator_or_char(sql: &str, mut index: usize) -> usize {
     let bytes = sql.as_bytes();
     if !is_operator_byte(bytes[index]) {
@@ -282,10 +213,6 @@ fn is_ident_start(byte: u8) -> bool {
 }
 
 fn is_ident_continue(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
-}
-
-fn is_dollar_tag_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
@@ -755,6 +682,52 @@ mod tests {
                 "    \"weird FROM\"\n",
                 "FROM \"public\".\"users\"\n",
                 "WHERE \"email\" = $1"
+            )
+        );
+    }
+
+    #[test]
+    fn pretty_sql_uses_raw_boundaries_for_nested_block_comments() {
+        assert_eq!(
+            super::format_query_sql(concat!(
+                "SELECT \"id\" FROM \"users\" ",
+                "WHERE /* outer /* inner */ still comment */ \"email\" = $1"
+            )),
+            concat!(
+                "SELECT\n",
+                "    \"id\"\n",
+                "FROM \"users\"\n",
+                "WHERE /* outer /* inner */ still comment */ \"email\" = $1"
+            )
+        );
+    }
+
+    #[test]
+    fn pretty_sql_uses_raw_boundaries_for_escape_strings() {
+        assert_eq!(
+            super::format_query_sql(
+                "SELECT E'can\\'t WHERE $1' AS label FROM \"users\" WHERE \"id\" = $1",
+            ),
+            concat!(
+                "SELECT\n",
+                "    E'can\\'t WHERE $1' AS label\n",
+                "FROM \"users\"\n",
+                "WHERE \"id\" = $1"
+            )
+        );
+    }
+
+    #[test]
+    fn pretty_sql_uses_raw_boundaries_for_unicode_escape_strings() {
+        assert_eq!(
+            super::format_query_sql(
+                "SELECT U&'it''s \\0441 FROM x' AS label FROM \"users\" WHERE \"id\" = $1",
+            ),
+            concat!(
+                "SELECT\n",
+                "    U&'it''s \\0441 FROM x' AS label\n",
+                "FROM \"users\"\n",
+                "WHERE \"id\" = $1"
             )
         );
     }

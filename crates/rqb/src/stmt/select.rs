@@ -108,23 +108,6 @@ impl Select {
         self
     }
 
-    /// Adds multiple expressions without output aliases.
-    ///
-    /// This accepts regular iterators of value expressions. For heterogeneous
-    /// field batches, use [`Select::columns`] with tuple syntax.
-    pub fn exprs<I, T>(mut self, exprs: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<ValueExpr>,
-    {
-        self.projection
-            .extend(exprs.into_iter().map(|expr| SelectItem {
-                expr: expr.into(),
-                alias: None,
-            }));
-        self
-    }
-
     /// Applies an arbitrary builder transformation.
     pub fn apply(self, f: impl FnOnce(Self) -> Self) -> Self {
         f(self)

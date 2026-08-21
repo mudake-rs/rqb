@@ -53,8 +53,8 @@ pub use functions::{
 };
 pub use window::{
     cume_dist, current_row, dense_rank, first_value, following, groups, lag, last_value, lead,
-    nth_value, ntile, partition_by, percent_rank, preceding, range, rank, row_number, rows,
-    unbounded_following, unbounded_preceding, window,
+    nth_value, ntile, percent_rank, preceding, range, rank, row_number, rows, unbounded_following,
+    unbounded_preceding, window,
 };
 
 pub(crate) use text::escaped_like_pattern;

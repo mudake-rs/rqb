@@ -442,7 +442,7 @@ pub enum Error {
     #[error("empty logical expression `{logical}`")]
     EmptyLogical {
         /// Logical operator name.
-        logical: String,
+        logical: &'static str,
     },
 
     /// A row-value comparison used row expressions with different arity.

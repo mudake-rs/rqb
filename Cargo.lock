@@ -1077,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "rqb"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "async-stream",
  "chrono",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "rqb-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "rqb-macros"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "heck",
  "proc-macro2",

@@ -412,6 +412,33 @@ fn search_pattern_values_have_a_length_limit() {
         crate::Error::InvalidSearchValue(err)
             if err.field == "status" && err.expected == "string up to 1024 characters"
     ));
+
+    let multibyte_ok: SearchRequest = serde_json::from_value(json!({
+        "filter": {
+            "field": "status",
+            "operator": "regex",
+            "value": "\u{044b}".repeat(1024)
+        }
+    }))
+    .unwrap();
+    let _ = crate::select(source()).apply_search(multibyte_ok).unwrap();
+
+    let multibyte_too_long: SearchRequest = serde_json::from_value(json!({
+        "filter": {
+            "field": "status",
+            "operator": "regex",
+            "value": "\u{044b}".repeat(1025)
+        }
+    }))
+    .unwrap();
+
+    assert!(matches!(
+        crate::select(source())
+            .apply_search(multibyte_too_long)
+            .unwrap_err(),
+        crate::Error::InvalidSearchValue(err)
+            if err.field == "status" && err.expected == "string up to 1024 characters"
+    ));
 }
 
 #[test]

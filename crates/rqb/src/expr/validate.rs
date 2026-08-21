@@ -74,8 +74,7 @@ impl BoolExpr {
                             BoolExpr::And(_) => "and",
                             BoolExpr::Or(_) => "or",
                             _ => unreachable!(),
-                        }
-                        .to_owned(),
+                        },
                     });
                 }
                 for expr in exprs {

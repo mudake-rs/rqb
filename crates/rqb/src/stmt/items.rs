@@ -172,16 +172,6 @@ impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_select_item_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-impl Assignment {
-    /// Creates a field assignment from a value expression.
-    pub fn new<T>(field: Field<T>, value: impl Into<ValueExpr>) -> Self {
-        Self {
-            field: *field.meta,
-            value: crate::AssignmentValue::Expr(value.into()),
-        }
-    }
-}
-
 impl OrderDirection {
     /// Returns the SQL token for this order direction.
     #[inline]

@@ -362,8 +362,7 @@ fn search_pattern_value<'a>(field: &str, value: &'a JsonValue) -> Result<&'a str
     let value = value
         .as_str()
         .ok_or_else(|| Error::invalid_search_value(field, "string"))?;
-    if value.len() <= MAX_SEARCH_PATTERN_CHARS || value.chars().count() <= MAX_SEARCH_PATTERN_CHARS
-    {
+    if value.chars().take(MAX_SEARCH_PATTERN_CHARS + 1).count() <= MAX_SEARCH_PATTERN_CHARS {
         return Ok(value);
     }
     Err(Error::invalid_search_value(

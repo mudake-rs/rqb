@@ -135,13 +135,6 @@ impl RawStmt {
     /// quoted identifiers, dollar quotes, and comments is ignored.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        if self.params.is_empty() && !self.sql.as_bytes().contains(&b'?') {
-            return Ok(BuiltQuery {
-                sql: self.sql.clone(),
-                params: Params::new(),
-                cacheable: false,
-            });
-        }
         Renderer::build_with(|renderer| renderer.render_raw_stmt(self))
     }
 }

@@ -60,7 +60,7 @@ rqb::schema! {
     }
     table sample.invoices {
         id: uuid = Uuid,
-        // Identity: always. Do not include in INSERT assignments; use OVERRIDING SYSTEM VALUE to override.
+        // Identity: always. Do not include in INSERT assignments; use raw SQL with OVERRIDING SYSTEM VALUE to override.
         invoice_no: int8 = i64,
         customer_id: uuid = Uuid,
         state: "sample.invoice_state" = InvoiceState,

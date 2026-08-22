@@ -1,16 +1,5 @@
-use chrono::{DateTime, Utc};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
-use uuid::Uuid;
-
-#[derive(Debug)]
-#[allow(dead_code)]
-struct UserRow {
-    id: Uuid,
-    email: String,
-    status: String,
-    created_at: DateTime<Utc>,
-}
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // No projection calls: rqb renders all known root fields instead of `SELECT *`.
@@ -27,6 +16,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(simple.params.len(), 2);
 
     let email_fragment = Some("@example.com");
+    let only_active = true;
     // Multiple filters compose with AND. `and([...])` is the explicit helper
     // when a nested predicate group reads better than a chain of `.filter(...)`.
     // The projection is intentionally narrow for a small response DTO.
@@ -36,7 +26,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             users::STATUS.in_list(["active", "invited"]),
             users::DISPLAY_NAME.is_not_null(),
         ]))
-        .filter_if(true, users::ACTIVE.eq(true))
+        .filter_if(only_active, users::ACTIVE.eq(true))
         .filter_option(email_fragment, |value| users::EMAIL.contains(value))
         .order_asc_nulls_last(users::CREATED_AT)
         .limit(10)

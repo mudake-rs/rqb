@@ -6,54 +6,54 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
 
-trait Db {
-    type Exec<'a>: PgExecutor<'a>
+trait ExecutorSource {
+    type Executor<'a>: PgExecutor<'a>
     where
         Self: 'a;
 
-    fn exec(&mut self) -> Self::Exec<'_>;
+    fn exec(&mut self) -> Self::Executor<'_>;
 }
 
-impl Db for &PgPool {
-    type Exec<'a>
+impl ExecutorSource for &PgPool {
+    type Executor<'a>
         = &'a PgPool
     where
         Self: 'a;
 
-    fn exec(&mut self) -> Self::Exec<'_> {
+    fn exec(&mut self) -> Self::Executor<'_> {
         *self
     }
 }
 
-impl Db for &mut PgConnection {
-    type Exec<'a>
+impl ExecutorSource for &mut PgConnection {
+    type Executor<'a>
         = &'a mut PgConnection
     where
         Self: 'a;
 
-    fn exec(&mut self) -> Self::Exec<'_> {
+    fn exec(&mut self) -> Self::Executor<'_> {
         &mut **self
     }
 }
 
-impl Db for &mut PoolConnection<Postgres> {
-    type Exec<'a>
+impl ExecutorSource for &mut PoolConnection<Postgres> {
+    type Executor<'a>
         = &'a mut PgConnection
     where
         Self: 'a;
 
-    fn exec(&mut self) -> Self::Exec<'_> {
+    fn exec(&mut self) -> Self::Executor<'_> {
         &mut **self
     }
 }
 
-impl Db for &mut Transaction<'_, Postgres> {
-    type Exec<'a>
+impl ExecutorSource for &mut Transaction<'_, Postgres> {
+    type Executor<'a>
         = &'a mut PgConnection
     where
         Self: 'a;
 
-    fn exec(&mut self) -> Self::Exec<'_> {
+    fn exec(&mut self) -> Self::Executor<'_> {
         &mut **self
     }
 }
@@ -102,8 +102,13 @@ macro_rules! crud_repository {
                 id: Uuid,
                 patch: &$patch,
             ) -> rqb::Result<Option<$row>> {
+                let assignments = patch.changeset_assignments();
+                if assignments.is_empty() {
+                    return Ok(None);
+                }
+
                 update($table::table())
-                    .patch(patch)
+                    .set_many(assignments)
                     .filter($table::$id.eq(id))
                     .returning_all()
                     .fetch_optional_as::<$row>(db)
@@ -220,7 +225,7 @@ async fn transaction_flow(
 }
 
 async fn deactivate_and_cancel(
-    mut db: impl Db,
+    mut db: impl ExecutorSource,
     user_id: Uuid,
     patch: &UserPatch,
 ) -> rqb::Result<Option<UserRow>> {

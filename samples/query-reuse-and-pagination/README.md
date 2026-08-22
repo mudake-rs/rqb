@@ -9,6 +9,9 @@ connection.
 ## What This Shows
 
 - Query-shape functions can return `Select` values that callers keep composing.
+- Build once into `BuiltQuery` when the application wants to log, inspect, and
+  execute the same validated SQL with the same bound params more than once;
+  rebuild for different values.
 - Default `select(table())` projection comes from generated schema metadata;
   callers add only the filters, ordering, and cursor predicates they own.
 - Composite cursors use the same columns and direction as `ORDER BY`.

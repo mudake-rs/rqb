@@ -188,7 +188,7 @@ paid_at: timestamptz = DateTime<Utc>,
 // Generated: stored. Do not include in INSERT assignments.
 line_total_cents: int8 = i64,
 
-// Identity: always. Do not include in INSERT assignments; use OVERRIDING SYSTEM VALUE to override.
+// Identity: always. Do not include in INSERT assignments; use raw SQL with OVERRIDING SYSTEM VALUE to override.
 invoice_no: int8 = i64,
 
 // Identity: by default. Explicit INSERT values are allowed.

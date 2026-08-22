@@ -10,7 +10,8 @@ cover patterns that tend to decide whether a query builder is pleasant in real
 service code:
 
 - `PATCH /users/{id}` uses `#[derive(Changeset)]`, so `Option<T>::None`
-  leaves a column untouched.
+  leaves a column untouched. Empty PATCH bodies are rejected at the HTTP
+  boundary before rqb builds an empty `UPDATE`.
 - `GET /orders` uses seek/cursor pagination with Postgres row comparison:
   `row((created_at, id)).lt((cursor_created_at, cursor_id))`.
 - `GET /orders/filter` parses raw query-string values into typed filters at the
@@ -26,7 +27,7 @@ service code:
 - `GET /orders/export.csv` streams Postgres rows into HTTP response chunks with
   `fetch_stream_pool_as` and `Body::from_stream`.
 - `POST /orders/search` applies JSON `SearchRequest` only after the service has
-  installed server-owned filters.
+  installed server-owned filters and bounded application page limits.
 
 ## What This Shows
 
@@ -37,10 +38,12 @@ service code:
 - Write DTOs derive `Insertable` or `Changeset` directly when the public request
   shape and the database write shape match. Split them only when they diverge.
 - REST pagination is application code: `limit`, `offset`, and `Select::count()`
-  for page-style endpoints; cursor pagination for large ordered lists.
+  for page-style endpoints; cursor pagination for large ordered lists. The
+  service clamps page limits and installs a deterministic default order when
+  clients omit sort keys.
 - Query-string parsing stays in axum/serde structs before service calls; bad
-  `min_total`, `from_date`, or `limit` values become field-specific `400`
-  errors before rqb sees typed Rust values.
+  `min_total`, `from_date`, or `limit` values fail before rqb sees typed Rust
+  values.
 - JSON extractor failures also happen before rqb sees `SearchRequest`; production
   APIs can map axum's rejection type when they need the same error envelope.
 - `ApiError` maps structured rqb errors to HTTP responses without parsing

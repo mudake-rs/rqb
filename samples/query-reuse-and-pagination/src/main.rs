@@ -54,6 +54,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(uuidv7_page.params.len(), 3);
 
+    let reusable = reusable_built_query(user_id)?;
+    assert_eq!(
+        reusable.sql,
+        "SELECT \"id\", \"status\" FROM \"sample\".\"orders\" WHERE \"user_id\" = $1 ORDER BY \"created_at\" DESC LIMIT $2"
+    );
+    assert_eq!(reusable.params.len(), 2);
+    assert!(reusable.summary().contains("Cacheable: true"));
+
     let offset_request: SearchRequest = serde_json::from_value(json!({
         "filter": { "field": "status", "operator": "equals", "value": "paid" },
         "sort": [{ "field": "created_at", "dir": "desc" }],
@@ -123,6 +131,18 @@ fn page_by_id(user_id: Uuid, after_id: Option<Uuid>, limit: u32) -> Select {
         .filter_option(after_id, |id| orders::ID.lt(id))
         .order_desc(orders::ID)
         .limit(limit + 1)
+}
+
+fn reusable_built_query(user_id: Uuid) -> rqb::Result<BuiltQuery> {
+    // Query-shape helpers return builders for further composition. Build once
+    // when the application wants to log, inspect, and execute the same
+    // validated SQL with the same bound params more than once. Rebuild for
+    // different values.
+    user_orders(user_id)
+        .columns((orders::ID, orders::STATUS))
+        .order_desc(orders::CREATED_AT)
+        .limit(20)
+        .build()
 }
 
 fn order_search() -> Select {

@@ -16,10 +16,13 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   predicates.
 - `Field<T>::set_null()` writes SQL `NULL` explicitly when application state
   needs to clear a nullable column.
-- `Field<T>::set_default()` and `insert(...).default_values()` delegate column
-  defaults to PostgreSQL.
+- `Field<T>::set_default()` delegates column defaults to PostgreSQL; use
+  `insert(...).default_values()` only for tables whose omitted columns are all
+  nullable or defaulted.
 - `set_if(...)` and `set_option(...)` keep conditional assignments in the
   builder chain.
+- `returning_as(field.old_value(), ...)` and `new_value()` render PostgreSQL 18
+  old/new DML returning fields.
 - `returning((...))` accepts a compact tuple/list of fields for write response
   shapes.
 - `returning_all()` uses generated metadata for explicit `RETURNING` columns.
@@ -27,8 +30,13 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   then use `do_update_set_where(...)` for a filtered `DO UPDATE`.
 - `do_update_excluded((...))` updates several fields from `EXCLUDED` without
   repeating per-field `.set_excluded()` calls.
+- `merge_into(...)` handles relation-driven matched updates and not-matched
+  inserts without dropping to raw SQL.
 - `values_many(...)` keeps DTO batch upserts from repeating target columns;
   `set_from("alias")` copies update values from the incoming source.
+- `UPDATE ... FROM` and `DELETE ... USING` compose with typed aliases and CTEs.
+- Optimistic compare-and-swap writes are normal updates with the expected
+  current state in `WHERE` and `RETURNING` for success detection.
 - Generated constraint name constants feed `on_conflict_constraint(...)`.
 - `insert(...).from_select((...), select(...))` validates target column count
   against the server-owned select projection.

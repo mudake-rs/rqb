@@ -7,6 +7,9 @@ use rqb_sample_schema::order_items as items;
 use rqb_sample_schema::orders;
 use uuid::Uuid;
 
+// Application row shape for the recursive CTE below. The sample renders SQL
+// without a database, so it does not fetch rows, but nullable `parent_id` maps
+// to `Option<Uuid>` in the row type.
 #[allow(dead_code)]
 struct CommentNode {
     id: Uuid,
@@ -71,31 +74,19 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let root_comment = Uuid::nil();
     let comment_walk = cte(
         "comment_walk",
-        raw(
-            "SELECT id, parent_id, body, ?::int4 AS depth \
+        raw("SELECT id, parent_id, body, ?::int4 AS depth \
              FROM comments WHERE id = ?::uuid \
              UNION ALL \
              SELECT c.id, c.parent_id, c.body, w.depth + 1 \
-             FROM comments c JOIN comment_walk w ON c.parent_id = w.id",
-        )
+             FROM comments c JOIN comment_walk w ON c.parent_id = w.id")
         .bind(0_i32)
         .bind(root_comment),
-        (
-            comment_id,
-            comment_parent_id,
-            comment_body,
-            comment_depth,
-        ),
+        (comment_id, comment_parent_id, comment_body, comment_depth),
     )
     .recursive();
     let comment_tree = select(comment_walk.source())
         .with(comment_walk)
-        .columns((
-            comment_id,
-            comment_parent_id,
-            comment_body,
-            comment_depth,
-        ))
+        .columns((comment_id, comment_parent_id, comment_body, comment_depth))
         .order_asc(comment_depth)
         .build()?;
 
@@ -151,14 +142,16 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // deletes typed without constructing `ValueExpr::Subquery` by hand.
     let retention_delete = delete_from(orders::table())
         .filter(orders::USER_ID.eq(Uuid::nil()))
-        .filter(orders::TOTAL_CENTS.expr().lte(scalar_subquery(
-            select(orders::table())
-                .column(orders::TOTAL_CENTS)
-                .filter(orders::USER_ID.eq(Uuid::nil()))
-                .order_desc(orders::TOTAL_CENTS)
-                .offset(200)
-                .limit(1),
-        )))
+        .filter(
+            orders::TOTAL_CENTS.expr().lte(scalar_subquery(
+                select(orders::table())
+                    .column(orders::TOTAL_CENTS)
+                    .filter(orders::USER_ID.eq(Uuid::nil()))
+                    .order_desc(orders::TOTAL_CENTS)
+                    .offset(200)
+                    .limit(1),
+            )),
+        )
         .build()?;
 
     assert_eq!(
@@ -183,10 +176,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // VALUES sources are useful for joining or filtering against server-owned
     // in-memory rows while keeping column metadata explicit.
     let seeded_orders = values_source(
-        [
-            (Uuid::nil(), "paid"),
-            (Uuid::nil(), "refunded"),
-        ],
+        [(Uuid::nil(), "paid"), (Uuid::nil(), "refunded")],
         "seeded_orders",
         (orders::ID, orders::STATUS),
     );

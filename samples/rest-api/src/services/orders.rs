@@ -14,6 +14,7 @@ use crate::types::{
 };
 
 const DEFAULT_PAGE_LIMIT: u32 = 100;
+const MAX_PAGE_LIMIT: u32 = 100;
 
 type StreamResult<T> = std::result::Result<T, rqb::Error>;
 
@@ -154,19 +155,27 @@ pub async fn transition(
 }
 
 pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Page<OrderSearchRow>> {
-    let limit = request.limit.unwrap_or(DEFAULT_PAGE_LIMIT);
+    let mut request = request;
+    let limit = request
+        .limit
+        .unwrap_or(DEFAULT_PAGE_LIMIT)
+        .clamp(1, MAX_PAGE_LIMIT);
     let offset = request.offset.unwrap_or(0);
-    let has_limit = request.limit.is_some();
+    let has_client_sort = !request.sort.is_empty();
+    request.limit = Some(limit);
 
     // Pagination is application policy, not a hidden rqb executor behavior. The
     // same trusted query shape is used for the page items and the count.
-    let mut query = select(order_search_view::view())
+    let query = select(order_search_view::view())
         .filter(order_search_view::STATUS.ne("canceled"))
         .apply_search(request)?;
-
-    if !has_limit {
-        query = query.limit(limit);
-    }
+    let query = if has_client_sort {
+        query
+    } else {
+        query
+            .order_desc(order_search_view::CREATED_AT)
+            .order_desc(order_search_view::ID)
+    };
 
     let total = query.count(db).await?;
     let items = query.fetch_all_as::<OrderSearchRow>(db).await?;
@@ -213,7 +222,9 @@ pub fn export_csv_stream(
 }
 
 pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
-    let u = user_fields::alias("u");
+    const U: &str = "u";
+
+    let u = user_fields::alias(U);
     let o = orders::alias("o");
     let last_event_at =
         rqb::field!("last_event_at": timestamptz => chrono::DateTime<chrono::Utc>, ordered);
@@ -224,8 +235,8 @@ pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
         literal("[]").cast("jsonb"),
     ]);
 
-    // The CTE exposes exactly the projected fields. `source().alias("u")`
-    // then gives the outer query a normal relation source.
+    // The CTE exposes app_users fields, so the generated alias handle can
+    // qualify those same field metas against the CTE alias.
     let active_users = select(user_fields::table())
         .column(user_fields::ID)
         .column(user_fields::EMAIL)
@@ -239,11 +250,14 @@ pub async fn summary(db: &PgPool) -> rqb::Result<Vec<UserOrderSummaryRow>> {
         .into_cte("order_events", (events::ORDER_ID, last_event_at));
     let order_events_source = order_events.source().alias("oe");
 
-    select(active_users.source().alias("u"))
+    select(active_users.source().alias(U))
         .with(active_users)
         .with(order_events)
         .left_join(&o, u.id().eq_field(o.user_id()))
-        .left_join(order_events_source, events::ORDER_ID.at("oe").eq_field(o.id()))
+        .left_join(
+            order_events_source,
+            events::ORDER_ID.at("oe").eq_field(o.id()),
+        )
         .expr_as(u.email(), "email")
         .expr_as(
             count_all().aggregate_filter(o.id().is_not_null()),

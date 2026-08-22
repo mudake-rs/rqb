@@ -47,7 +47,10 @@ impl IntoResponse for ApiError {
                 ),
                 rqb::Error::NotNullViolation(err) => (
                     StatusCode::BAD_REQUEST,
-                    format!("not null violation{}", suffix("column", err.column.as_deref())),
+                    format!(
+                        "not null violation{}",
+                        suffix("column", err.column.as_deref())
+                    ),
                 ),
                 rqb::Error::CheckViolation(err) => (
                     StatusCode::BAD_REQUEST,

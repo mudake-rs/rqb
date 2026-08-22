@@ -120,6 +120,12 @@ pub struct PatchUser {
     pub active: Option<bool>,
 }
 
+impl PatchUser {
+    pub fn is_empty(&self) -> bool {
+        self.changeset_assignments().is_empty()
+    }
+}
+
 #[derive(Debug, Deserialize, Insertable)]
 #[rqb(table = rqb_sample_schema::orders)]
 pub struct CreateOrder {

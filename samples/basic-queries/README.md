@@ -1,7 +1,6 @@
 # Basic Queries
 
-Typed fields build parameterized Postgres SQL. Result structs are normal sqlx
-rows when the query is executed.
+Typed fields build parameterized Postgres SQL.
 
 Execution mode: renders SQL and asserts it. No database connection is opened.
 

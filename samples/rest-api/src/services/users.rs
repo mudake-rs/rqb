@@ -5,6 +5,9 @@ use uuid::Uuid;
 use crate::services::orders;
 use crate::types::{CreateUser, PatchUser, UserRow};
 
+const DEFAULT_SEARCH_LIMIT: u32 = 100;
+const MAX_SEARCH_LIMIT: u32 = 100;
+
 pub fn find_query(id: Uuid) -> Select {
     select(users::table()).filter(users::ID.eq(id))
 }
@@ -14,11 +17,25 @@ pub async fn find(db: &PgPool, id: Uuid) -> rqb::Result<UserRow> {
 }
 
 pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Vec<UserRow>> {
-    select(users::table())
+    let mut request = request;
+    let has_client_sort = !request.sort.is_empty();
+    request.limit = Some(
+        request
+            .limit
+            .unwrap_or(DEFAULT_SEARCH_LIMIT)
+            .clamp(1, MAX_SEARCH_LIMIT),
+    );
+
+    let query = select(users::table())
         .filter(users::ACTIVE.eq(true))
-        .apply_search(request)?
-        .fetch_all_as::<UserRow>(db)
-        .await
+        .apply_search(request)?;
+    let query = if has_client_sort {
+        query
+    } else {
+        query.order_asc(users::EMAIL).order_asc(users::ID)
+    };
+
+    query.fetch_all_as::<UserRow>(db).await
 }
 
 pub async fn create(db: &PgPool, input: CreateUser) -> rqb::Result<UserRow> {

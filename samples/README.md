@@ -43,9 +43,6 @@ executable API documentation.
   control. Renders SQL and compile-checks transaction flows without connecting.
 - [`custom-types`](custom-types/): raw-only schema metadata for extension types
   outside the typed subset. Renders SQL and asserts it.
-- [`crud-repository`](crud-repository/): sample-local execution-only CRUD
-  repository macro plus a GAT `Db` wrapper. Compile-checks pool/transaction
-  flows without connecting.
 - [`rest-api`](rest-api/): service-layer REST shape with pool execution,
   closure-style transactions, cursor pagination, aggregate reports, streaming
   export, and JSON search. Builds the router without listening or connecting.
@@ -69,13 +66,16 @@ The focused samples avoid real connections and either assert rendered SQL or
 exercise validation and error paths. `rest-api` uses `connect_lazy`, so it is
 compile-checked without a running database.
 
-To run service code against a real Postgres instance, start the sample database
-and use the same schema crate:
+To compile-run the REST router bootstrap with the same schema crate, use:
 
 ```bash
-make db-up
 DATABASE_URL=postgres://rqb:rqb@localhost:55432/rqb cargo run --manifest-path samples/rest-api/Cargo.toml
 ```
+
+That command still does not start an HTTP listener or issue database queries;
+it proves the router and service code build with a realistic `DATABASE_URL`.
+Use `make db-up` when running integration tests or your own local app against
+the sample schema.
 
 The focused samples intentionally do not connect: they keep CI fast and keep
 the rendered SQL visible. `rest-api` shows the full service shape, while the

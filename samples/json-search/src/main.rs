@@ -178,10 +178,7 @@ fn search_api_error(error: rqb::Error) -> SearchApiError {
         rqb::Error::InvalidSearchOperator(err) => SearchApiError {
             status: 400,
             code: "invalid_search_operator",
-            detail: format!(
-                "operator {} is not allowed for this field",
-                err.operator
-            ),
+            detail: format!("operator {} is not allowed for this field", err.operator),
             field: Some(err.field),
         },
         rqb::Error::InvalidSearchValue(err) => SearchApiError {

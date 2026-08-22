@@ -46,6 +46,11 @@ struct NewUser {
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    const ACTIVE_IDS: &str = "active_ids";
+    const INCOMING: &str = "incoming";
+    const ORDERS_ALIAS: &str = "o";
+    const USERS_ALIAS: &str = "u";
+
     let invoice_id = Uuid::nil();
     let customer_id = Uuid::nil();
     let amount = BigDecimal::from_str("19.99")?;
@@ -87,12 +92,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(invoices::ID)
         .build()?;
 
-    // DEFAULT writes let Postgres apply column defaults without modeling them as
-    // Rust values.
-    let default_invoice_sql = insert(invoices::table())
-        .default_values()
-        .returning(invoices::ID)
-        .build()?;
+    // DEFAULT writes let Postgres apply column defaults without modeling them
+    // as Rust values. Use `default_values()` only for tables where every
+    // omitted column has a database default or is nullable.
     let reset_state_sql = update(invoices::table())
         .set(invoices::STATE.set_default())
         .filter(invoices::ID.eq(invoice_id))
@@ -180,11 +182,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "UPDATE \"sample\".\"invoices\" SET \"paid_at\" = NULL WHERE \"id\" = $1 RETURNING \"id\""
     );
     assert_eq!(
-        default_invoice_sql.sql,
-        "INSERT INTO \"sample\".\"invoices\" DEFAULT VALUES RETURNING \"id\""
-    );
-    assert_eq!(default_invoice_sql.params.len(), 0);
-    assert_eq!(
         reset_state_sql.sql,
         "UPDATE \"sample\".\"invoices\" SET \"state\" = DEFAULT WHERE \"id\" = $1 RETURNING \"id\""
     );
@@ -203,8 +200,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Conditional assignment helpers keep optional write branches in the
     // builder chain. Skipped branches do not leave dummy SQL behind.
     let maybe_display_name = Some("Ada Lovelace");
+    let should_activate = true;
     let conditional_update_sql = update(users::table())
-        .set_if(true, users::STATUS.set("active"))
+        .set_if(should_activate, users::STATUS.set("active"))
         .set_option(maybe_display_name, |name| users::DISPLAY_NAME.set(name))
         .filter(users::ID.eq(Uuid::nil()))
         .build()?;
@@ -233,13 +231,87 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         display_name: "Grace".to_owned(),
     }];
     let bulk_upsert_sql = insert(users::table())
-        .values_many(&incoming_users, "incoming")?
+        .values_many(&incoming_users, INCOMING)?
         .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
         .do_update_set((
-            users::STATUS.set_from("incoming"),
-            users::DISPLAY_NAME.set_from("incoming"),
+            users::STATUS.set_from(INCOMING),
+            users::DISPLAY_NAME.set_from(INCOMING),
         ))
         .returning(users::ID)
+        .build()?;
+
+    // MERGE is useful when the incoming relation drives both matched updates
+    // and inserts. The source can be a typed VALUES source, a CTE, a table, or
+    // a subquery.
+    let merge_incoming = values_source(
+        [(Uuid::nil(), "ada@example.com", "Ada Lovelace", "active")],
+        INCOMING,
+        (users::ID, users::EMAIL, users::DISPLAY_NAME, users::STATUS),
+    );
+    let merge_users_sql = merge_into(
+        users::table().alias(USERS_ALIAS),
+        merge_incoming,
+        users::EMAIL
+            .at(USERS_ALIAS)
+            .eq_field(users::EMAIL.at(INCOMING)),
+    )
+    .when_matched()
+    .update((
+        users::DISPLAY_NAME.set_from(INCOMING),
+        users::STATUS.set_from(INCOMING),
+    ))
+    .when_not_matched()
+    .insert((
+        users::ID.set_from(INCOMING),
+        users::EMAIL.set_from(INCOMING),
+        users::DISPLAY_NAME.set_from(INCOMING),
+        users::STATUS.set_from(INCOMING),
+    ))
+    .returning_as(users::ID.at(USERS_ALIAS), "id")
+    .returning_as(users::EMAIL.at(USERS_ALIAS), "email")
+    .build()?;
+
+    // Write CTEs and UPDATE ... FROM keep staging/query shape server-owned.
+    let active_ids = select(users::table())
+        .column(users::ID)
+        .filter(users::ACTIVE.eq(true))
+        .infer_cte(ACTIVE_IDS)?;
+    let active_ids_source = active_ids.source();
+    let update_from_cte_sql = update(users::table().alias(USERS_ALIAS))
+        .with(active_ids)
+        .set(users::STATUS.set("active"))
+        .from(active_ids_source)
+        .filter(users::ID.at(USERS_ALIAS).eq_field(users::ID.at(ACTIVE_IDS)))
+        .returning_as(users::ID.at(USERS_ALIAS), "id")
+        .build()?;
+
+    let delete_using_sql = delete_from(orders::table().alias(ORDERS_ALIAS))
+        .using(users::table().alias(USERS_ALIAS))
+        .filter(
+            orders::USER_ID
+                .at(ORDERS_ALIAS)
+                .eq_field(users::ID.at(USERS_ALIAS)),
+        )
+        .filter(users::STATUS.at(USERS_ALIAS).eq("disabled"))
+        .returning_as(orders::ID.at(ORDERS_ALIAS), "id")
+        .build()?;
+
+    // Optimistic compare-and-swap is just an UPDATE with the expected current
+    // state in WHERE and optional returning to distinguish a miss.
+    let optimistic_status_sql = update(orders::table())
+        .set(orders::STATUS.set("paid"))
+        .filter(orders::ID.eq(Uuid::nil()))
+        .filter(orders::STATUS.eq("open"))
+        .returning((orders::ID, orders::STATUS))
+        .build()?;
+
+    // PostgreSQL 18 exposes old/new values in DML RETURNING; generated fields
+    // can qualify those pseudo-relations without raw SQL.
+    let old_new_returning_sql = update(orders::table())
+        .set(orders::STATUS.set("paid"))
+        .filter(orders::ID.eq(Uuid::nil()))
+        .returning_as(orders::STATUS.old_value(), "old_status")
+        .returning_as(orders::STATUS.new_value(), "new_status")
         .build()?;
 
     assert_eq!(
@@ -254,6 +326,31 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         bulk_upsert_sql.sql,
         "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") SELECT \"incoming\".\"id\", \"incoming\".\"organization_id\", \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"display_name\" FROM (VALUES ($1, $2, $3, $4, $5)) AS \"incoming\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO UPDATE SET \"status\" = \"incoming\".\"status\", \"display_name\" = \"incoming\".\"display_name\" RETURNING \"id\""
     );
+    assert_eq!(
+        merge_users_sql.sql,
+        "MERGE INTO \"sample\".\"app_users\" AS \"u\" USING (VALUES ($1, $2, $3, $4)) AS \"incoming\" (\"id\", \"email\", \"display_name\", \"status\") ON \"u\".\"email\" = \"incoming\".\"email\" WHEN MATCHED THEN UPDATE SET \"display_name\" = \"incoming\".\"display_name\", \"status\" = \"incoming\".\"status\" WHEN NOT MATCHED THEN INSERT (\"id\", \"email\", \"display_name\", \"status\") VALUES (\"incoming\".\"id\", \"incoming\".\"email\", \"incoming\".\"display_name\", \"incoming\".\"status\") RETURNING \"u\".\"id\" AS \"id\", \"u\".\"email\" AS \"email\""
+    );
+    assert_eq!(merge_users_sql.params.len(), 4);
+    assert_eq!(
+        update_from_cte_sql.sql,
+        "WITH \"active_ids\" (\"id\") AS (SELECT \"id\" FROM \"sample\".\"app_users\" WHERE \"active\" = $1) UPDATE \"sample\".\"app_users\" AS \"u\" SET \"status\" = $2 FROM \"active_ids\" WHERE \"u\".\"id\" = \"active_ids\".\"id\" RETURNING \"u\".\"id\" AS \"id\""
+    );
+    assert_eq!(update_from_cte_sql.params.len(), 2);
+    assert_eq!(
+        delete_using_sql.sql,
+        "DELETE FROM \"sample\".\"orders\" AS \"o\" USING \"sample\".\"app_users\" AS \"u\" WHERE (\"o\".\"user_id\" = \"u\".\"id\" AND \"u\".\"status\" = $1) RETURNING \"o\".\"id\" AS \"id\""
+    );
+    assert_eq!(delete_using_sql.params.len(), 1);
+    assert_eq!(
+        optimistic_status_sql.sql,
+        "UPDATE \"sample\".\"orders\" SET \"status\" = $1 WHERE (\"id\" = $2 AND \"status\" = $3) RETURNING \"id\", \"status\""
+    );
+    assert_eq!(optimistic_status_sql.params.len(), 3);
+    assert_eq!(
+        old_new_returning_sql.sql,
+        "UPDATE \"sample\".\"orders\" SET \"status\" = $1 WHERE \"id\" = $2 RETURNING \"old\".\"status\" AS \"old_status\", \"new\".\"status\" AS \"new_status\""
+    );
+    assert_eq!(old_new_returning_sql.params.len(), 2);
 
     // Formatting and range helpers stay in the typed expression layer; no raw
     // SQL is needed for common report columns.
@@ -287,6 +384,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("{}", conditional_update_sql.sql);
     println!("{}", excluded_upsert_sql.sql);
     println!("{}", bulk_upsert_sql.sql);
+    println!("{}", merge_users_sql.sql);
+    println!("{}", update_from_cte_sql.sql);
+    println!("{}", optimistic_status_sql.sql);
     println!("{}", invoice_report_sql.sql);
     println!("{}", upsert_user_sql.sql);
     Ok(())

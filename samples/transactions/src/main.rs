@@ -1,6 +1,4 @@
-use rqb::dsl::{
-    advisory_xact_lock_named, try_advisory_xact_lock, try_advisory_xact_lock_named,
-};
+use rqb::dsl::{advisory_xact_lock_named, try_advisory_xact_lock, try_advisory_xact_lock_named};
 use rqb::prelude::*;
 use rqb_sample_schema::app_users as users;
 use rqb_sample_schema::orders;
@@ -51,10 +49,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         lock_sql.sql,
         "SELECT \"id\", \"user_id\", \"status\", \"total_cents\", \"metadata\", \"tags\", \"created_at\" FROM \"sample\".\"orders\" WHERE \"id\" = $1 FOR NO KEY UPDATE NOWAIT"
     );
-    assert_eq!(
-        advisory_sql.sql,
-        "SELECT pg_advisory_xact_lock($1)"
-    );
+    assert_eq!(advisory_sql.sql, "SELECT pg_advisory_xact_lock($1)");
     assert_eq!(
         try_advisory_sql.sql,
         "SELECT pg_try_advisory_xact_lock($1, $2)"

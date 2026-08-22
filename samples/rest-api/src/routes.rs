@@ -57,17 +57,9 @@ struct OrderExportQuery {
 struct OrderFilterQuery {
     user_id: Uuid,
     status: Option<String>,
-    min_total: Option<String>,
-    from_date: Option<String>,
-    limit: Option<String>,
-}
-
-struct ParsedOrderFilterQuery {
-    user_id: Uuid,
-    status: Option<String>,
     min_total: Option<i64>,
     from_date: Option<chrono::DateTime<chrono::Utc>>,
-    limit: u32,
+    limit: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,10 +67,7 @@ struct ReportQuery {
     days: Option<i64>,
 }
 
-async fn get_user(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<UserRow>> {
+async fn get_user(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<UserRow>> {
     let user = users::find(&state.pool, id).await?;
     Ok(Json(user))
 }
@@ -108,6 +97,12 @@ async fn patch_user(
 ) -> ApiResult<Json<UserRow>> {
     // This shape is both the HTTP PATCH body and the DB changeset. Split those
     // structs only when the public API and the write model actually diverge.
+    if input.is_empty() {
+        return Err(ApiError::BadRequest(
+            "PATCH body must include at least one field".to_owned(),
+        ));
+    }
+
     let user = users::patch(&state.pool, id, input).await?;
     Ok(Json(user))
 }
@@ -158,16 +153,15 @@ async fn filter_orders(
     State(state): State<AppState>,
     Query(query): Query<OrderFilterQuery>,
 ) -> ApiResult<Json<Vec<OrderRow>>> {
-    // Query strings arrive as strings at the HTTP boundary. Parse them here so
-    // services receive typed Rust values and each bad field gets a clear 400.
-    let query = parse_order_filter_query(query)?;
+    // Serde parses query-string values at the HTTP boundary, so services
+    // receive typed Rust values instead of raw strings.
     let rows = orders::filter(
         &state.pool,
         query.user_id,
         query.status,
         query.min_total,
         query.from_date,
-        query.limit,
+        query.limit.unwrap_or(50),
     )
     .await?;
 
@@ -216,9 +210,7 @@ async fn transition_order(
     Ok(Json(order))
 }
 
-async fn order_summary(
-    State(state): State<AppState>,
-) -> ApiResult<Json<Vec<UserOrderSummaryRow>>> {
+async fn order_summary(State(state): State<AppState>) -> ApiResult<Json<Vec<UserOrderSummaryRow>>> {
     let summary = orders::summary(&state.pool).await?;
     Ok(Json(summary))
 }
@@ -248,7 +240,9 @@ async fn checkout(
     // Request validation stays at the HTTP boundary; the DB service receives a
     // clean command DTO.
     if input.total_cents <= 0 {
-        return Err(ApiError::BadRequest("total_cents must be positive".to_owned()));
+        return Err(ApiError::BadRequest(
+            "total_cents must be positive".to_owned(),
+        ));
     }
 
     let response = orders::checkout(&state.pool, input).await?;
@@ -287,47 +281,4 @@ fn validate_product(input: &UpsertProduct) -> ApiResult<()> {
         ));
     }
     Ok(())
-}
-
-fn parse_order_filter_query(raw: OrderFilterQuery) -> ApiResult<ParsedOrderFilterQuery> {
-    Ok(ParsedOrderFilterQuery {
-        user_id: raw.user_id,
-        status: raw.status,
-        min_total: parse_optional_i64(raw.min_total, "min_total")?,
-        from_date: parse_optional_rfc3339(raw.from_date, "from_date")?,
-        limit: parse_optional_u32(raw.limit, "limit")?.unwrap_or(50),
-    })
-}
-
-fn parse_optional_i64(value: Option<String>, field: &'static str) -> ApiResult<Option<i64>> {
-    value
-        .map(|value| {
-            value
-                .parse::<i64>()
-                .map_err(|_| ApiError::BadRequest(format!("{field} must be an integer")))
-        })
-        .transpose()
-}
-
-fn parse_optional_u32(value: Option<String>, field: &'static str) -> ApiResult<Option<u32>> {
-    value
-        .map(|value| {
-            value
-                .parse::<u32>()
-                .map_err(|_| ApiError::BadRequest(format!("{field} must be a positive integer")))
-        })
-        .transpose()
-}
-
-fn parse_optional_rfc3339(
-    value: Option<String>,
-    field: &'static str,
-) -> ApiResult<Option<chrono::DateTime<chrono::Utc>>> {
-    value
-        .map(|value| {
-            chrono::DateTime::parse_from_rfc3339(&value)
-                .map(|value| value.with_timezone(&chrono::Utc))
-                .map_err(|_| ApiError::BadRequest(format!("{field} must be an RFC3339 timestamp")))
-        })
-        .transpose()
 }

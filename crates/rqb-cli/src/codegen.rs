@@ -298,7 +298,7 @@ fn column_comments(relation_kind: RelationKind, column: &Column) -> Vec<&'static
         }
         GeneratedKind::IdentityAlways => {
             comments.push(
-                "Identity: always. Do not include in INSERT assignments; use OVERRIDING SYSTEM VALUE to override.",
+                "Identity: always. Do not include in INSERT assignments; use raw SQL with OVERRIDING SYSTEM VALUE to override.",
             );
         }
         GeneratedKind::IdentityByDefault => {
@@ -794,7 +794,7 @@ mod tests {
         assert!(code.contains("// Nullable in Postgres metadata. Use Option<T> in row structs."));
         assert!(code.contains("// Generated: stored. Do not include in INSERT assignments."));
         assert!(code.contains(
-            "// Identity: always. Do not include in INSERT assignments; use OVERRIDING SYSTEM VALUE to override."
+            "// Identity: always. Do not include in INSERT assignments; use raw SQL with OVERRIDING SYSTEM VALUE to override."
         ));
         assert!(code.contains("// Identity: by default. Explicit INSERT values are allowed."));
     }

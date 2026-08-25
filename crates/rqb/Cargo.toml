@@ -27,7 +27,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 divan = "0.1.21"
-sqlx = { workspace = true, features = ["derive"] }
+sqlx = { workspace = true, features = ["derive", "runtime-tokio", "tls-rustls-ring-webpki"] }
 tokio.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 

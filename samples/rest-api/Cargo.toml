@@ -15,6 +15,6 @@ rqb = { path = "../../crates/rqb" }
 rqb-sample-schema = { path = "../schema" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
-sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "uuid", "chrono", "json", "runtime-tokio", "tls-rustls", "derive"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "uuid", "chrono", "json", "runtime-tokio", "tls-rustls-ring-webpki", "derive"] }
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1.23.4", features = ["serde", "v4"] }

@@ -60,18 +60,18 @@ rqb is distributed through crates.io:
 
 ```toml
 [dependencies]
-rqb = "0.1.4"
+rqb = "0.1.5"
 chrono = "0.4.45"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
-sqlx = { version = "0.9.0", features = [
+sqlx = { version = "0.9.0", default-features = false, features = [
     "postgres",
     "derive",
     "uuid",
     "chrono",
     "json",
     "runtime-tokio",
-    "tls-rustls",
+    "tls-rustls-ring-webpki",
 ] }
 uuid = "1.23.4"
 ```
@@ -81,6 +81,12 @@ For source-pinned application builds, use the GitHub repository:
 ```toml
 rqb = { git = "https://github.com/mudake-rs/rqb", rev = "<commit>" }
 ```
+
+rqb does not enable a sqlx async runtime or TLS provider. Your application owns
+that choice on its direct `sqlx` dependency; use any SQLx `runtime-*` and
+`tls-*` combination that matches the rest of the process, such as
+`tls-rustls-aws-lc-rs`, `tls-rustls-ring-webpki`, `tls-native-tls`, or
+`tls-none`.
 
 `uuid`, `chrono`, JSON, numeric, ranges, arrays, and other Postgres values are
 accepted when the Rust type implements sqlx `Encode` and `Type` for Postgres.

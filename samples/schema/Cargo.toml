@@ -14,4 +14,5 @@ sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "b
 uuid = "1.23.4"
 
 [dev-dependencies]
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }

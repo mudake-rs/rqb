@@ -10,6 +10,6 @@ publish = false
 chrono = "0.4.45"
 rqb = { path = "../../crates/rqb" }
 rqb-sample-schema = { path = "../schema" }
-sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "uuid", "chrono", "runtime-tokio", "tls-rustls", "derive"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "uuid", "chrono", "runtime-tokio", "tls-rustls-ring-webpki", "derive"] }
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
 uuid = "1.23.4"

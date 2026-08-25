@@ -194,17 +194,19 @@ Cacheable: true</code></pre>
 
       <h2 id="install">Install</h2>
       <pre><code>[dependencies]
-rqb = "0.1.4"
-sqlx = { version = "0.9.0", features = [
+rqb = "0.1.5"
+sqlx = { version = "0.9.0", default-features = false, features = [
     "postgres",
     "derive",
     "uuid",
     "chrono",
     "json",
     "runtime-tokio",
-    "tls-rustls",
+    "tls-rustls-ring-webpki",
 ] }
 uuid = "1"</code></pre>
+
+      <p><code>rqb</code> does not select a sqlx runtime or TLS provider. Choose the <code>runtime-*</code> and <code>tls-*</code> features on your application's direct <code>sqlx</code> dependency.</p>
 
       <p>Install the schema generator when you want to introspect a live database:</p>
       <pre class="command"><code>cargo install rqb-cli</code></pre>

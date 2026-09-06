@@ -296,6 +296,9 @@ fn column_comments(relation_kind: RelationKind, column: &Column) -> Vec<&'static
         GeneratedKind::Stored => {
             comments.push("Generated: stored. Do not include in INSERT assignments.");
         }
+        GeneratedKind::Virtual => {
+            comments.push("Generated: virtual. Do not include in INSERT assignments.");
+        }
         GeneratedKind::IdentityAlways => {
             comments.push(
                 "Identity: always. Do not include in INSERT assignments; use raw SQL with OVERRIDING SYSTEM VALUE to override.",
@@ -329,7 +332,7 @@ impl Column {
 
 fn rust_type_name(known: &KnownType) -> String {
     match known {
-        KnownType::Text | KnownType::Inet | KnownType::Cidr => "String".to_owned(),
+        KnownType::Text => "String".to_owned(),
         KnownType::Bool => "bool".to_owned(),
         KnownType::Int2 => "i16".to_owned(),
         KnownType::Int4 => "i32".to_owned(),
@@ -410,9 +413,7 @@ fn collect_type_imports(known: &KnownType, imports: &mut TypeImports) {
         | KnownType::Int8
         | KnownType::Float4
         | KnownType::Float8
-        | KnownType::Bytes
-        | KnownType::Inet
-        | KnownType::Cidr => {}
+        | KnownType::Bytes => {}
         KnownType::Numeric => imports.big_decimal = true,
         KnownType::Uuid => imports.uuid = true,
         KnownType::Date => imports.naive_date = true,
@@ -482,8 +483,6 @@ fn pg_name(known: &KnownType) -> String {
         KnownType::Json => "json".to_owned(),
         KnownType::Jsonb => "jsonb".to_owned(),
         KnownType::Bytes => "bytea".to_owned(),
-        KnownType::Inet => "inet".to_owned(),
-        KnownType::Cidr => "cidr".to_owned(),
         KnownType::Range(elem) => match elem.as_ref() {
             KnownType::Int4 => "int4range".to_owned(),
             KnownType::Int8 => "int8range".to_owned(),

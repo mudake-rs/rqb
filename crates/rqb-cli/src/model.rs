@@ -40,6 +40,7 @@ pub(crate) struct Column {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GeneratedKind {
+    Virtual,
     None,
     Stored,
     IdentityAlways,
@@ -119,8 +120,6 @@ pub(crate) enum KnownType {
     Json,
     Jsonb,
     Bytes,
-    Inet,
-    Cidr,
     Range(Box<KnownType>),
     Array(Box<KnownType>),
 }

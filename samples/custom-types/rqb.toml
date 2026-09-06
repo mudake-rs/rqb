@@ -1,0 +1,4 @@
+[type_map."sample_custom.cents"]
+rust = "crate::types::Cents"
+ops = "ordered"
+json = "big_int"

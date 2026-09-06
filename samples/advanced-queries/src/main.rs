@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use rqb::dsl::{
-    case, count_all, current_row, current_user, json_get_text, json_typeof, param, row_number,
+    case, count_all, current_row, current_user, json_get_text, jsonb_typeof, param, row_number,
     rows, sum, to_char, true_, unbounded_preceding, width_bucket, window,
 };
 use rqb::prelude::*;
@@ -110,14 +110,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             width_bucket(orders::TOTAL_CENTS, 0_i64, 100_000_i64, 10_i32),
             "amount_bucket",
         )
-        .expr_as(json_typeof(orders::METADATA), "metadata_kind")
+        .expr_as(jsonb_typeof(orders::METADATA), "metadata_kind")
         .expr_as(current_user(), "current_user")
         .limit(1)
         .build()?;
 
     assert_eq!(
         helper_showcase.sql,
-        "SELECT to_char(\"created_at\", $1) AS \"order_month\", sum(\"total_cents\") OVER (PARTITION BY \"user_id\" ORDER BY \"created_at\" ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"running_user_total_cents\", width_bucket(\"total_cents\", $2, $3, $4) AS \"amount_bucket\", json_typeof(\"metadata\") AS \"metadata_kind\", CURRENT_USER AS \"current_user\" FROM \"sample\".\"orders\" LIMIT $5"
+        "SELECT to_char(\"created_at\", $1) AS \"order_month\", sum(\"total_cents\") OVER (PARTITION BY \"user_id\" ORDER BY \"created_at\" ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"running_user_total_cents\", width_bucket(\"total_cents\", $2, $3, $4) AS \"amount_bucket\", jsonb_typeof(\"metadata\") AS \"metadata_kind\", CURRENT_USER AS \"current_user\" FROM \"sample\".\"orders\" LIMIT $5"
     );
     assert_eq!(helper_showcase.params.len(), 5);
 

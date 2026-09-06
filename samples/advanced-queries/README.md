@@ -13,7 +13,7 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
   aggregate windows, CASE, `GROUP BY`, `HAVING`, and `FETCH WITH TIES` compose
   in one query.
 - `case()` reads like SQL without exposing raw AST construction.
-- Reporting helpers such as `to_char`, `width_bucket`, `json_typeof`, and
+- Reporting helpers such as `to_char`, `width_bucket`, `jsonb_typeof`, and
   `current_user` keep common dashboard expressions out of raw SQL.
 - `rqb::field!` gives computed columns metadata for later projection, grouping,
   and ordering.

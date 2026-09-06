@@ -60,7 +60,7 @@ rqb is distributed through crates.io:
 
 ```toml
 [dependencies]
-rqb = "0.1.5"
+rqb = "0.1.6"
 chrono = "0.4.45"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
@@ -268,17 +268,22 @@ let paid_orders = select(schema::orders::table())
 let po = paid_orders.source().alias("po");
 let u = schema::users::alias("u");
 
+#[derive(sqlx::FromRow)]
+struct PaidUserRow {
+    id: Uuid,
+    email: String,
+    paid_total: sqlx::types::BigDecimal,
+}
+
 let rows = select(&u)
     .with(paid_orders)
     .join(po, u.id().eq_field(schema::orders::USER_ID.at("po")))
-    .filter(exists(
-        select(schema::orders::table())
-            .column(schema::orders::ID)
-            .filter(schema::orders::USER_ID.eq_field(u.id())),
-    ))
+    .expr_as(u.id(), "id")
+    .expr_as(u.email(), "email")
     .expr_as(sum(schema::orders::TOTAL_CENTS.at("po")), "paid_total")
     .group_by(u.id())
-    .fetch_all_as::<UserRow>(&pool)
+    .group_by(u.email())
+    .fetch_all_as::<PaidUserRow>(&pool)
     .await?;
 ```
 
@@ -335,7 +340,8 @@ including rows deleted by `WHEN NOT MATCHED BY SOURCE THEN DELETE`. If an API
 needs the final table state after that branch, run a follow-up `SELECT` with the
 same server-owned scope.
 
-MERGE actions are validated against Postgres `WHEN` clause rules before
+MERGE branch builders restrict actions to those allowed by Postgres. Branch
+ordering, assignments, and expressions are validated before
 rendering.
 
 Grouped analytics can make non-null source columns nullable in result rows.
@@ -386,7 +392,7 @@ Common helper families in the flat catalog:
 | Full-text search | `to_tsvector`, `phraseto_tsquery`, `ts_rank`, `ts_headline` |
 | JSON/JSONB | `json_build_object`, `jsonb_build_object`, `jsonb_pretty`, `array_to_json` |
 | Math | `round`, `sqrt`, `pow`, `random_between`, `width_bucket` |
-| Range | `range_lower`, `range_upper`, `range_merge`, `multirange_merge`, `isempty`, `lower_inc` |
+| Range | `range_lower`, `range_upper`, `range_merge`, `isempty`, `lower_inc` |
 | Scalar expressions | `case`, `coalesce`, `null`, `literal`, `greatest`, `current_user`, `scalar_subquery` |
 | Set-returning sources | `generate_series_source`, `unnest_source`, `json_each_source`, `regexp_split_to_table_source`, `values_source` |
 | Text | `lower`, `format`, `translate`, `repeat`, `octet_length`, `encode` |
@@ -450,6 +456,8 @@ let query = select(schema::order_search_view::view())
 Server filters are preserved and combined with the request filter using `AND`.
 Request sort, limit, and offset are request-owned clauses and replace existing
 builder values. Only fields with `Meta::json(...)` are visible to JSON requests.
+For filter-only input, use `query.apply_filter(filter)?` with a `SearchFilter`;
+it preserves server-owned ordering, limit, and offset regardless of call order.
 Operators are gated by field capabilities: equality/null tests require equality
 capability, sort requires ordering capability, and LIKE/regex/text-pattern
 operators require text-pattern capability such as `OpSet::text()`.
@@ -554,9 +562,11 @@ The usual HTTP mapping is:
 - `InvalidSearchField`, `SearchFieldNotExposed`, `InvalidSearchOperator`,
   `InvalidSearchValue`, `EmptySearchLogical`, and `InvalidSort` ->
   `400 Bad Request`.
-- `SerializationFailure`, `DeadlockDetected`, and connection failures ->
-  `503 Service Unavailable` or a retry response. `error.is_retryable()` returns
-  true for these retryable cases.
+- `SerializationFailure` and `DeadlockDetected` -> `503 Service Unavailable`
+  or retry the whole transaction with bounded backoff. `error.is_retryable()`
+  recognizes these two SQLSTATEs, not connection failures with uncertain outcomes.
+  `error.is_connection()` classifies transport/pool failures separately; it does
+  not authorize replaying an operation whose outcome is unknown.
 - `LockNotAvailable` (`55P03`, for example `FOR UPDATE NOWAIT`) -> `409 Conflict`,
   `423 Locked`, or a domain-specific "already busy" response.
 - `QueryCanceled` -> `504 Gateway Timeout` or request timeout, depending on
@@ -771,9 +781,11 @@ Derives map `snake_case` Rust fields to generated `SHOUTY_SNAKE_CASE` schema
 constants by default. Use `#[rqb(field = schema::table::FIELD)]` when a DTO field
 name differs from the database column, and `#[rqb(skip)]` for local-only fields.
 For `Insertable`, `#[rqb(skip_none)]` skips `None` on an `Option<T>` field;
-otherwise the `Option<T>` itself is inserted as the value. `Changeset` always
-treats `Option<T>` as patch semantics: `Some` sets the column, `None` leaves it
-unchanged.
+otherwise `Some(T)` writes the value and `None` writes SQL `NULL`, against the
+generated `Field<T>`. `Changeset` treats outer `None` as omission;
+`Option<Option<T>>` adds `Some(None)` for explicit NULL.
+For JSON PATCH, nested Option alone does not distinguish missing from null:
+see the tested present-field deserializer in `samples/writes-and-types`.
 
 ### Upserts And Batch Inserts
 
@@ -795,20 +807,16 @@ insert(schema::products::table())
     .await?;
 ```
 
-For sync-style batch DTO inputs, `values_many(...)` exposes the incoming
-rows as an inline `VALUES` source. `set_from("alias")` copies fields from that
-same source in conflict updates:
+For batch DTO inputs, `values_many(...)` builds an inline `VALUES` source.
+Conflict updates read the proposed row through PostgreSQL's `EXCLUDED`:
 
 ```rust
 let incoming = [product_a, product_b];
 
 insert(schema::products::table())
-    .values_many(&incoming, "incoming")?
+    .values_many(&incoming)?
     .on_conflict(schema::products::SKU)
-    .do_update_set((
-        schema::products::NAME.set_from("incoming"),
-        schema::products::PRICE_CENTS.set_from("incoming"),
-    ))
+    .do_update_excluded((schema::products::NAME, schema::products::PRICE_CENTS))
     .execute(&pool)
     .await?;
 ```

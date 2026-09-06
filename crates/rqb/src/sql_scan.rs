@@ -98,10 +98,14 @@ pub(crate) fn skip_dollar_quoted(sql: &str, start: usize) -> Option<usize> {
 }
 
 fn starts_token_boundary(bytes: &[u8], index: usize) -> bool {
-    index == 0 || !is_dollar_tag_char(char::from(bytes[index - 1]))
+    index == 0
+        || !matches!(bytes[index - 1], b'_' | b'$' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | 0x80..=0xff)
 }
 
 fn dollar_quote_open_end(sql: &str, start: usize) -> Option<usize> {
+    if !starts_token_boundary(sql.as_bytes(), start) {
+        return None;
+    }
     let mut pos = start + 1;
     while pos < sql.len() {
         let ch = sql[pos..].chars().next()?;
@@ -122,12 +126,12 @@ fn valid_dollar_tag(tag: &str) -> bool {
     let Some(first) = chars.next() else {
         return true;
     };
-    (first == '_' || first.is_ascii_alphabetic())
-        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    (first == '_' || first.is_ascii_alphabetic() || !first.is_ascii())
+        && chars.all(is_dollar_tag_char)
 }
 
 fn is_dollar_tag_char(ch: char) -> bool {
-    ch == '_' || ch.is_ascii_alphanumeric()
+    ch == '_' || ch.is_ascii_alphanumeric() || !ch.is_ascii()
 }
 
 #[cfg(test)]

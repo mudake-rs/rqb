@@ -1,32 +1,26 @@
 use super::*;
 
 impl Renderer {
-    pub(super) fn render_value(&mut self, expr: &ValueExpr) -> Result<()> {
+    pub(super) fn render_value(&mut self, expr: &ValueExpr) {
         match expr {
             ValueExpr::Field { meta, qualifier } => {
                 self.render_field(meta, qualifier.as_deref());
-                Ok(())
             }
             ValueExpr::Excluded(field) => {
                 self.sql.push_str("EXCLUDED.");
                 write_quoted_ident(&mut self.sql, field.db);
-                Ok(())
             }
             ValueExpr::Param(param) => {
                 self.push_param(param.clone());
-                Ok(())
             }
             ValueExpr::Null => {
                 self.sql.push_str("NULL");
-                Ok(())
             }
             ValueExpr::SqlLiteral(value) => {
                 self.render_sql_literal(value);
-                Ok(())
             }
             ValueExpr::Keyword(keyword) => {
                 self.sql.push_str(keyword);
-                Ok(())
             }
             ValueExpr::Function { name, args } => self.render_call(name, args),
             ValueExpr::Aggregate {
@@ -37,18 +31,17 @@ impl Renderer {
                 filter,
                 over,
             } => {
-                self.render_aggregate(name, args, *distinct, order_by)?;
+                self.render_aggregate(name, args, *distinct, order_by);
                 if let Some(filter) = filter {
                     self.sql.push_str(" FILTER (WHERE ");
-                    self.render_bool(filter)?;
+                    self.render_bool(filter);
                     self.sql.push(')');
                 }
                 if let Some(spec) = over {
                     self.sql.push_str(" OVER (");
-                    self.render_window_spec(spec)?;
+                    self.render_window_spec(spec);
                     self.sql.push(')');
                 }
-                Ok(())
             }
             ValueExpr::OrderedSetAggregate {
                 name,
@@ -56,66 +49,60 @@ impl Renderer {
                 within_group,
                 filter,
             } => {
-                self.render_ordered_set_aggregate(name, args, within_group)?;
+                self.render_ordered_set_aggregate(name, args, within_group);
                 if let Some(filter) = filter {
                     self.sql.push_str(" FILTER (WHERE ");
-                    self.render_bool(filter)?;
+                    self.render_bool(filter);
                     self.sql.push(')');
                 }
-                Ok(())
             }
             ValueExpr::Case { branches, else_ } => {
                 self.sql.push_str("CASE");
                 for (when, then) in branches {
                     self.sql.push_str(" WHEN ");
-                    self.render_bool(when)?;
+                    self.render_bool(when);
                     self.sql.push_str(" THEN ");
-                    self.render_value(then)?;
+                    self.render_value(then);
                 }
                 if let Some(else_) = else_ {
                     self.sql.push_str(" ELSE ");
-                    self.render_value(else_)?;
+                    self.render_value(else_);
                 }
                 self.sql.push_str(" END");
-                Ok(())
             }
             ValueExpr::Cast { expr, pg } => {
                 self.sql.push_str("CAST(");
-                self.render_value(expr)?;
+                self.render_value(expr);
                 self.sql.push_str(" AS ");
                 self.sql.push_str(pg);
                 self.sql.push(')');
-                Ok(())
             }
             ValueExpr::Binary { left, op, right } => {
                 self.sql.push('(');
-                self.render_value(left)?;
+                self.render_operand(left);
                 self.sql.push(' ');
                 self.sql.push_str(op.as_sql());
                 self.sql.push(' ');
-                self.render_value(right)?;
+                self.render_operand(right);
                 self.sql.push(')');
-                Ok(())
             }
             ValueExpr::Subscript { expr, index } => {
-                self.render_value(expr)?;
+                self.render_subscript_base(expr);
                 self.sql.push('[');
-                self.render_value(index)?;
+                self.render_value(index);
                 self.sql.push(']');
-                Ok(())
             }
             ValueExpr::Slice { expr, start, end } => {
-                self.render_value(expr)?;
+                self.render_subscript_base(expr);
                 self.sql.push('[');
                 if let Some(start) = start {
-                    self.render_value(start)?;
+                    self.render_value(start);
                 }
                 self.sql.push(':');
                 if let Some(end) = end {
-                    self.render_value(end)?;
+                    self.render_value(end);
                 }
                 self.sql.push(']');
-                Ok(())
             }
             ValueExpr::Array(values) => {
                 self.sql.push_str("ARRAY[");
@@ -123,10 +110,9 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    self.render_value(value)?;
+                    self.render_value(value);
                 }
                 self.sql.push(']');
-                Ok(())
             }
             ValueExpr::Row(values) => {
                 self.sql.push_str("ROW(");
@@ -134,18 +120,16 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    self.render_value(value)?;
+                    self.render_value(value);
                 }
                 self.sql.push(')');
-                Ok(())
             }
             ValueExpr::Extract { field, expr } => {
                 self.sql.push_str("extract(");
                 self.sql.push_str(field);
                 self.sql.push_str(" FROM ");
-                self.render_value(expr)?;
+                self.render_value(expr);
                 self.sql.push(')');
-                Ok(())
             }
             ValueExpr::Window {
                 function,
@@ -158,19 +142,17 @@ impl Renderer {
                     if idx > 0 {
                         self.sql.push_str(", ");
                     }
-                    self.render_value(arg)?;
+                    self.render_value(arg);
                 }
                 self.sql.push_str(") OVER (");
-                self.render_window_spec(spec)?;
+                self.render_window_spec(spec);
                 self.sql.push(')');
-                Ok(())
             }
             ValueExpr::Raw { sql, params } => self.render_raw(sql, params),
             ValueExpr::Subquery(stmt) => {
                 self.sql.push('(');
-                self.render_stmt(stmt)?;
+                self.render_stmt(stmt);
                 self.sql.push(')');
-                Ok(())
             }
             ValueExpr::InvalidAggregateModifier { .. } => unreachable!(
                 "invalid aggregate modifiers must be rejected during validation before rendering"
@@ -178,17 +160,43 @@ impl Renderer {
         }
     }
 
-    pub(super) fn render_call(&mut self, name: &str, args: &[ValueExpr]) -> Result<()> {
+    pub(super) fn render_operand(&mut self, expr: &ValueExpr) {
+        if matches!(expr, ValueExpr::Raw { .. }) {
+            self.sql.push('(');
+            self.render_value(expr);
+            self.sql.push(')');
+        } else {
+            self.render_value(expr);
+        }
+    }
+
+    fn render_subscript_base(&mut self, expr: &ValueExpr) {
+        // A chain must remain a[i][j], not (a[i])[j]: PG arrays are multidimensional.
+        if matches!(
+            expr,
+            ValueExpr::Field { .. }
+                | ValueExpr::Param(_)
+                | ValueExpr::Subscript { .. }
+                | ValueExpr::Slice { .. }
+        ) {
+            self.render_value(expr);
+        } else {
+            self.sql.push('(');
+            self.render_value(expr);
+            self.sql.push(')');
+        }
+    }
+
+    pub(super) fn render_call(&mut self, name: &str, args: &[ValueExpr]) {
         self.sql.push_str(name);
         self.sql.push('(');
         for (idx, arg) in args.iter().enumerate() {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
-            self.render_value(arg)?;
+            self.render_value(arg);
         }
         self.sql.push(')');
-        Ok(())
     }
 
     fn render_sql_literal(&mut self, value: &str) {
@@ -212,7 +220,7 @@ impl Renderer {
         args: &[ValueExpr],
         distinct: bool,
         order_by: &[crate::OrderItem],
-    ) -> Result<()> {
+    ) {
         self.sql.push_str(name);
         self.sql.push('(');
         if distinct {
@@ -225,12 +233,11 @@ impl Renderer {
                 if idx > 0 {
                     self.sql.push_str(", ");
                 }
-                self.render_value(arg)?;
+                self.render_value(arg);
             }
         }
-        self.render_order_clause(" ORDER BY ", order_by)?;
+        self.render_order_clause(" ORDER BY ", order_by);
         self.sql.push(')');
-        Ok(())
     }
 
     pub(super) fn render_ordered_set_aggregate(
@@ -238,22 +245,21 @@ impl Renderer {
         name: &str,
         args: &[ValueExpr],
         within_group: &[crate::OrderItem],
-    ) -> Result<()> {
+    ) {
         self.sql.push_str(name);
         self.sql.push('(');
         for (idx, arg) in args.iter().enumerate() {
             if idx > 0 {
                 self.sql.push_str(", ");
             }
-            self.render_value(arg)?;
+            self.render_value(arg);
         }
         self.sql.push_str(") WITHIN GROUP (ORDER BY ");
-        self.render_order_items(within_group)?;
+        self.render_order_items(within_group);
         self.sql.push(')');
-        Ok(())
     }
 
-    pub(super) fn render_window_spec(&mut self, spec: &WindowSpec) -> Result<()> {
+    pub(super) fn render_window_spec(&mut self, spec: &WindowSpec) {
         let mut needs_space = false;
         if !spec.partition_by.is_empty() {
             self.sql.push_str("PARTITION BY ");
@@ -261,7 +267,7 @@ impl Renderer {
                 if idx > 0 {
                     self.sql.push_str(", ");
                 }
-                self.render_value(expr)?;
+                self.render_value(expr);
             }
             needs_space = true;
         }
@@ -269,50 +275,47 @@ impl Renderer {
             if needs_space {
                 self.sql.push(' ');
             }
-            self.render_order_clause("ORDER BY ", &spec.order_by)?;
+            self.render_order_clause("ORDER BY ", &spec.order_by);
             needs_space = true;
         }
         if let Some(frame) = &spec.frame {
             if needs_space {
                 self.sql.push(' ');
             }
-            self.render_window_frame(frame)?;
+            self.render_window_frame(frame);
         }
-        Ok(())
     }
 
-    pub(super) fn render_window_frame(&mut self, frame: &WindowFrame) -> Result<()> {
+    pub(super) fn render_window_frame(&mut self, frame: &WindowFrame) {
         self.sql.push_str(frame.kind.as_sql());
         if let Some(end) = &frame.end {
             self.sql.push_str(" BETWEEN ");
-            self.render_frame_bound(&frame.start)?;
+            self.render_frame_bound(&frame.start);
             self.sql.push_str(" AND ");
-            self.render_frame_bound(end)?;
+            self.render_frame_bound(end);
         } else {
             self.sql.push(' ');
-            self.render_frame_bound(&frame.start)?;
+            self.render_frame_bound(&frame.start);
         }
         if let Some(exclude) = frame.exclude {
             self.sql.push(' ');
             self.sql.push_str(exclude.as_sql());
         }
-        Ok(())
     }
 
-    pub(super) fn render_frame_bound(&mut self, bound: &FrameBound) -> Result<()> {
+    pub(super) fn render_frame_bound(&mut self, bound: &FrameBound) {
         match bound {
             FrameBound::UnboundedPreceding => self.sql.push_str("UNBOUNDED PRECEDING"),
             FrameBound::Preceding(expr) => {
-                self.render_value(expr)?;
+                self.render_value(expr);
                 self.sql.push_str(" PRECEDING");
             }
             FrameBound::CurrentRow => self.sql.push_str("CURRENT ROW"),
             FrameBound::Following(expr) => {
-                self.render_value(expr)?;
+                self.render_value(expr);
                 self.sql.push_str(" FOLLOWING");
             }
             FrameBound::UnboundedFollowing => self.sql.push_str("UNBOUNDED FOLLOWING"),
         }
-        Ok(())
     }
 }

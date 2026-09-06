@@ -74,10 +74,9 @@ impl Insert {
     /// fields can be omitted per row, normalize the input first or build an
     /// explicit `values_source(...)`.
     ///
-    /// `alias` names the generated `VALUES` source. Use the same alias with
-    /// [`Field::set_from`] when an upsert needs to copy incoming values in
-    /// `DO UPDATE SET`.
-    pub fn values_many<I, R>(self, rows: I, alias: impl Into<String>) -> Result<Self>
+    /// For an upsert, use `do_update_excluded` or `set_excluded`: PostgreSQL
+    /// exposes incoming values as `EXCLUDED` in the conflict action.
+    pub fn values_many<I, R>(self, rows: I) -> Result<Self>
     where
         I: IntoIterator<Item = R>,
         R: Insertable,
@@ -91,7 +90,12 @@ impl Insert {
         let mut columns = None::<Vec<Meta>>;
         let mut values: Vec<Vec<ValueExpr>> = Vec::new();
         for row in rows {
-            let assignments = normalized_batch_assignments(row.insert_assignments())?;
+            let assignments = normalized_assignments(row.insert_assignments());
+            if assignments.is_empty() {
+                return Err(Error::InvalidInsertShape {
+                    message: "batch insert rows must contain at least one assignment",
+                });
+            }
             match &columns {
                 Some(columns) if !same_batch_fields(columns, &assignments) => {
                     return Err(Error::InvalidInsertShape {
@@ -112,6 +116,10 @@ impl Insert {
                 assignments
                     .into_iter()
                     .map(|assignment| match assignment.value {
+                        // VALUES resolves all-NULL columns before target coercion.
+                        AssignmentValue::Expr(ValueExpr::Null) => {
+                            Ok(ValueExpr::Null.cast(assignment.field.pg))
+                        }
                         AssignmentValue::Expr(expr) => Ok(expr),
                         AssignmentValue::Default => Err(Error::InvalidInsertShape {
                             message: "batch insert rows cannot use DEFAULT assignments",
@@ -126,7 +134,7 @@ impl Insert {
                 message: "batch insert requires at least one row",
             });
         };
-        Ok(self.from_select_all(crate::values_source(values, alias, columns)))
+        Ok(self.from_select_all(crate::values_source(values, "incoming", columns)))
     }
 
     /// Uses a select statement as the insert source.
@@ -230,7 +238,7 @@ impl Insert {
     #[inline]
     pub fn returning_all(mut self) -> Self {
         self.returning.clear();
-        push_all_source_fields(&self.target, &mut self.returning);
+        push_returning_fields(&self.target, &mut self.returning);
         self
     }
 
@@ -243,19 +251,6 @@ impl Insert {
         };
         assignments
     }
-}
-
-fn normalized_batch_assignments(assignments: Vec<Assignment>) -> Result<Vec<Assignment>> {
-    let mut normalized = Vec::new();
-    for assignment in assignments {
-        push_assignment(&mut normalized, assignment);
-    }
-    if normalized.is_empty() {
-        return Err(Error::InvalidInsertShape {
-            message: "batch insert rows must contain at least one assignment",
-        });
-    }
-    Ok(normalized)
 }
 
 fn same_batch_fields(columns: &[Meta], assignments: &[Assignment]) -> bool {

@@ -352,6 +352,8 @@ pub enum BoolExpr {
         right: ValueExpr,
         /// Whether to wrap with `NOT`.
         negated: bool,
+        /// Whether a named DSL helper requires metadata/type checks.
+        checked: bool,
     },
     /// `value = ANY(array)` / negated form.
     #[non_exhaustive]
@@ -647,6 +649,7 @@ impl BoolExpr {
             op,
             right,
             negated,
+            checked: true,
         }
     }
 

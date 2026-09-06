@@ -146,7 +146,7 @@ fn insertable_batch_insert_builds_values_source_from_dtos() {
     ];
 
     let built = insert(users::table())
-        .values_many(&users, "incoming")
+        .values_many(&users)
         .unwrap()
         .returning(users::ID)
         .build()
@@ -163,10 +163,7 @@ fn insertable_batch_insert_builds_values_source_from_dtos() {
 fn insertable_batch_insert_rejects_empty_batches() {
     let users = Vec::<NewUser>::new();
 
-    let err = insert(users::table())
-        .values_many(users, "incoming")
-        .err()
-        .unwrap();
+    let err = insert(users::table()).values_many(users).err().unwrap();
 
     assert!(matches!(
         err,
@@ -194,10 +191,7 @@ fn insertable_batch_insert_rejects_different_row_shapes() {
         },
     ];
 
-    let err = insert(users::table())
-        .values_many(&users, "incoming")
-        .err()
-        .unwrap();
+    let err = insert(users::table()).values_many(&users).err().unwrap();
 
     assert!(matches!(
         err,
@@ -210,10 +204,7 @@ fn insertable_batch_insert_rejects_different_row_shapes() {
 fn insertable_batch_insert_rejects_empty_row_assignments() {
     let users = [OptionalInsert { nickname: None }];
 
-    let err = insert(users::table())
-        .values_many(&users, "incoming")
-        .err()
-        .unwrap();
+    let err = insert(users::table()).values_many(&users).err().unwrap();
 
     assert!(matches!(
         err,
@@ -234,7 +225,7 @@ fn insertable_batch_insert_rejects_existing_insert_values() {
 
     let err = insert(users::table())
         .set(users::ID.set(1))
-        .values_many(&users, "incoming")
+        .values_many(&users)
         .err()
         .unwrap();
 

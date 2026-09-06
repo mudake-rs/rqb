@@ -294,8 +294,8 @@ fn map_introspected_column_type(
         };
     }
 
-    if let Some(element_udt) = ty.udt_name.strip_prefix('_') {
-        let enum_key = (ty.schema.to_owned(), element_udt.to_owned());
+    if let (Some(schema), Some(udt)) = (ty.element_schema, ty.element_udt_name) {
+        let enum_key = (schema.to_owned(), udt.to_owned());
         if enum_keys.contains(&enum_key) {
             used_enums.insert(enum_key.clone());
             return ColumnType::PgEnum {
@@ -339,6 +339,7 @@ fn custom_column_type(pg_type: &str, mapping: &TypeMapping, array: bool) -> Colu
 fn generated_kind(generated: &str, identity_generation: &str) -> GeneratedKind {
     match (generated, identity_generation) {
         ("s", _) => GeneratedKind::Stored,
+        ("v", _) => GeneratedKind::Virtual,
         (_, "a") => GeneratedKind::IdentityAlways,
         (_, "d") => GeneratedKind::IdentityByDefault,
         _ => GeneratedKind::None,
@@ -474,9 +475,45 @@ mod tests {
     #[test]
     fn generated_kind_maps_pg_catalog_markers() {
         assert_eq!(generated_kind("s", ""), GeneratedKind::Stored);
+        assert_eq!(generated_kind("v", ""), GeneratedKind::Virtual);
         assert_eq!(generated_kind("", "a"), GeneratedKind::IdentityAlways);
         assert_eq!(generated_kind("", "d"), GeneratedKind::IdentityByDefault);
         assert_eq!(generated_kind("", ""), GeneratedKind::None);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+    async fn catalog_identity_survives_array_name_collisions_and_virtual_columns() {
+        let pool = sqlx::PgPool::connect(&std::env::var("RQB_TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            "DROP SCHEMA IF EXISTS rqb_catalog_audit CASCADE;
+            CREATE SCHEMA rqb_catalog_audit;
+            CREATE TYPE rqb_catalog_audit._state AS ENUM ('reserved');
+            CREATE TYPE rqb_catalog_audit.state AS ENUM ('open', 'closed');
+            CREATE TABLE rqb_catalog_audit.events (
+                id int, id_meta int, states rqb_catalog_audit.state[],
+                computed int GENERATED ALWAYS AS (id + 1) VIRTUAL);",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let result = super::introspect(&pool, "rqb_catalog_audit", &[], &BTreeMap::new()).await;
+        sqlx::raw_sql("DROP SCHEMA rqb_catalog_audit CASCADE")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let model = result.unwrap().schema;
+        let columns = &model.relations[0].columns;
+        assert!(
+            matches!(&columns[2].ty, ColumnType::PgEnum { name, array: true, .. } if name == "state")
+        );
+        assert_eq!(columns[3].generated, GeneratedKind::Virtual);
+        let code = crate::codegen::render(&model).unwrap();
+        assert!(code.contains("Generated: virtual"));
+        assert!(code.contains("id_meta:"));
+        assert!(code.contains("Vec<State>"));
     }
 
     #[test]

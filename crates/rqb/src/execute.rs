@@ -305,6 +305,7 @@ macro_rules! impl_statement_execute {
             }
 
             /// Builds the statement and fetches all raw rows.
+            /// Write statements need an explicit `returning` or `returning_all` clause.
             pub async fn fetch_all<'e>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<PgRow>> {
                 self.build()?.fetch_all(executor).await
             }

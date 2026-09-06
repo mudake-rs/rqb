@@ -8,6 +8,7 @@ use heck::ToSnakeCase;
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Literal, Span};
 use quote::{quote, quote_spanned};
+use std::collections::HashSet;
 use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
@@ -51,6 +52,8 @@ use syn::{
 ///
 /// Generated metadata intentionally uses database column names as public API
 /// names. HTTP/JSON casing belongs in application DTOs, not generated schema.
+/// Rename columns that collide with generated helpers, for example
+/// `fields as FIELDS_1: int4 = i32`. The CLI does this automatically.
 ///
 /// ```rust,ignore
 /// rqb::schema! {
@@ -89,7 +92,7 @@ pub fn schema(input: TokenStream) -> TokenStream {
 /// `insert(table).values(&dto).set(server_field.set(value))` to let
 /// server-owned values override DTO fields.
 ///
-/// For DTO batches, use `insert(table).values_many(&rows, "incoming")`.
+/// For DTO batches, use `insert(table).values_many(&rows)`.
 /// Each row must produce the same fields in the same order.
 ///
 /// Field attributes:
@@ -97,7 +100,8 @@ pub fn schema(input: TokenStream) -> TokenStream {
 ///   generated schema field.
 /// - `#[rqb(skip)]` omits a local-only field.
 /// - `#[rqb(skip_none)]` omits `None` for `Option<T>` fields. Without this
-///   attribute, an `Option<T>` field is still inserted as a value.
+///   attribute, `Some(T)` writes the typed value and `None` writes SQL NULL.
+///   Generated nullable columns still use `Field<T>`, not `Field<Option<T>>`.
 ///
 /// ```rust,ignore
 /// #[derive(rqb::Insertable)]
@@ -127,6 +131,9 @@ pub fn derive_insertable(input: TokenStream) -> TokenStream {
 /// `Option<T>` fields naturally model PATCH semantics: `Some(value)` sets the
 /// column and `None` leaves it unchanged. Non-optional fields always produce an
 /// assignment.
+/// `Option<Option<T>>` adds explicit NULL: outer `None` omits, `Some(None)`
+/// clears, and `Some(Some(T))` sets. For HTTP JSON, use a present-field
+/// deserializer: serde's default nested Option handling collapses missing and null.
 ///
 /// Builder assignments use replacement semantics, so call `patch(&dto)` before
 /// `set(...)` when authenticated/server-owned values must override request
@@ -343,10 +350,21 @@ impl RelationInput {
             },
         };
 
+        let mut names = self
+            .columns
+            .iter()
+            .filter(|column| column.rust_ty.is_some())
+            .map(|column| column.const_ident.to_string())
+            .collect::<HashSet<_>>();
+        let mut methods = HashSet::new();
         let columns = self
             .columns
             .into_iter()
-            .map(ColumnInput::expand)
+            .map(|column| {
+                let ident = &column.const_ident;
+                let meta = unique_ident(format!("{ident}_META"), ident.span(), &mut names);
+                column.expand(meta, &mut methods)
+            })
             .collect::<Vec<_>>();
         let metas = columns.iter().map(|column| &column.meta);
         let fields = columns.iter().filter_map(|column| column.field.as_ref());
@@ -434,12 +452,30 @@ impl Parse for ColumnInput {
 
         input.parse::<Token![:]>()?;
         let pg = parse_pg_name(input)?;
+        if pg.ends_with("[]") && !matches!(attrs.json, None | Some(SchemaJson::None)) {
+            return Err(Error::new_spanned(
+                &const_ident,
+                "array fields do not support JSON search exposure; use json = none",
+            ));
+        }
         let rust_ty = if input.peek(Token![=]) {
             input.parse::<Token![=]>()?;
             Some(input.parse()?)
         } else {
             None
         };
+
+        if rust_ty.is_some()
+            && matches!(
+                const_ident.to_string().as_str(),
+                "FIELDS" | "table" | "view" | "alias"
+            )
+        {
+            return Err(Error::new_spanned(
+                &const_ident,
+                "field constant conflicts with a generated relation helper; choose another name with `as FIELD_NAME`",
+            ));
+        }
 
         Ok(Self {
             attrs,
@@ -452,20 +488,12 @@ impl Parse for ColumnInput {
 }
 
 impl ColumnInput {
-    fn expand(self) -> ExpandedColumn {
-        let meta_ident = Ident::new(
-            &format!("{}_META", self.const_ident),
-            self.const_ident.span(),
-        );
+    fn expand(self, meta_ident: Ident, methods: &mut HashSet<String>) -> ExpandedColumn {
         let db = self.db;
         let pg = self.pg;
         let ops = ops_tokens(&pg, self.rust_ty.is_some(), self.attrs.ops);
         let json = json_kind_tokens(&pg, self.rust_ty.is_some(), self.attrs.json);
         let const_ident = self.const_ident;
-        let method_ident = Ident::new(
-            &sanitize_alias_method_ident(&const_ident.to_string().to_snake_case()),
-            const_ident.span(),
-        );
         let meta_doc = Literal::string(&format!("Metadata for `{db}` (`{pg}`)."));
         let field_doc = Literal::string(&format!("Typed field for `{db}` (`{pg}`)."));
         let alias_method_doc = Literal::string(&format!("Returns `{db}` bound to this alias."));
@@ -481,6 +509,11 @@ impl ColumnInput {
 
         let (field, alias_method) = match self.rust_ty {
             Some(rust_ty) => {
+                let method_ident = unique_ident(
+                    sanitize_alias_method_ident(&const_ident.to_string().to_snake_case()),
+                    const_ident.span(),
+                    methods,
+                );
                 let field = quote! {
                     #[doc = #field_doc]
                     pub const #const_ident: ::rqb::Field<#rust_ty> = ::rqb::Field::new(&#meta_ident);
@@ -614,7 +647,7 @@ fn ops_tokens(pg: &str, typed: bool, override_ops: Option<SchemaOps>) -> proc_ma
     if let Some(ops) = override_ops {
         return schema_ops_tokens(ops);
     }
-    if !typed {
+    if !typed || pg == "json" {
         return quote! { ::rqb::OpSet::none() };
     }
     if is_text_pattern_pg(pg) {
@@ -637,8 +670,6 @@ fn schema_ops_tokens(ops: SchemaOps) -> proc_macro2::TokenStream {
 }
 
 fn is_text_pattern_pg(pg: &str) -> bool {
-    // `inet` and `cidr` deserialize from JSON strings, but pattern matching on
-    // network types is not a normal search capability.
     matches!(pg, "text" | "varchar" | "bpchar" | "citext")
 }
 
@@ -646,7 +677,6 @@ fn is_equality_only_pg(pg: &str) -> bool {
     matches!(
         pg,
         "bool"
-            | "json"
             | "jsonb"
             | "bytea"
             | "int4range"
@@ -673,7 +703,7 @@ fn json_kind_tokens(
         return None;
     }
     let kind = match pg {
-        "text" | "varchar" | "bpchar" | "citext" | "inet" | "cidr" => {
+        "text" | "varchar" | "bpchar" | "citext" => {
             quote! { ::rqb::JsonKind::Text }
         }
         "bool" => quote! { ::rqb::JsonKind::Bool },
@@ -683,10 +713,10 @@ fn json_kind_tokens(
         "numeric" => quote! { ::rqb::JsonKind::NumericString },
         "uuid" => quote! { ::rqb::JsonKind::Uuid },
         "date" => quote! { ::rqb::JsonKind::Date },
-        "time" | "timetz" => quote! { ::rqb::JsonKind::Time },
+        "time" => quote! { ::rqb::JsonKind::Time },
         "timestamp" => quote! { ::rqb::JsonKind::Timestamp },
         "timestamptz" => quote! { ::rqb::JsonKind::Timestamptz },
-        "json" | "jsonb" => quote! { ::rqb::JsonKind::Jsonb },
+        "jsonb" => quote! { ::rqb::JsonKind::Jsonb },
         _ => return None,
     };
     Some(kind)
@@ -794,11 +824,26 @@ fn expand_field(
                 }
             })
         }
+        WriteKind::Insertable if is_option(&field.ty) => Ok(quote_spanned! {field.span()=>
+            __rqb_assignments.push(match self.#ident.as_ref() {
+                ::std::option::Option::Some(__rqb_value) => #field_path.set_ref(__rqb_value),
+                ::std::option::Option::None => #field_path.set_null(),
+            });
+        }),
         WriteKind::Insertable => Ok(quote_spanned! {field.span()=>
             __rqb_assignments.push(#field_path.set_ref(#value));
         }),
         WriteKind::Changeset => {
-            if is_option(&field.ty) {
+            if option_inner(&field.ty).is_some_and(is_option) {
+                Ok(quote_spanned! {field.span()=>
+                    if let ::std::option::Option::Some(__rqb_value) = self.#ident.as_ref() {
+                        __rqb_assignments.push(match __rqb_value.as_ref() {
+                            ::std::option::Option::Some(__rqb_value) => #field_path.set_ref(__rqb_value),
+                            ::std::option::Option::None => #field_path.set_null(),
+                        });
+                    }
+                })
+            } else if is_option(&field.ty) {
                 Ok(quote_spanned! {field.span()=>
                     if let ::std::option::Option::Some(__rqb_value) = self.#ident.as_ref() {
                         __rqb_assignments.push(#field_path.set_ref(__rqb_value));
@@ -944,25 +989,23 @@ fn ensure_option_field(field: &Field) -> syn::Result<()> {
 }
 
 fn is_option(ty: &Type) -> bool {
-    let Type::Path(path) = ty else {
-        return false;
-    };
-    path.path
-        .segments
-        .last()
-        .is_some_and(|segment| segment.ident == "Option" && has_one_angle_arg(&segment.arguments))
+    option_inner(ty).is_some()
 }
 
-fn has_one_angle_arg(args: &PathArguments) -> bool {
-    match args {
-        PathArguments::AngleBracketed(args) => {
-            args.args
-                .iter()
-                .filter(|arg| matches!(arg, GenericArgument::Type(_)))
-                .count()
-                == 1
-        }
-        PathArguments::None | PathArguments::Parenthesized(_) => false,
+fn option_inner(ty: &Type) -> Option<&Type> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    if segment.ident != "Option" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    match args.args.first()? {
+        GenericArgument::Type(ty) if args.args.len() == 1 => Some(ty),
+        _ => None,
     }
 }
 
@@ -991,6 +1034,16 @@ fn sanitize_ident(value: &str) -> String {
         out.push('_');
     }
     out
+}
+
+fn unique_ident(base: String, span: Span, used: &mut HashSet<String>) -> Ident {
+    let mut name = base.clone();
+    let mut suffix = 2;
+    while !used.insert(name.clone()) {
+        name = format!("{}_{suffix}", base.trim_end_matches('_'));
+        suffix += 1;
+    }
+    Ident::new(&name, span)
 }
 
 fn sanitize_alias_method_ident(value: &str) -> String {
@@ -1112,5 +1165,32 @@ mod tests {
         let expanded = schema.expand().to_string();
 
         assert!(expanded.contains("contract_tokens"));
+    }
+
+    #[test]
+    fn schema_reports_field_constant_conflicts_with_helpers() {
+        let err = syn::parse_str::<SchemaInput>("table public.t { fields: int4 = i32 }")
+            .err()
+            .unwrap();
+        assert!(
+            err.to_string()
+                .contains("choose another name with `as FIELD_NAME`")
+        );
+        assert!(
+            syn::parse_str::<SchemaInput>("table public.t { fields as FIELDS_1: int4 = i32 }")
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn schema_rejects_unsupported_array_json_override() {
+        let err = syn::parse_str::<SchemaInput>(
+            r#"table public.t {
+            #[rqb(json = text)] tags: "text[]" = Vec<String>,
+        }"#,
+        )
+        .err()
+        .unwrap();
+        assert!(err.to_string().contains("array fields do not support JSON"));
     }
 }

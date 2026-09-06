@@ -3,7 +3,7 @@ use rqb_sample_schema::app_users as users;
 use uuid::Uuid;
 
 use crate::services::orders;
-use crate::types::{CreateUser, PatchUser, UserRow};
+use crate::types::{CreateUser, UserRow};
 
 const DEFAULT_SEARCH_LIMIT: u32 = 100;
 const MAX_SEARCH_LIMIT: u32 = 100;
@@ -32,10 +32,10 @@ pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Vec<User
     let query = if has_client_sort {
         query
     } else {
-        query.order_asc(users::EMAIL).order_asc(users::ID)
+        query.order_asc(users::EMAIL)
     };
 
-    query.fetch_all_as::<UserRow>(db).await
+    query.order_asc(users::ID).fetch_all_as::<UserRow>(db).await
 }
 
 pub async fn create(db: &PgPool, input: CreateUser) -> rqb::Result<UserRow> {
@@ -50,12 +50,14 @@ pub async fn create(db: &PgPool, input: CreateUser) -> rqb::Result<UserRow> {
         .await
 }
 
-pub async fn patch(db: &PgPool, id: Uuid, input: PatchUser) -> rqb::Result<UserRow> {
-    // `Changeset` is the REST PATCH bridge: only `Some(...)` fields become
-    // assignments, so omitted JSON fields do not accidentally overwrite data.
+pub async fn patch(
+    db: &PgPool,
+    id: Uuid,
+    assignments: Vec<rqb::Assignment>,
+) -> rqb::Result<UserRow> {
     update(users::table())
         .filter(users::ID.eq(id))
-        .patch(&input)
+        .set_many(assignments)
         .returning_all()
         .fetch_one_as::<UserRow>(db)
         .await

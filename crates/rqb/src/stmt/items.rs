@@ -8,17 +8,11 @@ pub struct ColumnList {
     pub(crate) items: Vec<SelectItem>,
 }
 
-impl ColumnList {
-    pub(crate) fn one(item: SelectItem) -> Self {
-        Self { items: vec![item] }
-    }
-}
-
 /// Converts one field, field reference, or metadata value into one column projection.
 #[doc(hidden)]
 pub trait IntoColumn {
-    /// Converts this value into one column projection.
-    fn into_column(self) -> ColumnList;
+    /// Appends this field to a column list without a temporary allocation.
+    fn push_column(self, columns: &mut ColumnList);
 }
 
 /// Converts fields, metadata, and tuples of either into column projections.
@@ -32,38 +26,38 @@ pub trait IntoColumns {
 }
 
 impl<T> IntoColumn for Field<T> {
-    fn into_column(self) -> ColumnList {
-        ColumnList::one(select_item_for_field(self))
+    fn push_column(self, columns: &mut ColumnList) {
+        columns.items.push(select_item_for_field(self));
     }
 }
 
 impl<T> IntoColumn for &Field<T> {
-    fn into_column(self) -> ColumnList {
-        ColumnList::one(select_item_for_field(*self))
+    fn push_column(self, columns: &mut ColumnList) {
+        columns.items.push(select_item_for_field(*self));
     }
 }
 
 impl<T> IntoColumn for FieldRef<T> {
-    fn into_column(self) -> ColumnList {
-        ColumnList::one(select_item_for_ref(self))
+    fn push_column(self, columns: &mut ColumnList) {
+        columns.items.push(select_item_for_ref(self));
     }
 }
 
 impl<T> IntoColumn for &FieldRef<T> {
-    fn into_column(self) -> ColumnList {
-        ColumnList::one(select_item_for_ref(self.clone()))
+    fn push_column(self, columns: &mut ColumnList) {
+        columns.items.push(select_item_for_ref(self.clone()));
     }
 }
 
 impl IntoColumn for Meta {
-    fn into_column(self) -> ColumnList {
-        ColumnList::one(select_item_for_meta(self))
+    fn push_column(self, columns: &mut ColumnList) {
+        columns.items.push(select_item_for_meta(self));
     }
 }
 
 impl IntoColumn for &Meta {
-    fn into_column(self) -> ColumnList {
-        ColumnList::one(select_item_for_meta(*self))
+    fn push_column(self, columns: &mut ColumnList) {
+        columns.items.push(select_item_for_meta(*self));
     }
 }
 
@@ -72,7 +66,9 @@ where
     T: IntoColumn,
 {
     fn into_columns(self) -> ColumnList {
-        self.into_column()
+        let mut columns = ColumnList { items: Vec::new() };
+        self.push_column(&mut columns);
+        columns
     }
 }
 
@@ -157,9 +153,9 @@ macro_rules! impl_select_item_tuple {
             #[allow(non_snake_case)]
             fn into_columns(self) -> ColumnList {
                 let ($($name,)+) = self;
-                let mut items = Vec::new();
-                $(items.extend($name.into_column().items);)+
-                ColumnList { items }
+                let mut columns = ColumnList { items: Vec::new() };
+                $($name.push_column(&mut columns);)+
+                columns
             }
         }
     };

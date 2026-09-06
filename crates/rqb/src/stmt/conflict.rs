@@ -114,7 +114,7 @@ fn column_target(fields: Vec<Meta>, predicate: Option<Box<BoolExpr>>) -> Conflic
 
 fn update_action(assignments: impl IntoAssignments, filter: Option<BoolExpr>) -> ConflictAction {
     ConflictAction::DoUpdate {
-        assignments: assignments.into_assignments(),
+        assignments: normalized_assignments(assignments),
         filter: filter.map(Box::new),
     }
 }

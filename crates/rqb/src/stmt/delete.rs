@@ -47,7 +47,7 @@ impl Delete {
     #[inline]
     pub fn returning_all(mut self) -> Self {
         self.returning.clear();
-        push_all_source_fields(&self.target, &mut self.returning);
+        push_returning_fields(&self.target, &mut self.returning);
         self
     }
 }

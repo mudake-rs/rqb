@@ -31,7 +31,7 @@ impl Select {
     ///
     /// Inference succeeds for default projection or plain field projections.
     /// Use `into_source(alias, fields)` when projecting computed expressions or
-    /// renaming exposed columns.
+    /// renaming exposed columns. Inferred database and API names must be unique.
     pub fn infer_source(self, alias: impl Into<String>) -> crate::Result<Source> {
         let fields = self.inferred_source_fields()?;
         Ok(subquery(self, alias, fields))
@@ -61,7 +61,11 @@ impl Select {
     /// stable aliases such as `u_email`, which makes `sqlx::FromRow` mapping
     /// deterministic for joins.
     pub fn column(mut self, field: impl IntoColumn) -> Self {
-        self.projection.extend(field.into_column().items);
+        let mut columns = ColumnList {
+            items: self.projection,
+        };
+        field.push_column(&mut columns);
+        self.projection = columns.items;
         self
     }
 
@@ -77,7 +81,11 @@ impl Select {
     /// computed projection items. It only expands the root source fields; joined
     /// fields still need explicit projection.
     pub fn default_columns(mut self) -> Self {
-        push_default_source_fields(&self.source, &mut self.projection);
+        let qualifier = self.source.explicit_alias();
+        self.source.for_each_field(|meta| {
+            self.projection
+                .push(select_item_for_source_meta(*meta, qualifier));
+        });
         self
     }
 
@@ -370,25 +378,37 @@ impl Select {
     }
 
     pub(crate) fn inferred_source_fields(&self) -> crate::Result<Vec<Meta>> {
-        if self.projection.is_empty() {
-            let mut fields = Vec::new();
-            self.source.for_each_field(|field| fields.push(*field));
-            return Ok(fields);
-        }
-
         let mut fields = Vec::with_capacity(self.projection.len());
+        if self.projection.is_empty() {
+            self.source.for_each_field(|field| fields.push(*field));
+        }
         for item in &self.projection {
-            let Some(meta) = item.expr.field_meta() else {
+            let ValueExpr::Field { meta, qualifier } = &item.expr else {
                 return Err(crate::Error::InvalidSelectShape {
                     message: "infer_source cannot infer fields from computed projection; use into_source",
                 });
             };
-            if item.alias.as_deref().is_some_and(|alias| alias != meta.db) {
+            let generated_alias = field_ref_alias(meta, qualifier.as_deref());
+            if item
+                .alias
+                .as_deref()
+                .is_some_and(|alias| alias != meta.db && Some(alias) != generated_alias.as_deref())
+            {
                 return Err(crate::Error::InvalidSelectShape {
                     message: "infer_source cannot infer fields from aliased projection; use into_source",
                 });
             }
             fields.push(*meta);
+        }
+        for (index, field) in fields.iter().enumerate() {
+            if fields[..index]
+                .iter()
+                .any(|other| other.db == field.db || other.api == field.api)
+            {
+                return Err(crate::Error::InvalidSelectShape {
+                    message: "inferred fields must have unique database and API names; use into_source or into_cte with distinct metadata",
+                });
+            }
         }
         Ok(fields)
     }

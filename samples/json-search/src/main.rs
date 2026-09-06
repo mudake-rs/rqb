@@ -199,11 +199,14 @@ fn search_api_error(error: rqb::Error) -> SearchApiError {
             field: None,
             detail: format!("{logical} group must contain at least one filter"),
         },
-        other => SearchApiError {
-            status: 500,
-            code: "query_shape_error",
-            field: None,
-            detail: other.to_string(),
-        },
+        other => {
+            eprintln!("search failed: {other:?}");
+            SearchApiError {
+                status: 500,
+                code: "query_shape_error",
+                field: None,
+                detail: "internal server error".to_owned(),
+            }
+        }
     }
 }

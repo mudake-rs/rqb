@@ -3,9 +3,6 @@ use crate::model::{ColumnType, KnownType};
 pub(crate) fn map_column_type(udt_name: &str) -> ColumnType {
     if let Some(elem) = udt_name.strip_prefix('_') {
         return match map_known_udt(elem) {
-            Some(KnownType::Array(_)) => ColumnType::RawOnly {
-                pg: udt_name.to_owned(),
-            },
             Some(known) => ColumnType::Known(KnownType::Array(Box::new(known))),
             None => ColumnType::RawOnly {
                 pg: udt_name.to_owned(),
@@ -41,8 +38,6 @@ fn map_known_udt(udt_name: &str) -> Option<KnownType> {
         "json" => KnownType::Json,
         "jsonb" => KnownType::Jsonb,
         "bytea" => KnownType::Bytes,
-        "inet" => KnownType::Inet,
-        "cidr" => KnownType::Cidr,
         "int4range" => KnownType::Range(Box::new(KnownType::Int4)),
         "int8range" => KnownType::Range(Box::new(KnownType::Int8)),
         "numrange" => KnownType::Range(Box::new(KnownType::Numeric)),
@@ -85,7 +80,14 @@ mod tests {
             map_column_type("timetz"),
             ColumnType::Known(KnownType::Timetz)
         );
-        assert_eq!(map_column_type("inet"), ColumnType::Known(KnownType::Inet));
+        assert!(matches!(
+            map_column_type("inet"),
+            ColumnType::RawOnly { .. }
+        ));
+        assert!(matches!(
+            map_column_type("cidr"),
+            ColumnType::RawOnly { .. }
+        ));
         assert_eq!(
             map_column_type("tstzrange"),
             ColumnType::Known(KnownType::Range(Box::new(KnownType::Timestamptz)))
@@ -98,7 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_arrays_fall_back_to_raw_only_pg_type() {
+    fn unknown_element_types_fall_back_to_raw_only() {
         assert_eq!(
             map_column_type("__int4"),
             ColumnType::RawOnly {
@@ -121,7 +123,9 @@ mod tests {
         );
         assert_eq!(
             map_column_type("_inet"),
-            ColumnType::Known(KnownType::Array(Box::new(KnownType::Inet)))
+            ColumnType::RawOnly {
+                pg: "_inet".to_owned()
+            }
         );
     }
 

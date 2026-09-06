@@ -42,6 +42,7 @@ verify: check doc
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/writes-and-types/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/transactions/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/executor-wrapper/Cargo.toml
+	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/crud-repository/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/error-handling/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/raw-query/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/joins-and-aggregates/Cargo.toml
@@ -50,7 +51,7 @@ verify: check doc
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/custom-types/Cargo.toml
 	RUSTFLAGS="-D warnings" cargo run --manifest-path samples/rest-api/Cargo.toml
 
-verify-full: verify test-integration
+verify-full: verify test-integration test-sample-integration
 
 generate-schema: docker-infra-up
 	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema public --out "$(GENERATED_SCHEMA)"
@@ -58,11 +59,11 @@ generate-schema: docker-infra-up
 generate-sample-schema: generate-sample-schemas
 
 generate-sample-schemas: docker-infra-up
-	docker compose -f test/docker-compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 -U rqb -d rqb < samples/schema.sql
+	$(DOCKER_DEV_COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U rqb -d rqb < samples/schema.sql
 	cargo run -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --out samples/schema/src/lib.rs
 
 smoke-rqb-cli: docker-infra-up
-	docker compose -f test/docker-compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 -U rqb -d rqb < samples/schema.sql
+	$(DOCKER_DEV_COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U rqb -d rqb < samples/schema.sql
 	cargo run -q -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --out /tmp/_rqb_cli_smoke.rs
 	cargo run -q -p rqb-cli -- generate --database-url "$(DATABASE_URL)" --schema sample --stdout > /tmp/_rqb_cli_smoke_stdout.rs
 	diff /tmp/_rqb_cli_smoke.rs /tmp/_rqb_cli_smoke_stdout.rs

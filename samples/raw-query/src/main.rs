@@ -6,13 +6,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Raw SQL uses `?` as a bind placeholder outside quoted strings,
     // dollar-quoted bodies, quoted identifiers, and comments. Escape SQL
     // operator question marks as `??` when the SQL text itself needs one.
-    let raw_stmt = raw("SELECT ?? AS marker, ?::uuid AS id")
+    let raw_stmt = raw("SELECT '{\"key\":1}'::jsonb ?? 'key' AS has_key, ?::uuid AS id")
         .bind(Uuid::nil())
         .build()?;
 
-    assert_eq!(raw_stmt.sql, "SELECT ? AS marker, $1::uuid AS id");
+    assert_eq!(
+        raw_stmt.sql,
+        "SELECT '{\"key\":1}'::jsonb ? 'key' AS has_key, $1::uuid AS id"
+    );
     assert_eq!(raw_stmt.params.len(), 1);
     assert!(!raw_stmt.cacheable);
+
+    let marker = raw("SELECT '?' AS marker, ?::uuid AS id")
+        .bind(Uuid::nil())
+        .build()?;
+    assert_eq!(marker.sql, "SELECT '?' AS marker, $1::uuid AS id");
 
     // Slot-level raw helpers take explicit Param::typed(...) binds. A raw
     // source can join typed queries, but rqb still needs the columns it exposes

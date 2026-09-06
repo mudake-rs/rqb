@@ -13,6 +13,16 @@ use super::{
 
 const MAX_SEARCH_PATTERN_CHARS: usize = 1024;
 
+impl Select {
+    /// AND-composes a JSON filter without replacing server-owned sorting or pagination.
+    ///
+    /// The same root-field exposure and operator checks as [`Self::apply_search`] apply.
+    pub fn apply_filter(self, filter: SearchFilter) -> Result<Self> {
+        let predicate = filter.to_expr(&SearchMetaLookup::new(&self.source))?;
+        Ok(self.filter(predicate))
+    }
+}
+
 impl SearchRequest {
     /// Merges this request into an existing select, preserving server filters.
     ///

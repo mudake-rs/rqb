@@ -165,16 +165,13 @@ fn json_filter_then_server_cursor(
 ) -> rqb::Result<Select> {
     // Cursor endpoints should accept a filter-only DTO, so client sort, limit,
     // and offset cannot be silently ignored by this server-owned page shape.
-    let filter_only = SearchRequest {
-        filter: request.filter,
-        sort: Vec::new(),
-        limit: None,
-        offset: None,
+    let query = order_search().filter(order_search_view::USER_ID.eq(user_id));
+    let query = match request.filter {
+        Some(filter) => query.apply_filter(filter)?,
+        None => query,
     };
 
-    Ok(order_search()
-        .filter(order_search_view::USER_ID.eq(user_id))
-        .apply_search(filter_only)?
+    Ok(query
         .filter_option(cursor, |cursor| {
             row((order_search_view::CREATED_AT, order_search_view::ID))
                 .lt((cursor.created_at, cursor.id))

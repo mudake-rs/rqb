@@ -18,7 +18,7 @@ connection.
 - UUIDv7 primary keys can work as id-only cursors when id order is the desired
   order.
 - Full `SearchRequest` fits offset-style endpoints; cursor endpoints should
-  accept a filter-only DTO so sort, limit, and offset stay server-owned.
+  accept a filter-only DTO and call `apply_filter` so sort, limit, and offset stay server-owned.
 
 Run with:
 

@@ -82,9 +82,9 @@ rqb::schema! {
         // Nullable in Postgres metadata. Use Option<T> in row structs.
         billing_window: tstzrange = PgRange<DateTime<Utc>>,
         // Nullable in Postgres metadata. Use Option<T> in row structs.
-        client_ip: inet = String,
+        client_ip: inet,
         // Nullable in Postgres metadata. Use Option<T> in row structs.
-        client_network: cidr = String,
+        client_network: cidr,
         // Nullable in Postgres metadata. Use Option<T> in row structs.
         pdf: bytea = Vec<u8>,
         tags: "text[]" = Vec<String>,

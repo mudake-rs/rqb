@@ -1,9 +1,9 @@
 use super::*;
 
 impl Renderer {
-    pub(super) fn render_ctes(&mut self, ctes: &[Cte]) -> Result<()> {
+    pub(super) fn render_ctes(&mut self, ctes: &[Cte]) {
         if ctes.is_empty() {
-            return Ok(());
+            return;
         }
         self.sql.push_str(if ctes.iter().any(|cte| cte.recursive) {
             "WITH RECURSIVE "
@@ -24,11 +24,10 @@ impl Renderer {
                 self.sql.push_str(materialization.as_sql());
             }
             self.sql.push_str(" (");
-            self.render_stmt(&cte.stmt)?;
+            self.render_stmt(&cte.stmt);
             self.sql.push(')');
         }
         self.sql.push(' ');
-        Ok(())
     }
 
     fn render_paren_column_list<'a>(&mut self, columns: impl IntoIterator<Item = &'a str>) {
@@ -61,7 +60,7 @@ impl Renderer {
         }
     }
 
-    pub(super) fn render_source(&mut self, source: &Source) -> Result<()> {
+    pub(super) fn render_source(&mut self, source: &Source) {
         match source {
             Source::Table { name, alias, .. } | Source::View { name, alias, .. } => {
                 write_quoted_qualified(&mut self.sql, name);
@@ -71,21 +70,32 @@ impl Renderer {
                 write_quoted_ident(&mut self.sql, name);
                 self.render_optional_alias(alias.as_deref());
             }
-            Source::Subquery { stmt, alias, .. } => {
-                self.sql.push('(');
-                self.render_stmt(stmt)?;
-                self.sql.push_str(") AS ");
-                write_quoted_ident(&mut self.sql, alias);
-                self.render_source_column_list(source);
-            }
-            Source::Raw {
-                sql, alias, params, ..
+            Source::Subquery {
+                stmt,
+                alias,
+                fields,
             } => {
                 self.sql.push('(');
-                self.render_raw(sql, params)?;
+                self.render_stmt(stmt);
                 self.sql.push_str(") AS ");
                 write_quoted_ident(&mut self.sql, alias);
-                self.render_source_column_list(source);
+                if !fields.is_empty() {
+                    self.render_paren_column_list(fields.iter().map(|field| field.db));
+                }
+            }
+            Source::Raw {
+                sql,
+                alias,
+                params,
+                fields,
+            } => {
+                self.sql.push('(');
+                self.render_raw(sql, params);
+                self.sql.push_str(") AS ");
+                write_quoted_ident(&mut self.sql, alias);
+                if !fields.is_empty() {
+                    self.render_paren_column_list(fields.iter().map(|field| field.db));
+                }
             }
             Source::Function {
                 name,
@@ -95,7 +105,7 @@ impl Renderer {
                 fields,
                 ..
             } => {
-                self.render_call(name, args)?;
+                self.render_call(name, args);
                 if *ordinality {
                     self.sql.push_str(" WITH ORDINALITY");
                 }
@@ -120,7 +130,7 @@ impl Renderer {
                         if value_idx > 0 {
                             self.sql.push_str(", ");
                         }
-                        self.render_value(value)?;
+                        self.render_value(value);
                     }
                     self.sql.push(')');
                 }
@@ -131,22 +141,20 @@ impl Renderer {
                 }
             }
         }
-        Ok(())
     }
 
-    pub(super) fn render_join(&mut self, join: &crate::source::Join) -> Result<()> {
+    pub(super) fn render_join(&mut self, join: &crate::source::Join) {
         self.sql.push(' ');
         self.sql.push_str(join.kind.as_sql());
         self.sql.push(' ');
         if join.lateral {
             self.sql.push_str("LATERAL ");
         }
-        self.render_source(&join.source)?;
+        self.render_source(&join.source);
         if let Some(on) = &join.on {
             self.sql.push_str(" ON ");
-            self.render_bool(on)?;
+            self.render_bool(on);
         }
-        Ok(())
     }
 
     pub(super) fn render_optional_alias(&mut self, alias: Option<&str>) {
@@ -156,30 +164,14 @@ impl Renderer {
         }
     }
 
-    fn render_source_column_list(&mut self, source: &Source) {
-        match source {
-            Source::Subquery { fields, .. }
-            | Source::Raw { fields, .. }
-            | Source::Values { fields, .. }
-                if !fields.is_empty() =>
-            {
-                self.render_paren_column_list(fields.iter().map(|field| field.db));
-            }
-            _ => {}
-        }
-    }
-
     pub(super) fn render_write_target(&mut self, source: &Source) {
         match source {
             Source::Table { name, alias, .. } | Source::View { name, alias, .. } => {
                 write_quoted_qualified(&mut self.sql, name);
                 self.render_optional_alias(alias.as_deref());
             }
-            Source::Cte { name, alias, .. } => {
-                write_quoted_ident(&mut self.sql, name);
-                self.render_optional_alias(alias.as_deref());
-            }
-            Source::Subquery { .. }
+            Source::Cte { .. }
+            | Source::Subquery { .. }
             | Source::Raw { .. }
             | Source::Function { .. }
             | Source::Values { .. } => {

@@ -55,7 +55,7 @@
 
       <h2 id="install">1. Install</h2>
       <pre><code>[dependencies]
-rqb = "0.1.5"
+rqb = "0.1.6"
 sqlx = { version = "0.9.0", default-features = false, features = [
     "postgres",
     "derive",
@@ -112,7 +112,7 @@ let o = orders::alias("o");
 
 let report = select(&amp;u)
     .join(&amp;o, u.id().eq_field(o.user_id()))
-    .column(u.email())
+    .expr_as(u.email(), "email")
     .expr_as(sum(o.total_cents()), "gross_cents")
     .expr_as(count_all(), "row_count")
     .group_by(u.email())
@@ -153,7 +153,7 @@ let o = orders::alias("o");
 
 let rows = select(&amp;u)
     .left_join(&amp;o, u.id().eq_field(o.user_id()))
-    .column(u.email())
+    .expr_as(u.email(), "email")
     .expr_as(
         coalesce([
             jsonb_agg_object![o.id(), o.status(), o.total_cents()]
@@ -247,7 +247,7 @@ let paid_users = select(&amp;u)
   "filter": {
     "and": [
       { "field": "status", "operator": "equals", "value": "active" },
-      { "field": "email", "operator": "ilike", "value": "%@example.com" }
+      { "field": "email", "operator": "iLike", "value": "%@example.com" }
     ]
   },
   "sort": [{ "field": "email", "dir": "asc" }],
@@ -303,15 +303,12 @@ update(users::table())
     .execute(&amp;pool)
     .await?;</code></pre>
 
-      <p>Batch DTO inserts expose an incoming <code>VALUES</code> source, so conflict updates can copy from the same alias.</p>
+      <p>Batch DTO inserts use an inline <code>VALUES</code> source. Conflict updates read the proposed row through <code>EXCLUDED</code>.</p>
 
       <pre><code>insert(users::table())
-    .values_many(&amp;incoming_users, "incoming")?
+    .values_many(&amp;incoming_users)?
     .on_conflict(users::EMAIL)
-    .do_update_set((
-        users::STATUS.set_from("incoming"),
-        users::DISPLAY_NAME.set_from("incoming"),
-    ))
+    .do_update_excluded((users::STATUS, users::DISPLAY_NAME))
     .returning(users::ID)
     .execute(&amp;pool)
     .await?;</code></pre>
@@ -384,11 +381,11 @@ Cacheable: true</code></pre>
       <h2 id="raw">10. Raw SQL</h2>
       <p>The typed DSL is not meant to mirror every PostgreSQL construct. Raw fragments are server-owned escape hatches at exact AST slots, and bind counts are still validated.</p>
 
-      <pre><code>let raw_stmt = raw("SELECT ?? AS marker, ?::uuid AS id")
+      <pre><code>let raw_stmt = raw("SELECT '?' AS marker, ?::uuid AS id")
     .bind(user_id)
     .build()?;
 
-assert_eq!(raw_stmt.sql, "SELECT ? AS marker, $1::uuid AS id");</code></pre>
+assert_eq!(raw_stmt.sql, "SELECT '?' AS marker, $1::uuid AS id");</code></pre>
 
       <p>Raw expressions and raw sources compose with typed queries. <code>raw("...")</code> uses fluent <code>.bind(value)</code>; slot-level helpers such as <code>raw_expr(...)</code>, <code>raw_predicate(...)</code>, and <code>raw_source(...)</code> take explicit <code>Param::typed(value)</code> binds. Any raw fragment marks the built query as non-cacheable because rqb cannot prove the text is a stable prepared-statement shape.</p>
 

@@ -82,12 +82,22 @@ impl Stmt {
 impl SetQuery {
     /// Validates both sides and trailing clauses of this set query.
     pub fn validate(&self) -> Result<()> {
-        self.left.validate_query_statement(
-            "set query operands must be SELECT, set, or raw statements",
-        )?;
-        self.right.validate_query_statement(
-            "set query operands must be SELECT, set, or raw statements",
-        )?;
+        for operand in [&self.left, &self.right] {
+            operand.validate_query_statement(
+                "set query operands must be SELECT, set, or raw statements",
+            )?;
+            if matches!(operand.as_ref(), Stmt::Select(select) if select.lock.is_some()) {
+                return Err(Error::InvalidSelectShape {
+                    message: "set query operands cannot have row locks",
+                });
+            }
+        }
+        if let Some(count) = self.left.projection_count() {
+            self.right.validate_projection_count(
+                count,
+                "set query operands must return the same column count",
+            )?;
+        }
         for item in &self.order {
             item.validate()?;
         }
@@ -101,6 +111,27 @@ impl SetQuery {
 impl Select {
     /// Validates source, joins, expressions, limits, locks, and CTEs.
     pub fn validate(&self) -> Result<()> {
+        if let Some(lock) = &self.lock {
+            if self.distinct
+                || !self.distinct_on.is_empty()
+                || !self.group_by.is_empty()
+                || self.having.is_some()
+                || self
+                    .projection
+                    .iter()
+                    .any(|item| item.expr.prevents_row_lock())
+                || self.order.iter().any(|item| item.expr.prevents_row_lock())
+            {
+                return Err(Error::InvalidSelectShape {
+                    message: "row locks cannot be combined with DISTINCT, grouping, aggregates or window functions",
+                });
+            }
+            if lock.of.iter().any(|alias| alias.is_empty()) {
+                return Err(Error::InvalidSelectShape {
+                    message: "row lock relation cannot be empty",
+                });
+            }
+        }
         validate_cte_names(&self.ctes)?;
         for cte in &self.ctes {
             cte.validate()?;
@@ -246,7 +277,7 @@ impl RawStmt {
 
 fn validate_table_target(statement: &'static str, target: &Source) -> Result<()> {
     if target.is_table_or_view() {
-        return Ok(());
+        return target.validate();
     }
     Err(Error::invalid_write_target(statement, target.kind()))
 }
@@ -286,7 +317,6 @@ fn validate_nonempty_columns(statement: &'static str, columns: &[Meta]) -> Resul
 
 impl MergeAction {
     fn validate(&self) -> Result<()> {
-        self.validate_when_matrix()?;
         match self {
             Self::DoNothing { condition, .. } | Self::Delete { condition, .. } => {
                 if let Some(condition) = condition {
@@ -324,35 +354,6 @@ impl MergeAction {
             }
         }
     }
-
-    fn validate_when_matrix(&self) -> Result<()> {
-        let invalid_message = match self {
-            Self::DoNothing { .. } => None,
-            Self::Insert {
-                when: MergeWhen::Matched,
-                ..
-            } => Some("merge insert is not valid for WHEN MATCHED"),
-            Self::Insert {
-                when: MergeWhen::NotMatchedBySource,
-                ..
-            } => Some("merge insert is not valid for WHEN NOT MATCHED BY SOURCE"),
-            Self::Insert { .. } => None,
-            Self::Update {
-                when: MergeWhen::NotMatched,
-                ..
-            } => Some("merge update is not valid for WHEN NOT MATCHED"),
-            Self::Delete {
-                when: MergeWhen::NotMatched,
-                ..
-            } => Some("merge delete is not valid for WHEN NOT MATCHED"),
-            Self::Update { .. } | Self::Delete { .. } => None,
-        };
-
-        if let Some(message) = invalid_message {
-            return Err(Error::InvalidMergeShape { message });
-        }
-        Ok(())
-    }
 }
 
 impl Merge {
@@ -370,7 +371,29 @@ impl Merge {
                 message: "merge requires at least one action",
             });
         }
+        let mut exhausted = [false; 3];
         for action in &self.actions {
+            let (when, condition) = match action {
+                MergeAction::DoNothing { when, condition }
+                | MergeAction::Insert {
+                    when, condition, ..
+                }
+                | MergeAction::Update {
+                    when, condition, ..
+                }
+                | MergeAction::Delete { when, condition } => (when, condition),
+            };
+            let index = match when {
+                MergeWhen::Matched => 0,
+                MergeWhen::NotMatched => 1,
+                MergeWhen::NotMatchedBySource => 2,
+            };
+            if exhausted[index] {
+                return Err(Error::InvalidMergeShape {
+                    message: "unreachable WHEN after unconditional branch of the same kind",
+                });
+            }
+            exhausted[index] = condition.is_none();
             action.validate()?;
         }
         validate_returning(&self.returning)
@@ -405,7 +428,11 @@ fn validate_insert_select_columns(columns: &[Meta], source: &Select) -> Result<(
 impl Select {
     pub(crate) fn projection_count(&self) -> Option<usize> {
         if !self.projection.is_empty() {
-            return Some(self.projection.len());
+            return (!self
+                .projection
+                .iter()
+                .any(|item| matches!(item.expr, ValueExpr::Raw { .. })))
+            .then_some(self.projection.len());
         }
         let mut count = 0usize;
         self.source.for_each_field(|_| count += 1);
@@ -414,6 +441,20 @@ impl Select {
 }
 
 impl Stmt {
+    pub(crate) fn validate_projection_count(
+        &self,
+        expected: usize,
+        message: &'static str,
+    ) -> Result<()> {
+        if self
+            .projection_count()
+            .is_some_and(|count| count != expected)
+        {
+            return Err(Error::InvalidSelectShape { message });
+        }
+        Ok(())
+    }
+
     pub(crate) fn projection_count(&self) -> Option<usize> {
         match self {
             Self::Select(select) => select.projection_count(),
@@ -427,7 +468,11 @@ impl Stmt {
                 (!delete.returning.is_empty()).then_some(delete.returning.len())
             }
             Self::Merge(merge) => (!merge.returning.is_empty()).then_some(merge.returning.len()),
-            Self::Set(_) | Self::Raw(_) => None,
+            Self::Set(set) => set
+                .left
+                .projection_count()
+                .or_else(|| set.right.projection_count()),
+            Self::Raw(_) => None,
         }
     }
 }

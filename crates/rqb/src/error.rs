@@ -25,11 +25,11 @@ pub struct DbErrorInfo {
 /// Position metadata reported by Postgres for a database error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DbErrorPosition {
-    /// Byte position in the original submitted SQL.
+    /// One-based character position in the original submitted SQL.
     Original(usize),
-    /// Byte position in an internally generated query.
+    /// One-based character position in an internally generated query.
     Internal {
-        /// Byte position in `query`.
+        /// One-based character position in `query`.
         position: usize,
         /// Internal query text reported by Postgres.
         query: String,
@@ -77,20 +77,8 @@ impl From<PgErrorPosition<'_>> for DbErrorPosition {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ConstraintError {
-    /// Constraint name when Postgres reported it.
-    pub constraint: Option<String>,
     /// Postgres detail string.
     pub detail: Option<String>,
-    /// Additional structured database error metadata.
-    pub info: DbErrorInfo,
-}
-
-/// Payload for Postgres column-class errors.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct ColumnError {
-    /// Column name when Postgres reported it.
-    pub column: Option<String>,
     /// Additional structured database error metadata.
     pub info: DbErrorInfo,
 }
@@ -121,12 +109,6 @@ pub struct DatabaseFailure {
     pub detail: Option<String>,
     /// Database hint string.
     pub hint: Option<String>,
-    /// Constraint name when available.
-    pub constraint: Option<String>,
-    /// Table name when available.
-    pub table: Option<String>,
-    /// Column name when available.
-    pub column: Option<String>,
     /// Additional structured database error metadata.
     pub info: DbErrorInfo,
 }
@@ -173,19 +155,8 @@ pub struct CteShapeError {
 
 impl ConstraintError {
     /// Creates a constraint error payload for tests or adapters.
-    pub fn new(constraint: Option<String>, detail: Option<String>, info: DbErrorInfo) -> Self {
-        Self {
-            constraint,
-            detail,
-            info,
-        }
-    }
-}
-
-impl ColumnError {
-    /// Creates a column error payload for tests or adapters.
-    pub fn new(column: Option<String>, info: DbErrorInfo) -> Self {
-        Self { column, info }
+    pub fn new(detail: Option<String>, info: DbErrorInfo) -> Self {
+        Self { detail, info }
     }
 }
 
@@ -214,9 +185,6 @@ impl DatabaseFailure {
             message: message.into(),
             detail: None,
             hint: None,
-            constraint: None,
-            table: None,
-            column: None,
             info: DbErrorInfo::default(),
         }
     }
@@ -235,19 +203,19 @@ impl DatabaseFailure {
 
     /// Sets the reported constraint name.
     pub fn constraint(mut self, constraint: Option<String>) -> Self {
-        self.constraint = constraint;
+        self.info.constraint = constraint;
         self
     }
 
     /// Sets the reported table name.
     pub fn table(mut self, table: Option<String>) -> Self {
-        self.table = table;
+        self.info.table = table;
         self
     }
 
     /// Sets the reported column name.
     pub fn column(mut self, column: Option<String>) -> Self {
-        self.column = column;
+        self.info.column = column;
         self
     }
 
@@ -314,27 +282,27 @@ pub enum Error {
     NotFound,
 
     /// Postgres unique constraint violation (`23505`).
-    #[error("unique violation{}", constraint_suffix(&.0.constraint))]
+    #[error("unique violation{}", constraint_suffix(&.0.info.constraint))]
     UniqueViolation(Box<ConstraintError>),
 
     /// Postgres foreign key violation (`23503`).
-    #[error("foreign key violation{}", constraint_suffix(&.0.constraint))]
+    #[error("foreign key violation{}", constraint_suffix(&.0.info.constraint))]
     ForeignKeyViolation(Box<ConstraintError>),
 
     /// Postgres restrict violation (`23001`).
-    #[error("restrict violation{}", constraint_suffix(&.0.constraint))]
+    #[error("restrict violation{}", constraint_suffix(&.0.info.constraint))]
     RestrictViolation(Box<ConstraintError>),
 
     /// Postgres not-null violation (`23502`).
     #[error("not null violation{}", column_suffix(&.0.column))]
-    NotNullViolation(Box<ColumnError>),
+    NotNullViolation(Box<DbErrorInfo>),
 
     /// Postgres check constraint violation (`23514`).
-    #[error("check violation{}", constraint_suffix(&.0.constraint))]
+    #[error("check violation{}", constraint_suffix(&.0.info.constraint))]
     CheckViolation(Box<ConstraintError>),
 
     /// Postgres exclusion constraint violation (`23P01`).
-    #[error("exclusion violation{}", constraint_suffix(&.0.constraint))]
+    #[error("exclusion violation{}", constraint_suffix(&.0.info.constraint))]
     ExclusionViolation(Box<ConstraintError>),
 
     /// Postgres serialization failure (`40001`).
@@ -363,7 +331,7 @@ pub enum Error {
 
     /// Connection-level failure.
     #[error("connection error: {0}")]
-    Connection(String),
+    Connection(#[source] Box<sqlx::Error>),
 
     /// Unclassified sqlx error.
     #[error("sqlx error: {0}")]
@@ -500,13 +468,6 @@ pub enum Error {
     /// A delete statement was built without a filter.
     #[error("delete without filter is not allowed")]
     DeleteWithoutFilter,
-
-    /// A non-cross join was built without an `ON` condition.
-    #[error("{join} requires an ON condition")]
-    MissingJoinCondition {
-        /// Join kind.
-        join: &'static str,
-    },
 }
 
 fn constraint_suffix(constraint: &Option<String>) -> String {
@@ -528,11 +489,11 @@ impl From<sqlx::Error> for Error {
         match error {
             sqlx::Error::RowNotFound => Self::NotFound,
             sqlx::Error::Database(db) => Self::from_sqlx_database_error(&*db),
-            sqlx::Error::Io(err) => Self::Connection(err.to_string()),
-            sqlx::Error::Tls(err) => Self::Connection(err.to_string()),
-            sqlx::Error::PoolTimedOut => Self::Connection("database pool timed out".to_owned()),
-            sqlx::Error::PoolClosed => Self::Connection("database pool is closed".to_owned()),
-            sqlx::Error::WorkerCrashed => Self::Connection("database worker crashed".to_owned()),
+            error @ (sqlx::Error::Io(_)
+            | sqlx::Error::Tls(_)
+            | sqlx::Error::PoolTimedOut
+            | sqlx::Error::PoolClosed
+            | sqlx::Error::WorkerCrashed) => Self::Connection(Box::new(error)),
             other => Self::Sqlx(Box::new(other)),
         }
     }
@@ -571,28 +532,15 @@ impl Error {
         let message = db.message().to_owned();
         let detail = pg.and_then(PgDatabaseError::detail).map(ToOwned::to_owned);
         let hint = pg.and_then(PgDatabaseError::hint).map(ToOwned::to_owned);
-        let constraint = db.constraint().map(ToOwned::to_owned);
-        let table = db.table().map(ToOwned::to_owned);
-        let column = pg.and_then(PgDatabaseError::column).map(ToOwned::to_owned);
         let info = DbErrorInfo::from_sqlx_database_error(db);
 
         match code.as_str() {
-            "23505" => {
-                Self::UniqueViolation(Box::new(ConstraintError::new(constraint, detail, info)))
-            }
-            "23503" => {
-                Self::ForeignKeyViolation(Box::new(ConstraintError::new(constraint, detail, info)))
-            }
-            "23001" => {
-                Self::RestrictViolation(Box::new(ConstraintError::new(constraint, detail, info)))
-            }
-            "23502" => Self::NotNullViolation(Box::new(ColumnError::new(column, info))),
-            "23514" => {
-                Self::CheckViolation(Box::new(ConstraintError::new(constraint, detail, info)))
-            }
-            "23P01" => {
-                Self::ExclusionViolation(Box::new(ConstraintError::new(constraint, detail, info)))
-            }
+            "23505" => Self::UniqueViolation(Box::new(ConstraintError::new(detail, info))),
+            "23503" => Self::ForeignKeyViolation(Box::new(ConstraintError::new(detail, info))),
+            "23001" => Self::RestrictViolation(Box::new(ConstraintError::new(detail, info))),
+            "23502" => Self::NotNullViolation(Box::new(info)),
+            "23514" => Self::CheckViolation(Box::new(ConstraintError::new(detail, info))),
+            "23P01" => Self::ExclusionViolation(Box::new(ConstraintError::new(detail, info))),
             "40001" => {
                 Self::SerializationFailure(Box::new(PgFailure::new(message, detail, hint, info)))
             }
@@ -607,29 +555,26 @@ impl Error {
                 DatabaseFailure::new(code, message)
                     .detail(detail)
                     .hint(hint)
-                    .constraint(constraint)
-                    .table(table)
-                    .column(column)
                     .info(info),
             )),
             _ => Self::Database(Box::new(
                 DatabaseFailure::new(code, message)
                     .detail(detail)
                     .hint(hint)
-                    .constraint(constraint)
-                    .table(table)
-                    .column(column)
                     .info(info),
             )),
         }
     }
 
-    /// Returns true for retryable transaction errors and connection failures.
+    /// Returns true for serialization failures and deadlocks.
+    /// Retry the whole transaction, including its decisions, with bounded backoff.
+    /// Connection failures are excluded: a lost commit response can have an unknown outcome.
     pub fn is_retryable(&self) -> bool {
-        self.code().is_some_and(is_retryable_sqlstate) || self.is_connection()
+        matches!(self.code(), Some("40001" | "40P01"))
     }
 
     /// Returns true for connection-level failures.
+    /// Classification only; it does not establish whether replaying an operation is safe.
     pub fn is_connection(&self) -> bool {
         matches!(self, Self::Connection(_))
     }
@@ -655,32 +600,13 @@ impl Error {
 
     /// Returns the associated constraint name when available.
     pub fn constraint_name(&self) -> Option<&str> {
-        match self {
-            Self::UniqueViolation(err)
-            | Self::ForeignKeyViolation(err)
-            | Self::RestrictViolation(err)
-            | Self::CheckViolation(err)
-            | Self::ExclusionViolation(err) => {
-                err.constraint.as_deref().or(err.info.constraint.as_deref())
-            }
-            Self::InsufficientPrivilege(err) | Self::Database(err) => {
-                err.constraint.as_deref().or(err.info.constraint.as_deref())
-            }
-            _ => self
-                .db_error_info()
-                .and_then(|info| info.constraint.as_deref()),
-        }
+        self.db_error_info()
+            .and_then(|info| info.constraint.as_deref())
     }
 
     /// Returns the associated column name when available.
     pub fn column_name(&self) -> Option<&str> {
-        match self {
-            Self::NotNullViolation(err) => err.column.as_deref().or(err.info.column.as_deref()),
-            Self::InsufficientPrivilege(err) | Self::Database(err) => {
-                err.column.as_deref().or(err.info.column.as_deref())
-            }
-            _ => self.db_error_info().and_then(|info| info.column.as_deref()),
-        }
+        self.db_error_info().and_then(|info| info.column.as_deref())
     }
 
     /// Returns the database detail message when available.
@@ -719,7 +645,7 @@ impl Error {
             | Self::RestrictViolation(err)
             | Self::CheckViolation(err)
             | Self::ExclusionViolation(err) => Some(&err.info),
-            Self::NotNullViolation(err) => Some(&err.info),
+            Self::NotNullViolation(info) => Some(info),
             Self::SerializationFailure(err)
             | Self::DeadlockDetected(err)
             | Self::LockNotAvailable(err)
@@ -730,16 +656,9 @@ impl Error {
     }
 }
 
-fn is_retryable_sqlstate(code: &str) -> bool {
-    matches!(code, "40001" | "40P01" | "57P01" | "57P02" | "57P03")
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        ColumnError, ConstraintError, DatabaseFailure, DbErrorInfo, DbErrorPosition, Error,
-        PgFailure,
-    };
+    use super::{ConstraintError, DatabaseFailure, DbErrorInfo, DbErrorPosition, Error, PgFailure};
 
     #[test]
     fn error_size_stays_small_for_application_results() {
@@ -753,10 +672,10 @@ mod tests {
             message: "duplicate key value violates unique constraint".to_owned(),
             detail: Some("Key (email)=(ada@example.com) already exists.".to_owned()),
             hint: Some("Use another email.".to_owned()),
-            constraint: Some("users_email_key".to_owned()),
-            table: Some("users".to_owned()),
-            column: Some("email".to_owned()),
             info: DbErrorInfo {
+                constraint: Some("users_email_key".to_owned()),
+                table: Some("users".to_owned()),
+                column: Some("email".to_owned()),
                 schema: Some("public".to_owned()),
                 datatype: Some("text".to_owned()),
                 where_: Some("SQL statement".to_owned()),
@@ -777,7 +696,7 @@ mod tests {
         let Error::Database(err) = error else {
             panic!("expected database error");
         };
-        assert_eq!(err.table.as_deref(), Some("users"));
+        assert_eq!(err.info.table.as_deref(), Some("users"));
         assert_eq!(err.info.schema.as_deref(), Some("public"));
         assert_eq!(err.info.datatype.as_deref(), Some("text"));
         assert_eq!(err.info.where_.as_deref(), Some("SQL statement"));
@@ -785,9 +704,8 @@ mod tests {
     }
 
     #[test]
-    fn specialized_error_helpers_fall_back_to_db_error_info() {
+    fn specialized_error_helpers_share_db_error_info() {
         let error = Error::UniqueViolation(Box::new(ConstraintError {
-            constraint: None,
             detail: None,
             info: DbErrorInfo {
                 constraint: Some("users_email_key".to_owned()),
@@ -803,7 +721,7 @@ mod tests {
     }
 
     #[test]
-    fn retryable_errors_include_transaction_shutdown_and_connection_failures() {
+    fn retryable_errors_exclude_unknown_connection_outcomes() {
         assert!(
             Error::SerializationFailure(Box::new(PgFailure {
                 message: "could not serialize access".to_owned(),
@@ -822,15 +740,15 @@ mod tests {
             }))
             .is_retryable()
         );
-        assert!(Error::Connection("connection closed".to_owned()).is_retryable());
+        assert!(!Error::from(sqlx::Error::PoolClosed).is_retryable());
         for code in ["57P01", "57P02", "57P03"] {
             assert!(
-                Error::Database(Box::new(DatabaseFailure::new(
+                !Error::Database(Box::new(DatabaseFailure::new(
                     code,
                     "transient server failure"
                 )))
                 .is_retryable(),
-                "{code} should be retryable"
+                "{code} must not imply safe transaction replay"
             );
         }
         assert!(
@@ -843,9 +761,9 @@ mod tests {
             .is_retryable()
         );
         assert!(
-            !Error::NotNullViolation(Box::new(ColumnError {
+            !Error::NotNullViolation(Box::new(DbErrorInfo {
                 column: Some("email".to_owned()),
-                info: DbErrorInfo::default(),
+                ..DbErrorInfo::default()
             }))
             .is_retryable()
         );
@@ -870,13 +788,20 @@ mod tests {
     fn connection_like_sqlx_errors_map_to_connection_variant() {
         let pool_timed_out = Error::from(sqlx::Error::PoolTimedOut);
         assert!(matches!(pool_timed_out, Error::Connection(_)));
-        assert!(pool_timed_out.is_retryable());
+        assert!(pool_timed_out.is_connection());
+        assert!(!pool_timed_out.is_retryable());
 
         let io = Error::from(sqlx::Error::Io(std::io::Error::new(
             std::io::ErrorKind::ConnectionReset,
             "connection reset",
         )));
         assert!(matches!(io, Error::Connection(_)));
-        assert!(io.is_retryable());
+        assert!(io.is_connection());
+        assert!(!io.is_retryable());
+        assert!(!Error::NotFound.is_connection());
+        let Error::Connection(source) = io else {
+            unreachable!()
+        };
+        assert!(matches!(*source, sqlx::Error::Io(_)));
     }
 }

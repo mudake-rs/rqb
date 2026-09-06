@@ -174,17 +174,31 @@ pub(crate) enum InsertBody {
 pub trait IntoAssignments {
     /// Converts this value into write assignments.
     fn into_assignments(self) -> Vec<Assignment>;
+
+    /// Appends assignments to an existing batch.
+    fn append_assignments(self, assignments: &mut Vec<Assignment>)
+    where
+        Self: Sized,
+    {
+        assignments.extend(self.into_assignments());
+    }
 }
 
 impl IntoAssignments for Assignment {
     fn into_assignments(self) -> Vec<Assignment> {
         vec![self]
     }
+    fn append_assignments(self, assignments: &mut Vec<Assignment>) {
+        assignments.push(self);
+    }
 }
 
 impl IntoAssignments for &Assignment {
     fn into_assignments(self) -> Vec<Assignment> {
         vec![self.clone()]
+    }
+    fn append_assignments(self, assignments: &mut Vec<Assignment>) {
+        assignments.push(self.clone());
     }
 }
 
@@ -214,10 +228,14 @@ macro_rules! impl_assignment_tuple {
         {
             #[allow(non_snake_case)]
             fn into_assignments(self) -> Vec<Assignment> {
-                let ($($name,)+) = self;
                 let mut assignments = Vec::new();
-                $(assignments.extend($name.into_assignments());)+
+                self.append_assignments(&mut assignments);
                 assignments
+            }
+            #[allow(non_snake_case)]
+            fn append_assignments(self, assignments: &mut Vec<Assignment>) {
+                let ($($name,)+) = self;
+                $($name.append_assignments(assignments);)+
             }
         }
     };
@@ -324,6 +342,15 @@ pub struct ConstraintConflictBuilder {
 }
 
 /// Trait implemented by DTOs that can provide insert assignments.
+///
+/// Nullable DTO fields must match the generated field's inner Rust type:
+///
+/// ```compile_fail,E0277
+/// rqb::schema! { table public.rows { id: int4 = i32, } }
+/// #[derive(rqb::Insertable)]
+/// #[rqb(table = rows)]
+/// struct Wrong { id: Option<String> }
+/// ```
 pub trait Insertable {
     /// Returns assignments to apply to an insert statement.
     fn insert_assignments(&self) -> Vec<Assignment>;
@@ -574,7 +601,7 @@ pub(crate) enum MergeWhen {
 
 /// Action inside a PostgreSQL `MERGE` statement.
 ///
-/// rqb validates branch/action legality at build time: `WHEN MATCHED` supports
+/// Branch builders restrict legal actions: `WHEN MATCHED` supports
 /// update/delete/do nothing, `WHEN NOT MATCHED` supports insert/do nothing, and
 /// `WHEN NOT MATCHED BY SOURCE` supports update/delete/do nothing.
 #[derive(Clone, Debug)]
@@ -617,9 +644,9 @@ pub(crate) enum MergeAction {
 
 /// Typed PostgreSQL `MERGE` statement.
 ///
-/// Actions are rendered in the order they are added. Build-time validation
-/// rejects missing actions and branch/action combinations PostgreSQL does not
-/// allow.
+/// Branch builders restrict legal actions; actions render in insertion order.
+/// Build-time validation rejects missing actions, unreachable branch ordering,
+/// empty assignments, and invalid expressions.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]

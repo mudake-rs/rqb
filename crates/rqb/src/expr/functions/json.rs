@@ -118,14 +118,21 @@ pub fn jsonb_each(expr: impl Into<ValueExpr>) -> ValueExpr {
     function("jsonb_each", [expr])
 }
 
-/// Builds `jsonb_path_query(target, path)`.
+/// Builds `jsonb_path_query(target, path::jsonpath)`. String paths stay bound parameters.
 pub fn jsonb_path_query(target: impl Into<ValueExpr>, path: impl Into<ValueExpr>) -> ValueExpr {
-    function("jsonb_path_query", [target.into(), path.into()])
+    function(
+        "jsonb_path_query",
+        [target.into(), path.into().cast("jsonpath")],
+    )
 }
 
-/// Builds `jsonb_path_exists(target, path)` as a boolean predicate.
+/// Builds `jsonb_path_exists(target, path::jsonpath)` as a boolean predicate.
 pub fn jsonb_path_exists(target: impl Into<ValueExpr>, path: impl Into<ValueExpr>) -> BoolExpr {
-    function("jsonb_path_exists", [target.into(), path.into()]).is_true()
+    function(
+        "jsonb_path_exists",
+        [target.into(), path.into().cast("jsonpath")],
+    )
+    .is_true()
 }
 
 /// Builds the Postgres `target -> key` JSON access expression.

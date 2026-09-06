@@ -10,6 +10,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `Insertable` maps DTO fields to generated schema fields without a serde JSON
   bridge.
 - `Changeset` maps PATCH DTOs to assignments and skips `None` fields.
+- Nullable PATCH uses `Option<Option<T>>` plus a serde present-field
+  deserializer: missing leaves the column unchanged, null clears it, a value sets it.
 - `Field<T>::set(...)` binds values through sqlx-supported Postgres types;
   `set_many((...))` batches manual assignments without losing field metadata.
 - Generated PostgreSQL enums behave like normal typed fields in Rust builder
@@ -33,7 +35,8 @@ Execution mode: renders SQL and asserts it. No database connection is opened.
 - `merge_into(...)` handles relation-driven matched updates and not-matched
   inserts without dropping to raw SQL.
 - `values_many(...)` keeps DTO batch upserts from repeating target columns;
-  `set_from("alias")` copies update values from the incoming source.
+  conflict updates use `do_update_excluded`. `set_from("alias")` belongs to
+  source-driven UPDATE FROM and MERGE assignments.
 - `UPDATE ... FROM` and `DELETE ... USING` compose with typed aliases and CTEs.
 - Optimistic compare-and-swap writes are normal updates with the expected
   current state in `WHERE` and `RETURNING` for success detection.

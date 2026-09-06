@@ -172,11 +172,10 @@ pub async fn search(db: &PgPool, request: SearchRequest) -> rqb::Result<Page<Ord
     let query = if has_client_sort {
         query
     } else {
-        query
-            .order_desc(order_search_view::CREATED_AT)
-            .order_desc(order_search_view::ID)
+        query.order_desc(order_search_view::CREATED_AT)
     };
 
+    let query = query.order_desc(order_search_view::ID);
     let total = query.count(db).await?;
     let items = query.fetch_all_as::<OrderSearchRow>(db).await?;
 

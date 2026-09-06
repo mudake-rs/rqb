@@ -97,13 +97,14 @@ async fn patch_user(
 ) -> ApiResult<Json<UserRow>> {
     // This shape is both the HTTP PATCH body and the DB changeset. Split those
     // structs only when the public API and the write model actually diverge.
-    if input.is_empty() {
+    let assignments = rqb::Changeset::changeset_assignments(&input);
+    if assignments.is_empty() {
         return Err(ApiError::BadRequest(
             "PATCH body must include at least one field".to_owned(),
         ));
     }
 
-    let user = users::patch(&state.pool, id, input).await?;
+    let user = users::patch(&state.pool, id, assignments).await?;
     Ok(Json(user))
 }
 

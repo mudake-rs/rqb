@@ -544,12 +544,6 @@ impl JoinKind {
             Self::Cross => "CROSS JOIN",
         }
     }
-
-    /// Returns true when this join kind requires an `ON` condition.
-    #[inline]
-    pub const fn requires_condition(self) -> bool {
-        !matches!(self, Self::Cross)
-    }
 }
 
 impl Join {
@@ -593,16 +587,13 @@ impl Join {
         }
     }
 
-    /// Validates the joined source and required join condition.
+    /// Validates the joined source and the condition supplied by its constructor.
     pub(crate) fn validate(&self) -> Result<()> {
         self.source.validate()?;
-        match (&self.on, self.kind.requires_condition()) {
-            (Some(on), _) => on.validate(),
-            (None, false) => Ok(()),
-            (None, true) => Err(crate::Error::MissingJoinCondition {
-                join: self.kind.as_sql(),
-            }),
+        if let Some(on) = &self.on {
+            on.validate()?;
         }
+        Ok(())
     }
 }
 

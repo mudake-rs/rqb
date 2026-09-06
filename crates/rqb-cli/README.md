@@ -110,6 +110,11 @@ rqb::schema! {
 ```
 
 Known sqlx-supported Postgres types generate typed `Field<T>` constants.
+`inet` and `cidr` remain raw-only unless configured with a suitable codec;
+they are not SQL-compatible with a String bind or decode. Plain `json` has
+no default equality/search capability (`jsonb` does), and `timetz` is not
+exposed to JSON search by default because an offset-free time loses its meaning.
+`samples/custom-types` includes a complete domain mapping and sqlx codec round trip.
 Postgres enum types generate Rust enums with `sqlx::Type`, then enum columns
 use those generated types:
 

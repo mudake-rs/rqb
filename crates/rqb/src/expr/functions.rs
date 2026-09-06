@@ -56,8 +56,7 @@ pub use math::{
 };
 pub use merge::merge_action;
 pub use range::{
-    isempty, lower_inc, lower_inf, multirange_merge, range_lower, range_merge, range_upper,
-    upper_inc, upper_inf,
+    isempty, lower_inc, lower_inf, range_lower, range_merge, range_upper, upper_inc, upper_inf,
 };
 pub use scalar::{
     coalesce, current_database, current_schema, current_user, greatest, least, nullif,

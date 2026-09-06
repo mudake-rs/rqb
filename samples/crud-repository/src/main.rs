@@ -130,7 +130,7 @@ macro_rules! crud_repository {
 #[allow(dead_code)]
 struct UserRow {
     id: Uuid,
-    organization_id: Uuid,
+    organization_id: Option<Uuid>,
     email: String,
     status: String,
     display_name: String,

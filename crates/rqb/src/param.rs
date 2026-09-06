@@ -9,13 +9,10 @@ use crate::{Error, Result};
 ///
 /// This hides sqlx's encode/type bounds behind the rqb concept used by field
 /// predicates, assignments, and raw parameters.
-pub trait BindValue:
-    Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>
-{
-}
+pub trait BindValue: Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres> {}
 
 impl<T> BindValue for T where
-    T: Clone + Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>
+    T: Send + Sync + 'static + for<'q> Encode<'q, Postgres> + Type<Postgres>
 {
 }
 
@@ -141,7 +138,7 @@ where
     T: BindValue,
 {
     fn add_to(&self, args: &mut PgArguments) -> Result<()> {
-        args.add(self.value.clone())
+        args.add(&self.value)
             .map_err(|error| Error::Encode(error.to_string()))
     }
 

@@ -14,7 +14,6 @@ mod stmt;
 mod value;
 mod write;
 
-#[derive(Default)]
 struct Renderer {
     sql: String,
     params: Vec<Param>,
@@ -38,10 +37,10 @@ impl Renderer {
         }
     }
 
-    fn build_with(render: impl FnOnce(&mut Self) -> Result<()>) -> Result<BuiltQuery> {
+    fn build_with(render: impl FnOnce(&mut Self)) -> BuiltQuery {
         let mut renderer = Self::new();
-        render(&mut renderer)?;
-        Ok(renderer.finish())
+        render(&mut renderer);
+        renderer.finish()
     }
 }
 
@@ -52,11 +51,8 @@ impl Stmt {
     /// before execution. The convenience `fetch_*` and `execute` methods build
     /// on each call.
     pub fn build(&self) -> Result<BuiltQuery> {
-        if let Self::Raw(raw) = self {
-            return raw.build();
-        }
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_stmt(self))
+        Ok(Renderer::build_with(|renderer| renderer.render_stmt(self)))
     }
 }
 
@@ -67,7 +63,9 @@ impl Select {
     /// items were added.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_select(self))
+        Ok(Renderer::build_with(|renderer| {
+            renderer.render_select(self)
+        }))
     }
 }
 
@@ -78,7 +76,7 @@ impl SetQuery {
     /// and row-limit clauses.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_set(self))
+        Ok(Renderer::build_with(|renderer| renderer.render_set(self)))
     }
 }
 
@@ -89,7 +87,9 @@ impl Insert {
     /// table/view sources before SQL is produced.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_insert(self))
+        Ok(Renderer::build_with(|renderer| {
+            renderer.render_insert(self)
+        }))
     }
 }
 
@@ -100,7 +100,9 @@ impl crate::Update {
     /// before SQL is produced.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_update(self))
+        Ok(Renderer::build_with(|renderer| {
+            renderer.render_update(self)
+        }))
     }
 }
 
@@ -112,18 +114,20 @@ impl Delete {
     /// any SQL is rendered.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_delete(self))
+        Ok(Renderer::build_with(|renderer| {
+            renderer.render_delete(self)
+        }))
     }
 }
 
 impl Merge {
     /// Validates and renders this merge into parameterized SQL.
     ///
-    /// Branch/action legality is checked at build time, including which actions
-    /// are valid for each `WHEN` branch.
+    /// Branch builders restrict actions for each `WHEN` category. Validation
+    /// checks branch ordering, assignments, and expressions before rendering.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_merge(self))
+        Ok(Renderer::build_with(|renderer| renderer.render_merge(self)))
     }
 }
 
@@ -135,7 +139,9 @@ impl RawStmt {
     /// quoted identifiers, dollar quotes, and comments is ignored.
     pub fn build(&self) -> Result<BuiltQuery> {
         self.validate()?;
-        Renderer::build_with(|renderer| renderer.render_raw_stmt(self))
+        Ok(Renderer::build_with(|renderer| {
+            renderer.render_raw_stmt(self)
+        }))
     }
 }
 

@@ -45,7 +45,42 @@ struct NewUser {
     display_name: String,
 }
 
+#[derive(serde::Deserialize, Changeset)]
+#[serde(deny_unknown_fields)]
+#[rqb(table = users)]
+struct OrganizationPatch {
+    // Missing key leaves membership unchanged; JSON null removes membership.
+    #[serde(default, deserialize_with = "present_nullable")]
+    organization_id: Option<Option<Uuid>>,
+}
+
+fn present_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Some)
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let leave: OrganizationPatch = serde_json::from_str("{}")?;
+    let clear: OrganizationPatch = serde_json::from_str(r#"{"organization_id":null}"#)?;
+    let set: OrganizationPatch = serde_json::from_value(json!({"organization_id": Uuid::nil()}))?;
+    assert!(leave.changeset_assignments().is_empty());
+    assert!(
+        update(users::table())
+            .patch(&clear)
+            .build()?
+            .sql
+            .ends_with("SET \"organization_id\" = NULL")
+    );
+    assert!(
+        update(users::table())
+            .patch(&set)
+            .build()?
+            .sql
+            .ends_with("SET \"organization_id\" = $1")
+    );
     const ACTIVE_IDS: &str = "active_ids";
     const INCOMING: &str = "incoming";
     const ORDERS_ALIAS: &str = "o";
@@ -171,7 +206,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(
         insert_sql.sql,
-        "INSERT INTO \"sample\".\"invoices\" (\"id\", \"customer_id\", \"amount\", \"due_on\", \"metadata\") VALUES ($1, $2, $3, $4, $5) RETURNING \"id\", \"invoice_no\", \"customer_id\", \"state\", \"amount\", \"tax_rate\", \"amount_history\", \"due_on\", \"issued_at\", \"paid_at\", \"reminder_time\", \"cutoff_time\", \"grace_period\", \"service_days\", \"billing_window\", \"client_ip\", \"client_network\", \"pdf\", \"tags\", \"metadata\""
+        "INSERT INTO \"sample\".\"invoices\" (\"id\", \"customer_id\", \"amount\", \"due_on\", \"metadata\") VALUES ($1, $2, $3, $4, $5) RETURNING \"invoices\".\"id\", \"invoices\".\"invoice_no\", \"invoices\".\"customer_id\", \"invoices\".\"state\", \"invoices\".\"amount\", \"invoices\".\"tax_rate\", \"invoices\".\"amount_history\", \"invoices\".\"due_on\", \"invoices\".\"issued_at\", \"invoices\".\"paid_at\", \"invoices\".\"reminder_time\", \"invoices\".\"cutoff_time\", \"invoices\".\"grace_period\", \"invoices\".\"service_days\", \"invoices\".\"billing_window\", \"invoices\".\"client_ip\", \"invoices\".\"client_network\", \"invoices\".\"pdf\", \"invoices\".\"tags\", \"invoices\".\"metadata\""
     );
     assert_eq!(
         update_sql.sql,
@@ -221,8 +256,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .returning(users::ID)
         .build()?;
 
-    // Batch DTO inserts use an inline VALUES source under the hood. `set_from`
-    // copies update values from the same source alias in conflict updates.
+    // Conflict updates read the proposed row through PostgreSQL's EXCLUDED.
     let incoming_users = [NewUser {
         id: Uuid::nil(),
         organization_id: Uuid::nil(),
@@ -231,12 +265,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         display_name: "Grace".to_owned(),
     }];
     let bulk_upsert_sql = insert(users::table())
-        .values_many(&incoming_users, INCOMING)?
+        .values_many(&incoming_users)?
         .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
-        .do_update_set((
-            users::STATUS.set_from(INCOMING),
-            users::DISPLAY_NAME.set_from(INCOMING),
-        ))
+        .do_update_excluded((users::STATUS, users::DISPLAY_NAME))
         .returning(users::ID)
         .build()?;
 
@@ -324,7 +355,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(
         bulk_upsert_sql.sql,
-        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") SELECT \"incoming\".\"id\", \"incoming\".\"organization_id\", \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"display_name\" FROM (VALUES ($1, $2, $3, $4, $5)) AS \"incoming\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO UPDATE SET \"status\" = \"incoming\".\"status\", \"display_name\" = \"incoming\".\"display_name\" RETURNING \"id\""
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") SELECT \"incoming\".\"id\", \"incoming\".\"organization_id\", \"incoming\".\"email\", \"incoming\".\"status\", \"incoming\".\"display_name\" FROM (VALUES ($1, $2, $3, $4, $5)) AS \"incoming\" (\"id\", \"organization_id\", \"email\", \"status\", \"display_name\") ON CONFLICT ON CONSTRAINT \"app_users_email_key\" DO UPDATE SET \"status\" = EXCLUDED.\"status\", \"display_name\" = EXCLUDED.\"display_name\" RETURNING \"id\""
     );
     assert_eq!(
         merge_users_sql.sql,
@@ -368,7 +399,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(invoice_report_sql.params.len(), 1);
     assert_eq!(
         upsert_user_sql.sql,
-        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") WHERE \"active\" = $5 DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = $6 WHERE \"active\" = $7 RETURNING \"id\", \"organization_id\", \"email\", \"status\", \"display_name\", \"active\", \"created_at\""
+        "INSERT INTO \"sample\".\"app_users\" (\"id\", \"email\", \"display_name\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"email\") WHERE \"active\" = $5 DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"status\" = $6 WHERE \"active\" = $7 RETURNING \"app_users\".\"id\", \"app_users\".\"organization_id\", \"app_users\".\"email\", \"app_users\".\"status\", \"app_users\".\"display_name\", \"app_users\".\"active\", \"app_users\".\"created_at\""
     );
     assert_eq!(
         ignore_duplicate_sql.sql,

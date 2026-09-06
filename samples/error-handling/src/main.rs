@@ -9,17 +9,15 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Database errors are normalized into structured variants so API code can
     // match by meaning instead of parsing message text.
     let unique = rqb::Error::UniqueViolation(Box::new(rqb::ConstraintError::new(
-        Some("app_users_email_key".to_owned()),
         Some("Key (email) already exists.".to_owned()),
-        rqb::DbErrorInfo::default(),
+        constraint_info("app_users_email_key"),
     )));
     assert_eq!(unique.code(), Some("23505"));
     assert_eq!(unique.constraint_name(), Some("app_users_email_key"));
 
     let foreign_key = rqb::Error::ForeignKeyViolation(Box::new(rqb::ConstraintError::new(
-        Some("orders_user_fkey".to_owned()),
         None,
-        rqb::DbErrorInfo::default(),
+        constraint_info("orders_user_fkey"),
     )));
     assert_eq!(foreign_key.code(), Some("23503"));
 
@@ -82,9 +80,15 @@ async fn create_user_and_match_db_error(db: impl PgExecutor<'_>) -> rqb::Result<
         Err(rqb::Error::UniqueViolation(err)) => {
             // Application code usually maps this to 409 Conflict; the optional
             // constraint name is useful for logs or field-specific API errors.
-            let _constraint = err.constraint;
+            let _constraint = err.info.constraint;
             Ok(())
         }
         Err(error) => Err(error),
     }
+}
+
+fn constraint_info(name: &str) -> rqb::DbErrorInfo {
+    let mut info = rqb::DbErrorInfo::default();
+    info.constraint = Some(name.to_owned());
+    info
 }

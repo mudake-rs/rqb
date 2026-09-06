@@ -118,8 +118,8 @@ extern crate self as rqb;
 pub use advisory::AdvisoryLockKey;
 pub use built::BuiltQuery;
 pub use error::{
-    ColumnError, ConstraintError, CteShapeError, DatabaseFailure, DbErrorInfo, DbErrorPosition,
-    Error, OperatorError, PgFailure, SearchValueError, WriteTargetError,
+    ConstraintError, CteShapeError, DatabaseFailure, DbErrorInfo, DbErrorPosition, Error,
+    OperatorError, PgFailure, SearchValueError, WriteTargetError,
 };
 pub use execute::ScalarValue;
 pub use expr::{
@@ -148,11 +148,11 @@ pub use expr::{
     jsonb_pretty, jsonb_set, jsonb_strip_nulls, jsonb_typeof, lag, last_value, lcm, lead, least,
     left, length, lgamma, literal, ln, log, lower, lower_inc, lower_inf, lpad, ltrim, make_date,
     make_time, make_timestamp, make_timestamptz, max, md5, merge_action, min, mod_, mode,
-    multirange_merge, normalize, normalize_form, not, not_similar_to, now, nth_value, ntile, null,
-    nullif, octet_length, or, ordered_set_aggregate, param, percent_rank, percentile_cont,
-    percentile_disc, phraseto_tsquery, phraseto_tsquery_config, pi, plainto_tsquery, pow, power,
-    preceding, radians, random, random_between, range, range_agg, range_intersect_agg, range_lower,
-    range_merge, range_upper, rank, raw_expr, raw_predicate, regexp_matches, regexp_replace,
+    normalize, normalize_form, not, not_similar_to, now, nth_value, ntile, null, nullif,
+    octet_length, or, ordered_set_aggregate, param, percent_rank, percentile_cont, percentile_disc,
+    phraseto_tsquery, phraseto_tsquery_config, pi, plainto_tsquery, pow, power, preceding, radians,
+    random, random_between, range, range_agg, range_intersect_agg, range_lower, range_merge,
+    range_upper, rank, raw_expr, raw_predicate, regexp_matches, regexp_replace,
     regexp_split_to_array, repeat, replace, reverse, right, round, row, row_number, row_to_json,
     rows, rpad, rtrim, scalar_subquery, session_user, sign, similar_to, slice, split_part, sqrt,
     starts_with, stddev, stddev_pop, stddev_samp, string_agg, string_to_array, strpos, subscript,
@@ -302,22 +302,22 @@ pub mod dsl {
         jsonb_object_keys_source, jsonb_path_exists, jsonb_path_query, jsonb_pretty, jsonb_set,
         jsonb_strip_nulls, jsonb_typeof, lag, last_value, lcm, lead, least, left, length, lgamma,
         literal, ln, log, lower, lower_inc, lower_inf, lpad, ltrim, make_date, make_time,
-        make_timestamp, make_timestamptz, max, md5, merge_action, min, mod_, mode,
-        multirange_merge, normalize, normalize_form, not, not_similar_to, now, nth_value, ntile,
-        null, nullif, octet_length, or, ordered_set_aggregate, param, percent_rank,
-        percentile_cont, percentile_disc, phraseto_tsquery, phraseto_tsquery_config, pi,
-        plainto_tsquery, pow, power, preceding, radians, random, random_between, range, range_agg,
-        range_intersect_agg, range_lower, range_merge, range_upper, rank, raw_expr, raw_predicate,
-        regexp_matches, regexp_replace, regexp_split_to_array, regexp_split_to_table_source,
-        repeat, replace, reverse, right, round, row, row_number, row_to_json, rows, rpad, rtrim,
-        scalar_subquery, session_user, sign, similar_to, slice, split_part, sqrt, starts_with,
-        stddev, stddev_pop, stddev_samp, string_agg, string_to_array, strpos, subscript, substring,
-        sum, sum_distinct, timezone, to_char, to_date, to_json, to_jsonb, to_number, to_timestamp,
-        to_tsquery, to_tsvector, to_tsvector_config, translate, trim, trim_array, true_, trunc,
-        ts_headline, ts_match, ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding,
-        unicode_assigned, unnest, unnest_source, upper, upper_inc, upper_inf,
-        uuid_extract_timestamp, uuid_extract_version, uuidv4, uuidv7, uuidv7_shift, values_source,
-        var_pop, var_samp, variance, version, websearch_to_tsquery, width_bucket, window,
+        make_timestamp, make_timestamptz, max, md5, merge_action, min, mod_, mode, normalize,
+        normalize_form, not, not_similar_to, now, nth_value, ntile, null, nullif, octet_length, or,
+        ordered_set_aggregate, param, percent_rank, percentile_cont, percentile_disc,
+        phraseto_tsquery, phraseto_tsquery_config, pi, plainto_tsquery, pow, power, preceding,
+        radians, random, random_between, range, range_agg, range_intersect_agg, range_lower,
+        range_merge, range_upper, rank, raw_expr, raw_predicate, regexp_matches, regexp_replace,
+        regexp_split_to_array, regexp_split_to_table_source, repeat, replace, reverse, right,
+        round, row, row_number, row_to_json, rows, rpad, rtrim, scalar_subquery, session_user,
+        sign, similar_to, slice, split_part, sqrt, starts_with, stddev, stddev_pop, stddev_samp,
+        string_agg, string_to_array, strpos, subscript, substring, sum, sum_distinct, timezone,
+        to_char, to_date, to_json, to_jsonb, to_number, to_timestamp, to_tsquery, to_tsvector,
+        to_tsvector_config, translate, trim, trim_array, true_, trunc, ts_headline, ts_match,
+        ts_rank, ts_rank_cd, unbounded_following, unbounded_preceding, unicode_assigned, unnest,
+        unnest_source, upper, upper_inc, upper_inf, uuid_extract_timestamp, uuid_extract_version,
+        uuidv4, uuidv7, uuidv7_shift, values_source, var_pop, var_samp, variance, version,
+        websearch_to_tsquery, width_bucket, window,
     };
 }
 
@@ -472,7 +472,7 @@ mod tests {
                 balance: "bitcoin.uint256" = crate::tests::PgU256,
                 #[rqb(ops = none, json = none)]
                 embedding: vector = crate::tests::Vector,
-                #[rqb(ops = equality, json = text)]
+                #[rqb(ops = equality, json = none)]
                 tags: "text[]" = Vec<String>,
                 constraints {
                     WALLETS_PKEY: "wallets_pkey",

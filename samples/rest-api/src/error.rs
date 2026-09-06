@@ -24,41 +24,16 @@ impl IntoResponse for ApiError {
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::Db(error) => match error {
                 rqb::Error::NotFound => (StatusCode::NOT_FOUND, "not found".to_owned()),
-                rqb::Error::UniqueViolation(err) => (
-                    StatusCode::CONFLICT,
-                    format!(
-                        "unique violation{}",
-                        suffix("constraint", err.constraint.as_deref())
-                    ),
-                ),
-                rqb::Error::ExclusionViolation(err) => (
-                    StatusCode::CONFLICT,
-                    format!(
-                        "exclusion violation{}",
-                        suffix("constraint", err.constraint.as_deref())
-                    ),
-                ),
-                rqb::Error::ForeignKeyViolation(err) | rqb::Error::RestrictViolation(err) => (
+                rqb::Error::UniqueViolation(_) | rqb::Error::ExclusionViolation(_) => {
+                    (StatusCode::CONFLICT, "conflicting record".to_owned())
+                }
+                rqb::Error::ForeignKeyViolation(_) | rqb::Error::RestrictViolation(_) => (
                     StatusCode::BAD_REQUEST,
-                    format!(
-                        "constraint violation{}",
-                        suffix("constraint", err.constraint.as_deref())
-                    ),
+                    "invalid record reference".to_owned(),
                 ),
-                rqb::Error::NotNullViolation(err) => (
-                    StatusCode::BAD_REQUEST,
-                    format!(
-                        "not null violation{}",
-                        suffix("column", err.column.as_deref())
-                    ),
-                ),
-                rqb::Error::CheckViolation(err) => (
-                    StatusCode::BAD_REQUEST,
-                    format!(
-                        "check violation{}",
-                        suffix("constraint", err.constraint.as_deref())
-                    ),
-                ),
+                rqb::Error::NotNullViolation(_) | rqb::Error::CheckViolation(_) => {
+                    (StatusCode::BAD_REQUEST, "invalid record values".to_owned())
+                }
                 rqb::Error::SerializationFailure(_) | rqb::Error::DeadlockDetected(_) => (
                     StatusCode::SERVICE_UNAVAILABLE,
                     "retryable database error".to_owned(),
@@ -105,7 +80,13 @@ impl IntoResponse for ApiError {
                     StatusCode::BAD_REQUEST,
                     format!("{logical} group must contain at least one filter"),
                 ),
-                error => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+                error => {
+                    eprintln!("database operation failed: {error:?}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "internal server error".to_owned(),
+                    )
+                }
             },
         };
 
@@ -113,8 +94,22 @@ impl IntoResponse for ApiError {
     }
 }
 
-fn suffix(label: &str, value: Option<&str>) -> String {
-    value
-        .map(|value| format!(" on {label} `{value}`"))
-        .unwrap_or_default()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn internal_database_details_do_not_reach_http_clients() {
+        let error = rqb::Error::Database(Box::new(rqb::DatabaseFailure::new(
+            "XX000",
+            "secret internal SQL",
+        )));
+        let response = ApiError::from(error).into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value, serde_json::json!({"error":"internal server error"}));
+    }
 }

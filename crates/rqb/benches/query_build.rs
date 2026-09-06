@@ -10,6 +10,16 @@ use uuid::Uuid;
 #[global_allocator]
 static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
 
+#[divan::bench]
+fn tuple_projection() -> Select {
+    select(users()).columns((USER_ID, USER_EMAIL, USER_ACTIVE, USER_CREATED_AT))
+}
+
+#[divan::bench]
+fn tuple_assignments() -> Update {
+    update(users()).set_many((USER_ID.set(1), USER_EMAIL.set("a"), USER_ACTIVE.set(true)))
+}
+
 static USER_ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
 static USER_EMAIL_META: Meta = Meta::new("email", "email", "text").ops(OpSet::text());
 static USER_ACTIVE_META: Meta = Meta::new("active", "active", "bool").ops(OpSet::equality());

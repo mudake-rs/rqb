@@ -1,5 +1,7 @@
 #[path = "postgres_integration/common.rs"]
 mod common;
+#[path = "postgres_integration/composition.rs"]
+mod composition;
 #[path = "postgres_integration/error_mapping.rs"]
 mod error_mapping;
 #[path = "postgres_integration/round_trip.rs"]

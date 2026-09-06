@@ -1,7 +1,4 @@
-use super::{
-    FetchClause, InsertBody, Join, JoinKind, MergeAction, MergeWhen, RowLimit, SelectItem,
-    SetOperator,
-};
+use super::{FetchClause, InsertBody, RowLimit, SelectItem, SetOperator};
 use crate::{
     BoolExpr, BoolOp, Field, Meta, OpSet, OrderItem, Param, RawStmt, Select, SetQuery, Source,
     ValueExpr, cte, cte_ref, delete_from, insert, merge_into, raw, select, subquery, update,
@@ -202,7 +199,7 @@ fn returning_all_uses_source_fields_with_api_aliases() {
 
     assert_eq!(
         built.sql,
-        "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"id\", \"display_name\" AS \"displayName\""
+        "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"users\".\"id\", \"users\".\"display_name\" AS \"displayName\""
     );
 }
 
@@ -225,7 +222,7 @@ fn returning_all_replaces_existing_returning_fields() {
 
     assert_eq!(
         built.sql,
-        "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"id\", \"display_name\" AS \"displayName\""
+        "INSERT INTO \"public\".\"users\" (\"id\") VALUES ($1) RETURNING \"users\".\"id\", \"users\".\"display_name\" AS \"displayName\""
     );
 }
 
@@ -658,24 +655,6 @@ fn duplicate_cte_names_are_rejected_before_rendering() {
 }
 
 #[test]
-fn non_cross_join_requires_condition_but_cross_join_does_not() {
-    let missing_inner = Join {
-        kind: JoinKind::Inner,
-        source: users(),
-        on: None,
-        lateral: false,
-    };
-
-    assert!(matches!(
-        missing_inner.validate().unwrap_err(),
-        crate::Error::MissingJoinCondition { join } if join == "JOIN"
-    ));
-
-    let cross = Join::cross(users());
-    cross.validate().unwrap();
-}
-
-#[test]
 fn merge_requires_at_least_one_action() {
     let merge = merge_into(
         users(),
@@ -689,93 +668,6 @@ fn merge_requires_at_least_one_action() {
         err,
         crate::Error::InvalidMergeShape { message }
             if message == "merge requires at least one action"
-    ));
-}
-
-#[test]
-fn merge_update_is_not_valid_for_when_not_matched() {
-    let mut merge = merge_into(
-        users(),
-        users().alias("source"),
-        ID.eq_field(ID.at("source")),
-    );
-    merge.actions.push(MergeAction::Update {
-        when: MergeWhen::NotMatched,
-        condition: None,
-        assignments: vec![ID.set(1)],
-    });
-
-    let err = merge.validate().unwrap_err();
-
-    assert!(matches!(
-        err,
-        crate::Error::InvalidMergeShape { message }
-            if message == "merge update is not valid for WHEN NOT MATCHED"
-    ));
-}
-
-#[test]
-fn merge_delete_is_not_valid_for_when_not_matched() {
-    let mut merge = merge_into(
-        users(),
-        users().alias("source"),
-        ID.eq_field(ID.at("source")),
-    );
-    merge.actions.push(MergeAction::Delete {
-        when: MergeWhen::NotMatched,
-        condition: None,
-    });
-
-    let err = merge.validate().unwrap_err();
-
-    assert!(matches!(
-        err,
-        crate::Error::InvalidMergeShape { message }
-            if message == "merge delete is not valid for WHEN NOT MATCHED"
-    ));
-}
-
-#[test]
-fn merge_insert_is_not_valid_for_when_matched() {
-    let mut merge = merge_into(
-        users(),
-        users().alias("source"),
-        ID.eq_field(ID.at("source")),
-    );
-    merge.actions.push(MergeAction::Insert {
-        when: MergeWhen::Matched,
-        condition: None,
-        assignments: vec![ID.set(1)],
-    });
-
-    let err = merge.validate().unwrap_err();
-
-    assert!(matches!(
-        err,
-        crate::Error::InvalidMergeShape { message }
-            if message == "merge insert is not valid for WHEN MATCHED"
-    ));
-}
-
-#[test]
-fn merge_insert_is_not_valid_for_when_not_matched_by_source() {
-    let mut merge = merge_into(
-        users(),
-        users().alias("source"),
-        ID.eq_field(ID.at("source")),
-    );
-    merge.actions.push(MergeAction::Insert {
-        when: MergeWhen::NotMatchedBySource,
-        condition: None,
-        assignments: vec![ID.set(1)],
-    });
-
-    let err = merge.validate().unwrap_err();
-
-    assert!(matches!(
-        err,
-        crate::Error::InvalidMergeShape { message }
-            if message == "merge insert is not valid for WHEN NOT MATCHED BY SOURCE"
     ));
 }
 

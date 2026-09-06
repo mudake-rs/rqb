@@ -77,14 +77,26 @@ impl ValueExpr {
         Self::binary(self, ValueOp::Custom(op), right.into())
     }
 
-    /// Builds a custom boolean infix predicate.
+    /// Builds a server-owned custom infix predicate; PostgreSQL checks operator types.
     pub fn predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
-        BoolExpr::infix(self, op, right.into(), false)
+        BoolExpr::Infix {
+            left: self,
+            op,
+            right: right.into(),
+            negated: false,
+            checked: false,
+        }
     }
 
     /// Builds a negated custom boolean infix predicate.
     pub fn not_predicate(self, op: &'static str, right: impl Into<ValueExpr>) -> BoolExpr {
-        BoolExpr::infix(self, op, right.into(), true)
+        BoolExpr::Infix {
+            left: self,
+            op,
+            right: right.into(),
+            negated: true,
+            checked: false,
+        }
     }
 
     /// Builds `expr IS NULL`.

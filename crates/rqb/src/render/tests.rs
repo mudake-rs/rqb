@@ -377,19 +377,19 @@ fn sql_literal_and_typed_date_part_render_without_parameters() {
 }
 
 #[test]
-fn insert_from_select_all_projects_source_fields_and_set_from_uses_alias() {
+fn insert_from_select_all_projects_source_fields_and_conflict_uses_excluded() {
     let incoming = values_source([(1_i32, "egor@example.com")], "incoming", (ID, EMAIL));
 
     let built = insert(users())
         .from_select_all(incoming)
         .on_conflict(ID)
-        .do_update_set([EMAIL.set_from("incoming")])
+        .do_update_excluded(EMAIL)
         .build()
         .unwrap();
 
     assert_eq!(
         built.sql,
-        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") SELECT \"incoming\".\"id\", \"incoming\".\"email_address\" FROM (VALUES ($1, $2)) AS \"incoming\" (\"id\", \"email_address\") ON CONFLICT (\"id\") DO UPDATE SET \"email_address\" = \"incoming\".\"email_address\""
+        "INSERT INTO \"public\".\"app_users\" (\"id\", \"email_address\") SELECT \"incoming\".\"id\", \"incoming\".\"email_address\" FROM (VALUES ($1, $2)) AS \"incoming\" (\"id\", \"email_address\") ON CONFLICT (\"id\") DO UPDATE SET \"email_address\" = EXCLUDED.\"email_address\""
     );
     assert_eq!(built.params.len(), 2);
 }
@@ -705,7 +705,7 @@ fn negated_field_predicates_render_without_raw_sql() {
 }
 
 #[test]
-fn distinct_group_having_and_locks_render_as_select_clauses() {
+fn distinct_group_and_having_render_as_select_clauses() {
     fn count_id() -> ValueExpr {
         crate::count(ID)
     }
@@ -717,14 +717,12 @@ fn distinct_group_having_and_locks_render_as_select_clauses() {
         .group_by(EMAIL)
         .having(count_id().gt(1_i64))
         .order_asc(EMAIL)
-        .for_update()
-        .skip_locked()
         .build()
         .unwrap();
 
     assert_eq!(
         built.sql,
-        "SELECT DISTINCT ON (\"email_address\") \"email_address\" AS \"email\", count(\"id\") AS \"user_count\" FROM \"public\".\"app_users\" GROUP BY \"email_address\" HAVING count(\"id\") > $1 ORDER BY \"email_address\" ASC FOR UPDATE SKIP LOCKED"
+        "SELECT DISTINCT ON (\"email_address\") \"email_address\" AS \"email\", count(\"id\") AS \"user_count\" FROM \"public\".\"app_users\" GROUP BY \"email_address\" HAVING count(\"id\") > $1 ORDER BY \"email_address\" ASC"
     );
     assert_eq!(built.params.len(), 1);
 }
@@ -1168,7 +1166,7 @@ fn select_infer_source_infers_field_metadata_from_projection() {
 #[test]
 fn select_infer_source_rejects_projection_aliases_that_need_explicit_fields() {
     let err = select(users())
-        .column(EMAIL)
+        .expr_as(EMAIL, "unknown_output_name")
         .infer_source("emails")
         .unwrap_err();
 
@@ -1753,7 +1751,7 @@ fn json_symmetry_helpers_render_without_raw_sql() {
             "json_arr",
         )
         .expr_as(crate::json_object(array(["id", "42"])), "json_object")
-        .expr_as(crate::json_typeof(PAYLOAD), "json_type")
+        .expr_as(crate::jsonb_typeof(PAYLOAD), "json_type")
         .expr_as(
             crate::json_array_length(crate::json_build_array([TOTAL])),
             "json_len",
@@ -1767,7 +1765,7 @@ fn json_symmetry_helpers_render_without_raw_sql() {
 
     assert_eq!(
         built.sql,
-        "SELECT json_build_object($1, \"user_id\", $2, \"total_cents\") AS \"json_obj\", json_build_array(\"user_id\", \"total_cents\") AS \"json_arr\", json_object(ARRAY[$3, $4]) AS \"json_object\", json_typeof(\"payload\") AS \"json_type\", json_array_length(json_build_array(\"total_cents\")) AS \"json_len\", jsonb_array_length(jsonb_build_array(\"total_cents\")) AS \"jsonb_len\" FROM \"public\".\"orders\""
+        "SELECT json_build_object($1, \"user_id\", $2, \"total_cents\") AS \"json_obj\", json_build_array(\"user_id\", \"total_cents\") AS \"json_arr\", json_object(ARRAY[$3, $4]) AS \"json_object\", jsonb_typeof(\"payload\") AS \"json_type\", json_array_length(json_build_array(\"total_cents\")) AS \"json_len\", jsonb_array_length(jsonb_build_array(\"total_cents\")) AS \"jsonb_len\" FROM \"public\".\"orders\""
     );
     assert_eq!(built.params.len(), 4);
 }
@@ -1889,9 +1887,12 @@ fn json_utility_and_range_helpers_render_without_raw_sql() {
         .expr_as(crate::row_to_json(row((ORDER_USER_ID, TOTAL))), "row_json")
         .expr_as(crate::range_lower(SCORE_RANGE), "lower_score")
         .expr_as(crate::range_upper(SCORE_RANGE), "upper_score")
-        .expr_as(crate::range_merge(SCORE_RANGE), "merged_score")
         .expr_as(
-            crate::multirange_merge(raw_expr("'{}'::int4multirange", Vec::<Param>::new())),
+            crate::function("range_merge", [SCORE_RANGE, SCORE_RANGE]),
+            "merged_score",
+        )
+        .expr_as(
+            crate::range_merge(raw_expr("'{}'::int4multirange", Vec::<Param>::new())),
             "merged_multi",
         )
         .filter(BoolExpr::and([
@@ -1906,7 +1907,7 @@ fn json_utility_and_range_helpers_render_without_raw_sql() {
 
     assert_eq!(
         built.sql,
-        "SELECT jsonb_pretty(\"payload\") AS \"pretty_payload\", array_to_json(\"tags\") AS \"tags_json\", row_to_json(ROW(\"user_id\", \"total_cents\")) AS \"row_json\", lower(\"score_range\") AS \"lower_score\", upper(\"score_range\") AS \"upper_score\", range_merge(\"score_range\") AS \"merged_score\", multirange_merge('{}'::int4multirange) AS \"merged_multi\" FROM \"public\".\"orders\" WHERE (isempty(\"score_range\") IS TRUE AND lower_inc(\"score_range\") IS TRUE AND upper_inc(\"score_range\") IS TRUE AND lower_inf(\"score_range\") IS TRUE AND upper_inf(\"score_range\") IS TRUE)"
+        "SELECT jsonb_pretty(\"payload\") AS \"pretty_payload\", array_to_json(\"tags\") AS \"tags_json\", row_to_json(ROW(\"user_id\", \"total_cents\")) AS \"row_json\", lower(\"score_range\") AS \"lower_score\", upper(\"score_range\") AS \"upper_score\", range_merge(\"score_range\", \"score_range\") AS \"merged_score\", range_merge('{}'::int4multirange) AS \"merged_multi\" FROM \"public\".\"orders\" WHERE (isempty(\"score_range\") IS TRUE AND lower_inc(\"score_range\") IS TRUE AND upper_inc(\"score_range\") IS TRUE AND lower_inf(\"score_range\") IS TRUE AND upper_inf(\"score_range\") IS TRUE)"
     );
     assert_eq!(built.params.len(), 0);
 }

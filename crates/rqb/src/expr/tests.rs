@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use super::escaped_like_pattern;
 use crate::{
-    BoolExpr, BoolOp, Field, IntoColumn, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param,
+    BoolExpr, BoolOp, Field, IntoColumns, IntoFieldRef, JsonKind, Meta, OpSet, OrderItem, Param,
     ValueExpr, ValueOp, raw_expr, raw_predicate, row,
 };
 
@@ -241,8 +241,8 @@ fn borrowed_field_refs_and_raw_metadata_convert_to_value_shapes() {
 
     let id = ID.at("u");
     let expr = ValueExpr::from(&id);
-    let item = (&id).into_column().items.pop().unwrap();
-    let raw_meta_item = EMAIL_META.into_column().items.pop().unwrap();
+    let item = (&id).into_columns().items.pop().unwrap();
+    let raw_meta_item = EMAIL_META.into_columns().items.pop().unwrap();
 
     assert!(matches!(
         expr,
@@ -396,6 +396,7 @@ fn jsonb_infix_predicates_reject_non_jsonb_fields() {
     let err = BoolExpr::Infix {
         left: ID.expr(),
         op: "?",
+        checked: true,
         right: ValueExpr::from("id"),
         negated: false,
     }
@@ -456,6 +457,7 @@ fn range_infix_predicates_reject_plain_scalar_fields() {
     let err = BoolExpr::Infix {
         left: ID.expr(),
         op: "&&",
+        checked: true,
         right: ValueExpr::from(10_i32),
         negated: false,
     }

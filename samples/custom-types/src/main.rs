@@ -3,6 +3,9 @@ use rqb::prelude::*;
 use serde_json::Value;
 use uuid::Uuid;
 
+mod mapped_schema;
+mod types;
+
 rqb::schema! {
     table sample.vector_documents {
         id: uuid = Uuid,
@@ -16,6 +19,11 @@ rqb::schema! {
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let mapped = insert(mapped_schema::wallets::table())
+        .set(mapped_schema::wallets::ID.set(1))
+        .set(mapped_schema::wallets::BALANCE.set(types::Cents(1250)))
+        .build()?;
+    assert_eq!(mapped.params.len(), 2);
     // Even without typed extension support, generated metadata is enough for a
     // useful default projection.
     let default_projection = select(vector_documents::table()).build()?;
@@ -65,4 +73,47 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("{}", vector_search.sql);
     println!("{}", full_text.sql);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires schema.sql and RQB_TEST_DATABASE_URL"]
+    async fn configured_domain_codec_binds_decodes_and_searches() {
+        use mapped_schema::wallets as w;
+        let pool = sqlx::PgPool::connect(&std::env::var("RQB_TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let value = insert(w::table())
+            .set(w::ID.set(1))
+            .set(w::BALANCE.set(types::Cents(1250)))
+            .returning(w::BALANCE)
+            .fetch_one_scalar::<types::Cents>(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(value, types::Cents(1250));
+        let filter = serde_json::from_value(
+            serde_json::json!({"field":"balance","operator":"equals","value":1250}),
+        )
+        .unwrap();
+        let value = select(w::table())
+            .column(w::BALANCE)
+            .apply_filter(filter)
+            .unwrap()
+            .fetch_one_scalar::<types::Cents>(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(value, types::Cents(1250));
+        let err = update(w::table())
+            .set(w::BALANCE.set(types::Cents(-1)))
+            .filter(w::ID.eq(1))
+            .execute(&mut *tx)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, rqb::Error::CheckViolation(_)));
+        tx.rollback().await.unwrap();
+    }
 }

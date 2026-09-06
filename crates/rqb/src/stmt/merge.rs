@@ -116,15 +116,8 @@ impl Merge {
     /// Replaces `RETURNING` with every field exposed by the target source.
     #[inline]
     pub fn returning_all(mut self) -> Self {
-        let qualifier = self.target.explicit_alias().map(str::to_owned);
-        let mut returning = Vec::new();
-        self.target.for_each_field(|field| {
-            returning.push(SelectItem {
-                expr: ValueExpr::field(*field, qualifier.clone()),
-                alias: field_alias(field),
-            });
-        });
-        self.returning = returning;
+        self.returning.clear();
+        push_returning_fields(&self.target, &mut self.returning);
         self
     }
 }
@@ -137,7 +130,7 @@ impl MatchedMergeBuilder {
             MergeAction::Update {
                 when: MergeWhen::Matched,
                 condition: self.condition,
-                assignments: assignments.into_assignments(),
+                assignments: normalized_assignments(assignments),
             },
         )
     }
@@ -175,7 +168,7 @@ impl NotMatchedMergeBuilder {
             MergeAction::Insert {
                 when: MergeWhen::NotMatched,
                 condition: self.condition,
-                assignments: assignments.into_assignments(),
+                assignments: normalized_assignments(assignments),
             },
         )
     }
@@ -201,7 +194,7 @@ impl NotMatchedBySourceMergeBuilder {
             MergeAction::Update {
                 when: MergeWhen::NotMatchedBySource,
                 condition: self.condition,
-                assignments: assignments.into_assignments(),
+                assignments: normalized_assignments(assignments),
             },
         )
     }

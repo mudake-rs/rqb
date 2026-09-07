@@ -179,10 +179,10 @@ pub use source::{
 pub use sqlx::{PgConnection, PgExecutor, PgPool};
 pub use stmt::{
     Assignment, Changeset, ColumnConflictBuilder, ColumnList, ConflictFields,
-    ConstraintConflictBuilder, Delete, Insert, Insertable, IntoColumn, IntoColumns, LockMode,
-    MatchedMergeBuilder, Merge, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder, OrderItem,
-    RawStmt, Select, SetQuery, Stmt, Update, delete_from, except, except_all, insert, intersect,
-    intersect_all, merge_into, raw, select, union, union_all, update,
+    ConstraintConflictBuilder, Delete, Insert, InsertRow, Insertable, IntoColumn, IntoColumns,
+    LockMode, MatchedMergeBuilder, Merge, NotMatchedBySourceMergeBuilder, NotMatchedMergeBuilder,
+    OrderItem, RawStmt, Select, SetQuery, Stmt, Update, delete_from, except, except_all, insert,
+    intersect, intersect_all, merge_into, raw, select, union, union_all, update,
 };
 pub(crate) use stmt::{
     AssignmentValue, ConflictAction, ConflictClause, ConflictTarget, GroupByItem, InsertBody,
@@ -248,7 +248,7 @@ macro_rules! field {
 
 /// Builds `jsonb_agg(jsonb_build_object(...))` from metadata-backed fields.
 ///
-/// Field and field-ref arguments use their metadata database name as the JSON
+/// Field and field-ref arguments use their metadata API name as the JSON
 /// object key. Computed expressions can be passed as `("key", expr)` pairs.
 #[macro_export]
 macro_rules! jsonb_agg_object {
@@ -330,12 +330,13 @@ pub mod dsl {
 pub mod prelude {
     pub use crate::{
         Assignment, BindValue, BoolExpr, BuiltQuery, Changeset, Cte, Delete, Error, Field,
-        FieldRef, Insert, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params, PgConnection,
-        PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate, SearchRequest,
-        SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update, ValueExpr, and, cte,
-        cte_ref, delete_from, except, except_all, field, insert, intersect, intersect_all,
-        jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate, raw_source, schema,
-        select, subquery, table, tx, union, union_all, update, values_source, view,
+        FieldRef, Insert, InsertRow, Insertable, JsonKind, Merge, Meta, OpSet, Param, Params,
+        PgConnection, PgExecutor, PgPool, RawStmt, SearchFilter, SearchOperator, SearchPredicate,
+        SearchRequest, SearchSort, Select, SetQuery, SortDirection, Source, Stmt, Update,
+        ValueExpr, and, cte, cte_ref, delete_from, except, except_all, field, insert, intersect,
+        intersect_all, jsonb_agg_object, merge_into, not, or, raw, raw_expr, raw_predicate,
+        raw_source, schema, select, subquery, table, tx, union, union_all, update, values_source,
+        view,
     };
 }
 

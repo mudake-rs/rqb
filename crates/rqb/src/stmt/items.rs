@@ -248,12 +248,6 @@ impl RowLock {
         self.wait = LockWait::SkipLocked;
         self
     }
-
-    /// Restricts the lock to a relation alias.
-    pub fn of(mut self, relation: impl Into<String>) -> Self {
-        self.of.push(relation.into());
-        self
-    }
 }
 
 impl Default for RowLock {

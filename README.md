@@ -45,9 +45,8 @@ query planning.
 
 ## Status
 
-Pre-1.0. The repository is public and the supported distribution path is the
-GitHub repository. APIs are still allowed to break when that makes the library
-simpler or clearer.
+Pre-1.0. APIs are still allowed to break when that makes the library simpler
+or clearer.
 
 The core builder targets Postgres 14+ for ordinary application queries. Some
 helpers expose newer server features such as `MERGE` branches from Postgres 17
@@ -60,7 +59,7 @@ rqb is distributed through crates.io:
 
 ```toml
 [dependencies]
-rqb = "0.1.6"
+rqb = "0.1.7"
 chrono = "0.4.45"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
@@ -593,6 +592,19 @@ In this section: [Assignments](#assignments),
 
 ### Assignments
 
+`insert(table)` starts an editable `InsertRow`. Single-row setters, CTEs,
+`RETURNING`, and completed conflict clauses preserve that type. Selecting
+`values_many(...)?`, `from_select(...)`, `from_select_all(...)`, or
+`default_values()` returns `Insert`, which has no additive row setters:
+a later `set` cannot silently replace a batch. Use `.into()` when a helper
+returns an explicitly typed `Insert` or `Stmt`.
+
+Modeled write `fetch_*` methods require explicit `returning(...)`,
+`returning_as(...)`, or `returning_all()`. Without it they return
+`Error::WriteWithoutReturning` before database I/O. Use `execute()` for
+affected-row counts. This guard does not inspect raw SQL or `BuiltQuery`;
+those lower-level paths remain caller-owned.
+
 ```rust
 let created = insert(schema::users::table())
     .set_many((
@@ -854,6 +866,11 @@ let order = select(schema::orders::table())
 Use `for_no_key_update`, `for_share`, or `for_key_share` when the narrower
 Postgres row-lock mode matches the workflow. `skip_locked()` supports worker
 queue patterns where busy rows should be ignored.
+
+Changing lock mode preserves `NOWAIT` / `SKIP LOCKED` and the existing
+relation scope. Repeated `for_update_of(...)` (or other scoped lock methods)
+add distinct relations; the latest mode applies to all of them. Wait modifiers
+replace each other and can be set before the mode.
 
 Postgres advisory locks are exposed as transaction-scoped statement helpers in
 `rqb::dsl`:

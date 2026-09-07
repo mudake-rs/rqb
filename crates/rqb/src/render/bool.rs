@@ -33,6 +33,10 @@ impl Renderer {
                 values,
                 negated,
             } => {
+                if values.is_empty() {
+                    self.sql.push_str(if *negated { "TRUE" } else { "FALSE" });
+                    return;
+                }
                 self.render_operand(expr);
                 self.sql
                     .push_str(if *negated { " NOT IN (" } else { " IN (" });

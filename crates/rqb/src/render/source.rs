@@ -56,6 +56,33 @@ impl Renderer {
             rendered += 1;
         });
         if rendered == 0 {
+            match source {
+                Source::Table {
+                    name, alias: None, ..
+                }
+                | Source::View {
+                    name, alias: None, ..
+                } => {
+                    write_quoted_qualified(&mut self.sql, name);
+                }
+                Source::Table {
+                    alias: Some(alias), ..
+                }
+                | Source::View {
+                    alias: Some(alias), ..
+                }
+                | Source::Cte {
+                    alias: Some(alias), ..
+                }
+                | Source::Subquery { alias, .. }
+                | Source::Raw { alias, .. }
+                | Source::Function { alias, .. }
+                | Source::Values { alias, .. } => write_quoted_ident(&mut self.sql, alias),
+                Source::Cte {
+                    name, alias: None, ..
+                } => write_quoted_ident(&mut self.sql, name),
+            }
+            self.sql.push('.');
             self.sql.push('*');
         }
     }

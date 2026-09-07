@@ -6,8 +6,8 @@ use sqlx::{AssertSqlSafe, Decode, FromRow, PgExecutor, PgPool, Postgres, Type};
 
 use crate::Result;
 use crate::{
-    BuiltQuery, Delete, Insert, Merge, RawStmt, Select, SetQuery, Stmt, Update, count_all, select,
-    subquery,
+    BuiltQuery, Delete, Insert, InsertRow, Merge, RawStmt, Select, SetQuery, Stmt, Update,
+    count_all, select, subquery,
 };
 
 /// Rust value that can be decoded from a single Postgres result column.
@@ -294,7 +294,7 @@ impl Select {
 }
 
 macro_rules! impl_statement_execute {
-    ($ty:ty) => {
+    ($ty:ty $(, $check:ident)?) => {
         impl $ty {
             /// Builds and executes the statement.
             ///
@@ -307,11 +307,13 @@ macro_rules! impl_statement_execute {
             /// Builds the statement and fetches all raw rows.
             /// Write statements need an explicit `returning` or `returning_all` clause.
             pub async fn fetch_all<'e>(&self, executor: impl PgExecutor<'e>) -> Result<Vec<PgRow>> {
+                $(self.$check()?;)?
                 self.build()?.fetch_all(executor).await
             }
 
             /// Builds the statement and fetches one raw row.
             pub async fn fetch_one<'e>(&self, executor: impl PgExecutor<'e>) -> Result<PgRow> {
+                $(self.$check()?;)?
                 self.build()?.fetch_one(executor).await
             }
 
@@ -320,6 +322,7 @@ macro_rules! impl_statement_execute {
                 &self,
                 executor: impl PgExecutor<'e>,
             ) -> Result<Option<PgRow>> {
+                $(self.$check()?;)?
                 self.build()?.fetch_optional(executor).await
             }
 
@@ -331,6 +334,7 @@ macro_rules! impl_statement_execute {
                 self,
                 pool: PgPool,
             ) -> Result<BoxStream<'static, Result<PgRow>>> {
+                $(self.$check()?;)?
                 self.build()?.fetch_stream_pool(pool)
             }
 
@@ -342,6 +346,7 @@ macro_rules! impl_statement_execute {
             where
                 T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_all_as(executor).await
             }
 
@@ -350,6 +355,7 @@ macro_rules! impl_statement_execute {
             where
                 T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_one_as(executor).await
             }
 
@@ -361,6 +367,7 @@ macro_rules! impl_statement_execute {
             where
                 T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_optional_as(executor).await
             }
 
@@ -375,6 +382,7 @@ macro_rules! impl_statement_execute {
             where
                 T: for<'r> FromRow<'r, PgRow> + Send + Unpin + 'static,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_stream_pool_as(pool)
             }
 
@@ -383,6 +391,7 @@ macro_rules! impl_statement_execute {
             where
                 T: ScalarValue,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_scalar(executor).await
             }
 
@@ -391,6 +400,7 @@ macro_rules! impl_statement_execute {
             where
                 T: ScalarValue,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_one_scalar(executor).await
             }
 
@@ -402,6 +412,7 @@ macro_rules! impl_statement_execute {
             where
                 T: ScalarValue,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_optional_scalar(executor).await
             }
 
@@ -416,6 +427,7 @@ macro_rules! impl_statement_execute {
             where
                 T: ScalarValue + 'static,
             {
+                $(self.$check()?;)?
                 self.build()?.fetch_stream_pool_scalar(pool)
             }
         }
@@ -424,9 +436,41 @@ macro_rules! impl_statement_execute {
 
 impl_statement_execute!(Select);
 impl_statement_execute!(SetQuery);
-impl_statement_execute!(Insert);
-impl_statement_execute!(Update);
-impl_statement_execute!(Delete);
-impl_statement_execute!(Merge);
+impl_statement_execute!(Insert, check_returning);
+impl_statement_execute!(InsertRow, check_returning);
+impl_statement_execute!(Update, check_returning);
+impl_statement_execute!(Delete, check_returning);
+impl_statement_execute!(Merge, check_returning);
 impl_statement_execute!(RawStmt);
-impl_statement_execute!(Stmt);
+impl_statement_execute!(Stmt, check_returning);
+
+macro_rules! impl_write_fetch_check {
+    ($ty:ty, $name:literal) => {
+        impl $ty {
+            pub(crate) fn check_returning(&self) -> Result<()> {
+                if self.returning.is_empty() {
+                    Err(crate::Error::WriteWithoutReturning { statement: $name })
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    };
+}
+
+impl_write_fetch_check!(Insert, "INSERT");
+impl_write_fetch_check!(Update, "UPDATE");
+impl_write_fetch_check!(Delete, "DELETE");
+impl_write_fetch_check!(Merge, "MERGE");
+
+impl Stmt {
+    fn check_returning(&self) -> Result<()> {
+        match self {
+            Self::Insert(stmt) => stmt.check_returning(),
+            Self::Update(stmt) => stmt.check_returning(),
+            Self::Delete(stmt) => stmt.check_returning(),
+            Self::Merge(stmt) => stmt.check_returning(),
+            Self::Select(_) | Self::Set(_) | Self::Raw(_) => Ok(()),
+        }
+    }
+}

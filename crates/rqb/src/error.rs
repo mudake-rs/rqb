@@ -277,6 +277,13 @@ impl CteShapeError {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    /// A modeled write fetch was rejected before execution because RETURNING is absent.
+    #[error("{statement} fetch requires an explicit RETURNING clause")]
+    WriteWithoutReturning {
+        /// Statement kind: INSERT, UPDATE, DELETE, or MERGE.
+        statement: &'static str,
+    },
+
     /// A `fetch_one`-style operation did not return a row.
     #[error("query returned no rows")]
     NotFound,

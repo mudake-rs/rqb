@@ -1,22 +1,24 @@
 use super::*;
 
-impl Insert {
-    /// Creates an insert statement for a table or view source.
-    pub(crate) fn into(target: impl Into<Source>) -> Self {
-        Self {
+/// Editable single-row INSERT returned by [`insert()`].
+///
+/// Assignments stay editable through WITH, RETURNING and ON CONFLICT.
+/// Batch, SELECT and DEFAULT VALUES select a complete body and return [`Insert`],
+/// which has no additive row setters. Convert with `.into()` when a helper
+/// needs a completed `Insert` or [`Stmt`].
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct InsertRow(pub(super) Insert);
+
+impl InsertRow {
+    pub(super) fn new(target: impl Into<Source>) -> Self {
+        Self(Insert {
             ctes: Vec::new(),
             target: target.into(),
             body: InsertBody::Values(Vec::new()),
             conflict: None,
             returning: Vec::new(),
-        }
-    }
-
-    /// Adds a CTE to the insert statement.
-    #[inline]
-    pub fn with(mut self, cte: Cte) -> Self {
-        self.ctes.push(cte);
-        self
+        })
     }
 
     /// Adds one column assignment. If the same database column was assigned
@@ -73,17 +75,18 @@ impl Insert {
     /// usually true for DTOs without `#[rqb(skip_none)]`; if optional insert
     /// fields can be omitted per row, normalize the input first or build an
     /// explicit `values_source(...)`.
+    /// The row builder must not already contain single-row assignments.
     ///
     /// For an upsert, use `do_update_excluded` or `set_excluded`: PostgreSQL
     /// exposes incoming values as `EXCLUDED` in the conflict action.
-    pub fn values_many<I, R>(self, rows: I) -> Result<Self>
+    pub fn values_many<I, R>(self, rows: I) -> Result<Insert>
     where
         I: IntoIterator<Item = R>,
         R: Insertable,
     {
-        if !matches!(&self.body, InsertBody::Values(assignments) if assignments.is_empty()) {
+        if !matches!(&self.0.body, InsertBody::Values(assignments) if assignments.is_empty()) {
             return Err(Error::InvalidInsertShape {
-                message: "batch insert cannot be combined with existing insert values or source",
+                message: "batch insert cannot be combined with existing single-row assignments",
             });
         }
 
@@ -137,6 +140,50 @@ impl Insert {
         Ok(self.from_select_all(crate::values_source(values, "incoming", columns)))
     }
 
+    /// Replaces the row body with an INSERT ... SELECT.
+    pub fn from_select(self, columns: impl IntoFieldMetas, select: Select) -> Insert {
+        self.0.from_select(columns, select)
+    }
+
+    /// Replaces the row body with all exposed source fields.
+    pub fn from_select_all(self, source: impl Into<Source>) -> Insert {
+        self.0.from_select_all(source)
+    }
+
+    /// Replaces the row body with PostgreSQL DEFAULT VALUES.
+    pub fn default_values(self) -> Insert {
+        self.0.default_values()
+    }
+
+    /// Validates the insert without rendering SQL.
+    pub fn validate(&self) -> Result<()> {
+        self.0.validate()
+    }
+
+    /// Validates and renders parameterized SQL without consuming the row builder.
+    pub fn build(&self) -> Result<crate::BuiltQuery> {
+        self.0.build()
+    }
+
+    pub(crate) fn check_returning(&self) -> Result<()> {
+        self.0.check_returning()
+    }
+
+    fn values_mut(&mut self) -> &mut Vec<Assignment> {
+        let InsertBody::Values(assignments) = &mut self.0.body else {
+            unreachable!("InsertRow only constructs and preserves the Values body")
+        };
+        assignments
+    }
+}
+
+impl From<InsertRow> for Insert {
+    fn from(row: InsertRow) -> Self {
+        row.0
+    }
+}
+
+impl Insert {
     /// Uses a select statement as the insert source.
     ///
     /// `columns` owns the complete target-column list for the insert-select
@@ -180,78 +227,87 @@ impl Insert {
     ///
     /// This is for rows where every target column should be populated by its
     /// database default or remain nullable. It can still be combined with
-    /// `RETURNING` and `ON CONFLICT`. Calling a later body method such as
-    /// `set(...)`, `values(...)`, or `from_select(...)` replaces this body.
+    /// `RETURNING` and `ON CONFLICT`. A later `from_select(...)` or
+    /// `from_select_all(...)` explicitly replaces this body.
     #[inline]
     pub fn default_values(mut self) -> Self {
         self.body = InsertBody::DefaultValues;
         self
     }
-
-    /// Starts an `ON CONFLICT (columns...)` clause.
-    ///
-    /// Use this for column/index targets. For a named database constraint, use
-    /// [`Insert::on_conflict_constraint`] with a generated constraint constant.
-    pub fn on_conflict(self, fields: impl ConflictFields) -> ColumnConflictBuilder {
-        let mut target_fields = Vec::with_capacity(fields.conflict_field_count());
-        fields.push_conflict_fields(&mut target_fields);
-        ColumnConflictBuilder {
-            insert: self,
-            fields: target_fields,
-            predicate: None,
-        }
-    }
-
-    /// Starts an `ON CONFLICT ON CONSTRAINT` clause.
-    ///
-    /// Generated schema exposes unique constraint names under
-    /// `relation::constraints`.
-    pub fn on_conflict_constraint(
-        self,
-        constraint: impl Into<String>,
-    ) -> ConstraintConflictBuilder {
-        ConstraintConflictBuilder {
-            insert: self,
-            constraint: constraint.into(),
-        }
-    }
-
-    /// Adds one or more fields to `RETURNING`.
-    ///
-    /// Use a field for one returned column or tuple syntax for a small
-    /// heterogeneous field list: `.returning((users::ID, users::EMAIL))`.
-    pub fn returning(mut self, fields: impl IntoColumns) -> Self {
-        self.returning.extend(fields.into_columns().items);
-        self
-    }
-
-    /// Adds an aliased expression to `RETURNING`.
-    pub fn returning_as(mut self, expr: impl Into<ValueExpr>, alias: impl Into<String>) -> Self {
-        self.returning.push(SelectItem {
-            expr: expr.into(),
-            alias: Some(alias.into()),
-        });
-        self
-    }
-
-    /// Replaces `RETURNING` with every field exposed by the target source.
-    #[inline]
-    pub fn returning_all(mut self) -> Self {
-        self.returning.clear();
-        push_returning_fields(&self.target, &mut self.returning);
-        self
-    }
-
-    fn values_mut(&mut self) -> &mut Vec<Assignment> {
-        if !matches!(self.body, InsertBody::Values(_)) {
-            self.body = InsertBody::Values(Vec::new());
-        }
-        let InsertBody::Values(assignments) = &mut self.body else {
-            unreachable!("insert body was just set to values")
-        };
-        assignments
-    }
 }
+
+macro_rules! impl_insert_clauses {
+    ($ty:ty $(, $field:tt)?) => {
+        impl $ty {
+            /// Adds a CTE to the insert statement.
+            #[inline]
+            pub fn with(mut self, cte: Cte) -> Self {
+                self $(.$field)?.ctes.push(cte);
+                self
+            }
+
+            /// Starts an `ON CONFLICT (columns...)` clause.
+            /// Completing a later conflict clause replaces the previous clause.
+            ///
+            /// Use this for column/index targets. For a named database constraint, use
+            /// [`Insert::on_conflict_constraint`] with a generated constraint constant.
+            pub fn on_conflict(self, fields: impl ConflictFields) -> ColumnConflictBuilder<Self> {
+                let mut target_fields = Vec::with_capacity(fields.conflict_field_count());
+                fields.push_conflict_fields(&mut target_fields);
+                ColumnConflictBuilder {
+                    insert: self,
+                    fields: target_fields,
+                    predicate: None,
+                }
+            }
+
+            /// Starts an `ON CONFLICT ON CONSTRAINT` clause.
+            /// Completing a later conflict clause replaces the previous clause.
+            ///
+            /// Generated schema exposes unique constraint names under
+            /// `relation::constraints`.
+            pub fn on_conflict_constraint(
+                self,
+                constraint: impl Into<String>,
+            ) -> ConstraintConflictBuilder<Self> {
+                ConstraintConflictBuilder {
+                    insert: self,
+                    constraint: constraint.into(),
+                }
+            }
+
+            /// Adds one or more fields to `RETURNING`.
+            ///
+            /// Use a field for one returned column or tuple syntax for a small
+            /// heterogeneous field list: `.returning((users::ID, users::EMAIL))`.
+            pub fn returning(mut self, fields: impl IntoColumns) -> Self {
+                self $(.$field)?.returning.extend(fields.into_columns().items);
+                self
+            }
+
+            /// Adds an aliased expression to `RETURNING`.
+            pub fn returning_as(mut self, expr: impl Into<ValueExpr>, alias: impl Into<String>) -> Self {
+                self $(.$field)?.returning.push(SelectItem {
+                    expr: expr.into(),
+                    alias: Some(alias.into()),
+                });
+                self
+            }
+
+            /// Replaces `RETURNING` with every field exposed by the target source.
+            #[inline]
+            pub fn returning_all(mut self) -> Self {
+                self $(.$field)?.returning.clear();
+                push_returning_fields(&self $(.$field)?.target, &mut self $(.$field)?.returning);
+                self
+            }
+
+        }
+    };
+}
+
+impl_insert_clauses!(Insert);
+impl_insert_clauses!(InsertRow, 0);
 
 fn same_batch_fields(columns: &[Meta], assignments: &[Assignment]) -> bool {
     columns.len() == assignments.len()

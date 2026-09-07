@@ -6,8 +6,8 @@ pub fn select(source: impl Into<Source>) -> Select {
 }
 
 /// Starts a typed `INSERT` statement.
-pub fn insert(target: impl Into<Source>) -> Insert {
-    Insert::into(target)
+pub fn insert(target: impl Into<Source>) -> InsertRow {
+    InsertRow::new(target)
 }
 
 /// Starts a typed `UPDATE` statement.
@@ -79,6 +79,12 @@ impl From<SetQuery> for Stmt {
 impl From<Insert> for Stmt {
     fn from(insert: Insert) -> Self {
         Self::Insert(Box::new(insert))
+    }
+}
+
+impl From<InsertRow> for Stmt {
+    fn from(row: InsertRow) -> Self {
+        Self::from(Insert::from(row))
     }
 }
 

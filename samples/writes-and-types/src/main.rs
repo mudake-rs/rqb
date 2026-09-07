@@ -62,6 +62,14 @@ where
     <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Some)
 }
 
+// Clauses can be configured before choosing a single DTO or a batch.
+fn upsert_users() -> InsertRow {
+    insert(users::table())
+        .returning(users::ID)
+        .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
+        .do_update_excluded((users::STATUS, users::DISPLAY_NAME))
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let leave: OrganizationPatch = serde_json::from_str("{}")?;
     let clear: OrganizationPatch = serde_json::from_str(r#"{"organization_id":null}"#)?;
@@ -264,12 +272,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         status: "active".to_owned(),
         display_name: "Grace".to_owned(),
     }];
-    let bulk_upsert_sql = insert(users::table())
-        .values_many(&incoming_users)?
-        .on_conflict_constraint(users::constraints::APP_USERS_EMAIL_KEY)
-        .do_update_excluded((users::STATUS, users::DISPLAY_NAME))
-        .returning(users::ID)
-        .build()?;
+    let single_upsert_sql = upsert_users().values(&incoming_users[0]).build()?;
+    assert!(single_upsert_sql.sql.contains("RETURNING"));
+    let bulk_upsert_sql = upsert_users().values_many(&incoming_users)?.build()?;
 
     // MERGE is useful when the incoming relation drives both matched updates
     // and inserts. The source can be a typed VALUES source, a CTE, a table, or

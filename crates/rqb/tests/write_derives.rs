@@ -232,7 +232,7 @@ fn insertable_batch_insert_rejects_existing_insert_values() {
     assert!(matches!(
         err,
         rqb::Error::InvalidInsertShape { message }
-            if message == "batch insert cannot be combined with existing insert values or source"
+            if message == "batch insert cannot be combined with existing single-row assignments"
     ));
 }
 

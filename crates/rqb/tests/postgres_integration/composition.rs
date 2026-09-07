@@ -15,6 +15,203 @@ rqb::schema! {
 }
 use audit_rows as t;
 
+#[tokio::test]
+#[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+async fn rejected_write_fetches_have_no_database_effect() {
+    let mut conn = connection().await;
+    let writes: [Stmt; 4] = [
+        insert(t::table()).set(t::ID.set(3)).into(),
+        update(t::table()).set(t::LABEL.set("changed")).into(),
+        delete_from(t::table()).filter(t::ID.gt(0)).into(),
+        merge_into(
+            t::alias("t"),
+            t::alias("s"),
+            t::ID.at("t").eq_field(t::ID.at("s")),
+        )
+        .when_matched()
+        .delete()
+        .into(),
+    ];
+    for write in writes {
+        assert!(matches!(
+            write.fetch_one_scalar::<i32>(&mut *conn).await,
+            Err(Error::WriteWithoutReturning { .. })
+        ));
+        assert!(matches!(
+            write.fetch_optional_as::<(i32,)>(&mut *conn).await,
+            Err(Error::WriteWithoutReturning { .. })
+        ));
+        assert!(matches!(
+            write.fetch_all(&mut *conn).await,
+            Err(Error::WriteWithoutReturning { .. })
+        ));
+    }
+    let rows = select(t::table())
+        .columns((t::ID, t::LABEL))
+        .order_asc(t::ID)
+        .fetch_all_as::<(i32, String)>(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(rows, [(1, "one".into()), (2, "two".into())]);
+    let zero = update(t::table())
+        .set(t::LABEL.set("changed"))
+        .filter(t::ID.eq(0))
+        .returning(t::ID);
+    assert_eq!(
+        zero.fetch_optional_scalar::<i32>(&mut *conn).await.unwrap(),
+        None
+    );
+    assert!(zero.fetch_all(&mut *conn).await.unwrap().is_empty());
+    assert!(matches!(
+        zero.fetch_one_scalar::<i32>(&mut *conn).await,
+        Err(Error::NotFound)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+async fn configured_insert_preserves_all_batch_rows() {
+    #[derive(Insertable)]
+    #[rqb(table = t)]
+    struct Input {
+        id: i32,
+        quantity: i32,
+    }
+    let mut conn = connection().await;
+    let configured = || {
+        insert(t::table())
+            .with(cte("marker", raw("SELECT ? AS id").bind(97_i32), t::ID))
+            .returning((t::ID, t::QUANTITY))
+            .on_conflict(t::ID)
+            .do_update_excluded_where(t::QUANTITY, t::ID.at("audit_rows").gt(0))
+    };
+    let row = configured().values(Input {
+        id: 3,
+        quantity: 10,
+    });
+    assert_eq!(
+        row.fetch_one_as::<(i32, i32)>(&mut *conn).await.unwrap(),
+        (3, 10)
+    );
+    let completed: Insert = row.clone().into();
+    assert_eq!(
+        completed
+            .fetch_one_as::<(i32, i32)>(&mut *conn)
+            .await
+            .unwrap(),
+        (3, 10)
+    );
+    assert_eq!(
+        Stmt::from(row)
+            .fetch_one_as::<(i32, i32)>(&mut *conn)
+            .await
+            .unwrap(),
+        (3, 10)
+    );
+    let mut rows = configured()
+        .values_many([
+            Input {
+                id: 3,
+                quantity: 20,
+            },
+            Input {
+                id: 4,
+                quantity: 30,
+            },
+        ])
+        .unwrap()
+        .fetch_all_as::<(i32, i32)>(&mut *conn)
+        .await
+        .unwrap();
+    rows.sort();
+    assert_eq!(rows, [(3, 20), (4, 30)]);
+    let quantities = select(t::table())
+        .column(t::QUANTITY)
+        .filter(t::ID.gte(3))
+        .order_asc(t::ID)
+        .fetch_scalar::<i32>(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(quantities, [20, 30]);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+async fn metadata_free_projection_does_not_return_joined_columns() {
+    use sqlx::{Column, Row};
+    let mut conn = connection().await;
+    let roots = [
+        raw_source("SELECT 1 AS root_value", "r", [], ()),
+        subquery(raw("SELECT 1 AS root_value"), "r", ()),
+        rqb::function_source("generate_series", vec![1_i32.into(), 1_i32.into()], "r", ()).into(),
+    ];
+    for root in roots {
+        let row = select(root)
+            .cross_join(raw_source("SELECT 2 AS joined_value", "j", [], ()))
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(row.columns().len(), 1);
+        assert_ne!(row.columns()[0].name(), "joined_value");
+        assert_eq!(row.get::<i32, _>(0), 1);
+    }
+    for root in [
+        table("pg_temp.audit_rows", &[]),
+        table("pg_temp.audit_rows", &[]).alias("r"),
+    ] {
+        let row = select(root)
+            .cross_join(raw_source("SELECT 2 AS joined_value", "j", [], ()))
+            .limit(1)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(row.columns().len(), 5);
+        assert!(row.columns().iter().all(|c| c.name() != "joined_value"));
+    }
+    let root = cte("root", raw("SELECT 1 AS root_value"), ());
+    let row = select(root.source())
+        .with(root)
+        .cross_join(raw_source("SELECT 2 AS joined_value", "j", [], ()))
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(row.columns().len(), 1);
+    assert_eq!(row.columns()[0].name(), "root_value");
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+async fn modifier_first_lock_skips_rows_locked_by_another_transaction() {
+    use super::common::{delete_product, insert_product, pool, products, unique_text};
+    let pool = pool().await;
+    let id = Uuid::new_v4();
+    insert_product(&pool, id, &unique_text("state-lock"), "state-lock", 1).await;
+    let mut owner = pool.begin().await.unwrap();
+    select(products::table())
+        .column(products::ID)
+        .filter(products::ID.eq(id))
+        .for_update()
+        .fetch_one_scalar::<Uuid>(&mut *owner)
+        .await
+        .unwrap();
+    let mut reader = pool.begin().await.unwrap();
+    raw("SET LOCAL statement_timeout = '2s'")
+        .execute(&mut *reader)
+        .await
+        .unwrap();
+    let result = select(products::table())
+        .column(products::ID)
+        .filter(products::ID.eq(id))
+        .skip_locked()
+        .for_no_key_update()
+        .fetch_scalar::<Uuid>(&mut *reader)
+        .await;
+    reader.rollback().await.unwrap();
+    owner.rollback().await.unwrap();
+    delete_product(&pool, id).await;
+    assert!(result.unwrap().is_empty());
+}
+
 async fn connection() -> sqlx::pool::PoolConnection<sqlx::Postgres> {
     let pool = super::common::pool().await;
     let mut conn = pool.acquire().await.unwrap();

@@ -563,7 +563,7 @@ fn insert_default_values_body_can_be_replaced() {
         .validate()
         .unwrap();
 
-    let values = insert(users()).default_values().set(ID.set(1));
+    let values = crate::Insert::from(insert(users()).set(ID.set(1)));
     values.validate().unwrap();
     assert!(matches!(values.body, InsertBody::Values(_)));
 

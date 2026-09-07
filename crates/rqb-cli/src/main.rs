@@ -13,6 +13,7 @@ mod config;
 mod ident;
 mod introspect;
 mod model;
+mod output;
 mod type_map;
 
 use codegen::render;
@@ -204,7 +205,8 @@ async fn generate(
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
-    fs::write(out, code).with_context(|| format!("failed to write {}", out.display()))?;
+    output::write(out, code.as_bytes())
+        .with_context(|| format!("failed to write {}", out.display()))?;
     println!(
         "rqb-cli: generated {} relation(s) to {}",
         schema_model.relations.len(),
@@ -413,6 +415,67 @@ mod tests {
         Column, ColumnType, FieldJson, FieldOps, GeneratedKind, KnownType, Relation, RelationKind,
         UniqueConstraint,
     };
+
+    #[tokio::test]
+    #[ignore = "requires Postgres 18 and RQB_TEST_DATABASE_URL"]
+    async fn generation_rejects_dotted_catalog_names_without_touching_output() {
+        let url = std::env::var("RQB_TEST_DATABASE_URL").unwrap();
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::raw_sql(
+            "CREATE SCHEMA rqb_output_safety;
+             CREATE TABLE rqb_output_safety.valid (id int);
+             CREATE TABLE rqb_output_safety.\"audit.events\" (id int);
+             CREATE SCHEMA \"rqb.output_safety\";
+             CREATE TABLE \"rqb.output_safety\".valid (id int);",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("schema.rs");
+        let output = || super::GenerateOutput {
+            out: Some(path.clone()),
+            stdout: false,
+            check: false,
+            report: false,
+            deny_raw_only: false,
+            deny_unused_type_map: false,
+            no_rustfmt: false,
+        };
+        let good =
+            super::generate(&url, "rqb_output_safety", &["valid".into()], None, output()).await;
+        let original = std::fs::read(&path);
+        let dotted_table = super::generate(
+            &url,
+            "rqb_output_safety",
+            &["audit.events".into()],
+            None,
+            output(),
+        )
+        .await;
+        let dotted_schema = super::generate(&url, "rqb.output_safety", &[], None, output()).await;
+        sqlx::raw_sql(
+            "DROP SCHEMA rqb_output_safety CASCADE; DROP SCHEMA \"rqb.output_safety\" CASCADE;",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        good.unwrap();
+        assert!(
+            dotted_table
+                .unwrap_err()
+                .to_string()
+                .contains("literal dots")
+        );
+        assert!(
+            dotted_schema
+                .unwrap_err()
+                .to_string()
+                .contains("literal dots")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), original.unwrap());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
 
     #[test]
     fn stdout_and_check_conflict() {

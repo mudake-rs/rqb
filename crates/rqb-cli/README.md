@@ -97,6 +97,16 @@ compares unformatted generator output against the file exactly as committed.
 
 ## Output
 
+Generation stages output in a unique sibling file and replaces `--out` only
+after the complete write succeeds. Existing permission bits are preserved;
+new files use private temporary-file permissions (0600 on Unix). Symlinks and
+non-regular targets are rejected. Replacement changes the inode, so hard links
+retain the old content; ownership and extended metadata are not preserved.
+The output directory must be trusted. This is not crash-durable publication.
+
+Literal dots inside schema or relation names are rejected: the schema DSL uses
+dots as path separators. Spaces, hyphens and quotes remain supported.
+
 The output is one Rust file containing imports and a single `rqb::schema!`
 invocation:
 

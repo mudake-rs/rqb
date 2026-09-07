@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use heck::{ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
 
 use crate::ident::{sanitize_ident, unique_ident_strings};
@@ -38,6 +38,15 @@ const RESERVED_TYPE_NAMES: &[&str] = &[
 ];
 
 pub(crate) fn render(schema: &SchemaModel) -> Result<String> {
+    for relation in &schema.relations {
+        if relation.schema.contains('.') || relation.name.contains('.') {
+            bail!(
+                "cannot generate relation {:?}.{:?}: literal dots inside schema or relation names are not supported",
+                relation.schema,
+                relation.name
+            );
+        }
+    }
     let module_names = unique_ident_strings(
         schema
             .relations
@@ -549,6 +558,23 @@ mod tests {
             relations,
         })
         .unwrap()
+    }
+
+    #[test]
+    fn rejects_literal_dots_in_relation_path_components() {
+        for (schema, name) in [("public", "audit.events"), ("audit.log", "events")] {
+            let result = render(&SchemaModel {
+                enums: vec![],
+                relations: vec![Relation {
+                    schema: schema.into(),
+                    name: name.into(),
+                    kind: RelationKind::Table,
+                    columns: vec![typed_column("id", "ID", KnownType::Int4)],
+                    constraints: vec![],
+                }],
+            });
+            assert!(result.unwrap_err().to_string().contains("literal dots"));
+        }
     }
 
     fn enum_type(schema: &str, name: &str, labels: &[&str]) -> PgEnum {

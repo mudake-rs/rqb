@@ -323,17 +323,17 @@ fn into_field_ref_accepts_fields_and_existing_refs() {
 }
 
 #[test]
-fn empty_in_list_is_false_and_empty_not_in_is_true() {
+fn empty_lists_retain_the_operand_for_validation() {
     static ID_META: Meta = Meta::new("id", "id", "int4").ops(OpSet::ordered());
     const ID: Field<i32> = Field::new(&ID_META);
 
     assert!(matches!(
         ID.in_list(Vec::<i32>::new()),
-        BoolExpr::Constant(false)
+        BoolExpr::InList { values, negated: false, .. } if values.is_empty()
     ));
     assert!(matches!(
         ID.not_in(Vec::<i32>::new()),
-        BoolExpr::Constant(true)
+        BoolExpr::InList { values, negated: true, .. } if values.is_empty()
     ));
 }
 

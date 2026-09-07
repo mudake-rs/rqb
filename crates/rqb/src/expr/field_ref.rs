@@ -196,9 +196,6 @@ impl<T: BindValue> FieldRef<T> {
             .into_iter()
             .map(|value| ValueExpr::Param(Param::typed(value.into())))
             .collect::<Vec<_>>();
-        if values.is_empty() {
-            return BoolExpr::Constant(negated);
-        }
         BoolExpr::in_list(self.expr(), values, negated)
     }
 

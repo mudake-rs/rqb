@@ -100,6 +100,7 @@ pub use constructors::{
     delete_from, except, except_all, insert, intersect, intersect_all, merge_into, raw, select,
     union, union_all, update,
 };
+pub use insert::InsertRow;
 pub use items::{ColumnList, IntoColumn, IntoColumns};
 
 use helpers::*;

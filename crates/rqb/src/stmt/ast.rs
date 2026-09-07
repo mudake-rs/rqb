@@ -324,20 +324,22 @@ pub struct NotMatchedBySourceMergeBuilder {
     pub(super) condition: Option<Box<BoolExpr>>,
 }
 
-/// Builder returned by `Insert::on_conflict(...)` for column targets.
+/// Pending column-target conflict clause on an `InsertRow` or `Insert`.
+/// Completing the clause returns the same host type `I`.
 #[derive(Clone, Debug)]
 #[must_use]
-pub struct ColumnConflictBuilder {
-    pub(super) insert: Insert,
+pub struct ColumnConflictBuilder<I> {
+    pub(super) insert: I,
     pub(super) fields: Vec<Meta>,
     pub(super) predicate: Option<Box<BoolExpr>>,
 }
 
-/// Builder returned by `Insert::on_conflict_constraint(...)`.
+/// Pending named-constraint conflict clause on an `InsertRow` or `Insert`.
+/// Completing the clause returns the same host type `I`.
 #[derive(Clone, Debug)]
 #[must_use]
-pub struct ConstraintConflictBuilder {
-    pub(super) insert: Insert,
+pub struct ConstraintConflictBuilder<I> {
+    pub(super) insert: I,
     pub(super) constraint: String,
 }
 
@@ -531,7 +533,52 @@ pub struct Select {
     pub(crate) lock: Option<RowLock>,
 }
 
-/// Typed insert statement.
+/// INSERT with a selected body, without additive single-row setters.
+///
+/// Start with [`insert()`] to assemble an [`InsertRow`]. Batch, SELECT and
+/// DEFAULT VALUES complete its input; clauses and explicit body replacement
+/// remain available on `Insert`.
+///
+/// Completed input cannot be overwritten through row setters:
+///
+/// ```compile_fail,E0599
+/// # fn invalid(q: rqb::Insert, a: rqb::Assignment) {
+/// q.set(a);
+/// # }
+/// ```
+/// ```compile_fail,E0599
+/// # fn invalid(q: rqb::Insert, a: rqb::Assignment) {
+/// q.set_many([a]);
+/// # }
+/// ```
+/// ```compile_fail,E0599
+/// # fn invalid(q: rqb::Insert, a: rqb::Assignment) {
+/// q.set_if(false, a);
+/// # }
+/// ```
+/// ```compile_fail,E0599
+/// # fn invalid(q: rqb::Insert, a: rqb::Assignment) {
+/// q.set_option(None::<i32>, |_| a);
+/// # }
+/// ```
+/// ```compile_fail,E0599
+/// # fn invalid(q: rqb::Insert, dto: impl rqb::Insertable) {
+/// q.values(dto);
+/// # }
+/// ```
+/// ```compile_fail,E0599
+/// # fn invalid(q: rqb::Insert, dto: impl rqb::Insertable) {
+/// q.values_many([dto]);
+/// # }
+/// ```
+///
+/// Completion is one-way:
+///
+/// ```compile_fail,E0277
+/// # fn invalid(q: rqb::Insert) {
+/// let row: rqb::InsertRow = q.into();
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]

@@ -122,6 +122,7 @@ impl Select {
     }
 
     /// Adds `DISTINCT`.
+    /// A nonempty `distinct_on` list takes precedence, regardless of call order.
     #[inline]
     pub fn distinct(mut self) -> Self {
         self.distinct = true;
@@ -129,6 +130,7 @@ impl Select {
     }
 
     /// Adds a `DISTINCT ON` expression.
+    /// Calls append expressions; a nonempty list takes precedence over `distinct()`.
     pub fn distinct_on(mut self, expr: impl Into<ValueExpr>) -> Self {
         self.distinct_on.push(expr.into());
         self
@@ -306,16 +308,22 @@ impl Select {
         self
     }
 
-    /// Adds a row lock with the given mode.
+    /// Sets the row lock mode, preserving wait behavior and relation scope.
     #[inline]
     pub fn lock(mut self, mode: LockMode) -> Self {
-        self.lock = Some(RowLock::new(mode));
+        self.lock.get_or_insert_with(|| RowLock::new(mode)).mode = mode;
         self
     }
 
-    /// Adds a row lock scoped to a relation alias.
+    /// Sets the lock mode and adds a relation to its scope, preserving wait behavior.
+    /// Repeated aliases are included once. All scoped relations use the latest mode.
     pub fn lock_of(mut self, mode: LockMode, relation: impl Into<String>) -> Self {
-        self.lock = Some(RowLock::new(mode).of(relation));
+        let lock = self.lock.get_or_insert_with(|| RowLock::new(mode));
+        lock.mode = mode;
+        let relation = relation.into();
+        if !lock.of.contains(&relation) {
+            lock.of.push(relation);
+        }
         self
     }
 
